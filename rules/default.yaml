@@ -1,0 +1,8 @@
+# Conjunt de regles per defecte de la fase 1.
+# No hi ha cap regla activa: el motor analitza, protegeix i valida, però
+# retorna el text exactament igual que l'ha rebut.
+name: default
+description: Cap regla activa. El text es retorna sense modificar.
+max_semantic_risk: low   # none | low | medium | high
+min_confidence: 0.6
+rules: []

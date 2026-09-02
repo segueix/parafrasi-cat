@@ -1,0 +1,12 @@
+# Conjunt de regles d'exemple: activa la substitució lèxica basada en diccionari.
+# Ús: parafrasi-cat --rules exemple-lexic "Gairebé sempre plou."
+name: exemple-lexic
+description: Substitucions lèxiques i de connectors a partir d'un diccionari d'exemple.
+max_semantic_risk: low
+min_confidence: 0.6
+rules:
+  - id: lexical.substitution          # identificador que apareix a les explicacions
+    type: lexical.substitution        # tipus registrat (per defecte, igual que «id»)
+    enabled: true
+    params:
+      source: resources/ca/transformations/substitucions_lexiques.yaml

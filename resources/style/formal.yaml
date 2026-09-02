@@ -1,0 +1,20 @@
+# Perfil d'estil formal (acadèmic o administratiu).
+name: formal
+description: Prefereix connectors formals i evita col·loquialismes i crosses.
+sentence_length:
+  target_mean: 22
+  tolerance: 10
+formality: 0.8
+preferred_connectors:
+  - tanmateix
+  - així mateix
+  - en conseqüència
+  - atès que
+  - no obstant això
+avoided_words:
+  - o sigui
+  - bueno
+  - vale
+  - un munt de
+  - súper
+max_change_ratio: 0.3

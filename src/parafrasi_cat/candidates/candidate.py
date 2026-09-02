@@ -1,0 +1,70 @@
+"""Un candidat: una versió alternativa d'una frase amb les transformacions aplicades."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable
+from dataclasses import dataclass
+from difflib import SequenceMatcher
+
+from parafrasi_cat.core.transformation import Transformation, apply_transformations
+
+
+@dataclass(frozen=True, slots=True)
+class Candidate:
+    """Versió alternativa d'una frase.
+
+    Atributs:
+        sentence_index: Índex de la frase dins del document.
+        source_text: Text original de la frase.
+        text: Text del candidat (igual a ``source_text`` si és el candidat identitat).
+        transformations: Transformacions aplicades, ordenades per posició.
+    """
+
+    sentence_index: int
+    source_text: str
+    text: str
+    transformations: tuple[Transformation, ...] = ()
+
+    @property
+    def is_identity(self) -> bool:
+        return not self.transformations and self.text == self.source_text
+
+    @property
+    def n_transformations(self) -> int:
+        return len(self.transformations)
+
+    def change_ratio(self) -> float:
+        """Proporció de caràcters canviats (0 = idèntic, 1 = completament diferent)."""
+        if self.source_text == self.text:
+            return 0.0
+        return 1.0 - SequenceMatcher(a=self.source_text, b=self.text, autojunk=False).ratio()
+
+    @classmethod
+    def identity(cls, sentence_index: int, source_text: str) -> Candidate:
+        return cls(sentence_index, source_text, source_text, ())
+
+    @classmethod
+    def from_transformations(
+        cls,
+        sentence_index: int,
+        source_text: str,
+        transformations: Iterable[Transformation],
+    ) -> Candidate:
+        ordered = tuple(sorted(transformations, key=lambda t: t.changed_span.start))
+        return cls(
+            sentence_index, source_text, apply_transformations(source_text, ordered), ordered
+        )
+
+    def describe(self) -> str:
+        if self.is_identity:
+            return "sense canvis"
+        return "; ".join(t.describe() for t in self.transformations)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "sentence_index": self.sentence_index,
+            "source_text": self.source_text,
+            "text": self.text,
+            "transformations": [t.to_dict() for t in self.transformations],
+            "change_ratio": round(self.change_ratio(), 4),
+        }

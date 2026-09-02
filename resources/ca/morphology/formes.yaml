@@ -1,0 +1,16 @@
+# Diccionari de formes flexionades (mostra mínima per validar el format).
+# El proveïdor DictionaryMorphology el carrega si existeix.
+# Trets: pos, gender (m|f), number (sg|pl), person (1|2|3), tense, mood.
+description: Mostra de formes flexionades del català.
+entries:
+  - {form: casa, lemma: casa, pos: noun, gender: f, number: sg}
+  - {form: cases, lemma: casa, pos: noun, gender: f, number: pl}
+  - {form: gos, lemma: gos, pos: noun, gender: m, number: sg}
+  - {form: gossos, lemma: gos, pos: noun, gender: m, number: pl}
+  - {form: és, lemma: ser, pos: verb, person: "3", number: sg, tense: pres, mood: ind}
+  - {form: són, lemma: ser, pos: verb, person: "3", number: pl, tense: pres, mood: ind}
+  - {form: era, lemma: ser, pos: verb, person: "3", number: sg, tense: impf, mood: ind}
+  - {form: té, lemma: tenir, pos: verb, person: "3", number: sg, tense: pres, mood: ind}
+  - {form: tenen, lemma: tenir, pos: verb, person: "3", number: pl, tense: pres, mood: ind}
+  - {form: gran, lemma: gran, pos: adj, number: sg}
+  - {form: grans, lemma: gran, pos: adj, number: pl}

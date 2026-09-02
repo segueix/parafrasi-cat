@@ -1,0 +1,6 @@
+# Noms propis que s'han de protegir sempre, amb coincidència exacta.
+# Útil per a noms que l'heurística de majúscules no captura (p. ex. al
+# començament d'una frase) o que s'escriuen en minúscula.
+# Exemples:
+# Verdaguer
+# Fabra

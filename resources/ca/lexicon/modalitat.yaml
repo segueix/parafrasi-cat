@@ -1,0 +1,73 @@
+# Marcadors que els validadors fan servir per garantir que:
+#   - una hipòtesi no es converteix en certesa (hedges no poden disminuir,
+#     certainty no pot augmentar);
+#   - la negació es conserva exactament (negation ha de tenir el mateix recompte).
+# Es compten com a paraula o locució sencera, sense distingir majúscules.
+description: Marcadors de modalitat epistèmica i de negació.
+
+hedges:
+  - potser
+  - probablement
+  - possiblement
+  - presumiblement
+  - presumptament
+  - suposadament
+  - aparentment
+  - versemblantment
+  - hipotèticament
+  - hipòtesi
+  - sembla
+  - sembla que
+  - semblaria
+  - podria
+  - podrien
+  - pot ser que
+  - podria ser
+  - es creu
+  - es considera
+  - es pensa
+  - es diria
+  - tal vegada
+  - segurament
+  - en principi
+  - a priori
+  - si més no
+  - caldria
+
+certainty:
+  - certament
+  - sens dubte
+  - sense cap dubte
+  - indubtablement
+  - inqüestionablement
+  - innegablement
+  - evidentment
+  - òbviament
+  - clarament
+  - és evident
+  - és clar
+  - definitivament
+  - necessàriament
+  - amb tota seguretat
+
+negation:
+  - "no"
+  - mai
+  - cap
+  - res
+  - ningú
+  - gens
+  - enlloc
+  - tampoc
+  - ni
+  - sense
+
+# Locucions que contenen un marcador de negació però no neguen res:
+# s'ignoren en comptar la negació.
+negation_exceptions:
+  - no obstant això
+  - no obstant
+  - no res
+  - si no
+  - com no
+  - ni tan sols

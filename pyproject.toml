@@ -1,0 +1,89 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "parafrasi-cat"
+version = "0.1.0"
+description = "Motor local de reredacció i parafraseig en català basat en regles explícites, sense LLM ni serveis externs."
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = ["català", "parafraseig", "reredacció", "PLN", "regles", "estilometria"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Natural Language :: Catalan",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Text Processing :: Linguistic",
+  "Typing :: Typed",
+]
+dependencies = [
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "mypy>=1.8",
+  "ruff>=0.4",
+  "types-PyYAML>=6.0",
+]
+
+[project.scripts]
+parafrasi-cat = "parafrasi_cat.cli:main"
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/parafrasi_cat",
+  "resources",
+  "rules",
+  "dictionaries",
+  "docs",
+  "examples",
+  "tests",
+  "README.md",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/parafrasi_cat"]
+
+# En instal·lar el paquet (no en mode editable), els recursos lingüístics i els
+# conjunts de regles s'empaqueten dins del paquet perquè el motor funcioni sense
+# dependre del directori del repositori.
+[tool.hatch.build.targets.wheel.force-include]
+"resources" = "parafrasi_cat/_data/resources"
+"rules" = "parafrasi_cat/_data/rules"
+"dictionaries" = "parafrasi_cat/_data/dictionaries"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "N", "SIM"]
+ignore = ["SIM108"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["parafrasi_cat"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src/parafrasi_cat", "tests"]
+warn_unreachable = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = "yaml"
+ignore_missing_imports = true
