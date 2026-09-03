@@ -206,7 +206,10 @@ class RewriteService:
     ) -> None:
         self._paths = paths or ProjectPaths.discover()
         self._rule_set = rule_set
-        self._history = history or HistoryLog(self._paths.root / DEFAULT_HISTORY_FILE)
+        # Comparació amb None, no «or»: un registre buit té longitud 0 i seria fals.
+        self._history = (
+            HistoryLog(self._paths.root / DEFAULT_HISTORY_FILE) if history is None else history
+        )
         self._pipelines: dict[PipelineConfig, Pipeline] = {}
         self._observer: DocumentObserver | None = None
         self._analyzer: RuleBasedAnalyzer | None = None
