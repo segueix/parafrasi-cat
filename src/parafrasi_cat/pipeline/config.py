@@ -44,6 +44,11 @@ class PipelineConfig:
         level: Nivell màxim de les regles actives (1 lèxic … 5 paràgraf); ``None`` = totes.
         length_ratio: Marge de longitud (mínim, màxim) acceptat respecte de l'original.
         use_style: Si és fals, no es calcula la distància d'estil.
+        dictionaries: Diccionaris terminològics actius (noms dins de ``dictionaries/`` o rutes).
+        preferences: Fitxer de preferències explícites de l'autor (nom dins de
+            ``preferences/`` o ruta); ``None`` = cap.
+        feedback: Fitxer de feedback manual; ``None`` = el que indiqui el fitxer de
+            preferències (clau ``feedback``), si en té.
     """
 
     home: Path | None = None
@@ -62,6 +67,9 @@ class PipelineConfig:
     level: int | None = None
     length_ratio: tuple[float, float] = (0.6, 1.6)
     use_style: bool = True
+    dictionaries: tuple[str, ...] = ()
+    preferences: str | None = None
+    feedback: Path | None = None
 
     def __post_init__(self) -> None:
         if self.level is not None and not 1 <= self.level <= 5:
@@ -133,6 +141,17 @@ class PipelineConfig:
                 as_float(ratio, "max", defaults.length_ratio[1]),
             ),
             use_style=as_bool(data, "use_style", defaults.use_style),
+            dictionaries=tuple(
+                _maybe_path(item, base_dir) for item in as_str_list(data, "dictionaries")
+            ),
+            preferences=(
+                _maybe_path(as_str(data, "preferences"), base_dir)
+                if data.get("preferences")
+                else None
+            ),
+            feedback=(
+                _resolve_path(as_str(data, "feedback"), base_dir) if data.get("feedback") else None
+            ),
         )
 
     @classmethod
@@ -160,6 +179,9 @@ class PipelineConfig:
             "level": self.level,
             "length_ratio": {"min": self.length_ratio[0], "max": self.length_ratio[1]},
             "use_style": self.use_style,
+            "dictionaries": list(self.dictionaries),
+            "preferences": self.preferences,
+            "feedback": None if self.feedback is None else str(self.feedback),
         }
 
 

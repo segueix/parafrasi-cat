@@ -6,6 +6,7 @@ Exemples::
     parafrasi-cat rewrite input.txt --candidates 10 --discarded 8
     parafrasi-cat rewrite input.txt --json > resultat.json
     parafrasi-cat rewrite input.txt --output sortida.txt
+    parafrasi-cat rewrite input.txt --dictionary historia --preferences preferences/author.yml
 
 La sortida mostra, per a cada frase, el millor candidat, les regles
 aplicades, les puntuacions per dimensió (preservació factual,
@@ -45,6 +46,8 @@ class RewriteOptions:
     min_confidence: float | None = None
     protected_terms: tuple[str, ...] = ()
     protected_terms_files: tuple[Path, ...] = ()
+    dictionaries: tuple[str, ...] = ()
+    preferences: str | None = None
     home: Path | None = None
     config: Path | None = None
 
@@ -72,6 +75,10 @@ class RewriteOptions:
                 *config.protected_terms_files,
                 *self.protected_terms_files,
             )
+        if self.dictionaries:
+            overrides["dictionaries"] = (*config.dictionaries, *self.dictionaries)
+        if self.preferences:
+            overrides["preferences"] = self.preferences
         return config.with_overrides(**overrides)
 
 
@@ -149,6 +156,21 @@ def build_rewrite_parser() -> argparse.ArgumentParser:
         help="fitxer amb termes protegits, un per línia (es pot repetir)",
     )
     parser.add_argument(
+        "--dictionary",
+        action="append",
+        default=[],
+        metavar="NOM|FITXER",
+        help=(
+            "diccionari terminològic del projecte (nom dins de dictionaries/ o ruta; "
+            "es pot repetir)"
+        ),
+    )
+    parser.add_argument(
+        "--preferences",
+        metavar="NOM|FITXER",
+        help="preferències explícites de l'autor (nom dins de preferences/ o ruta)",
+    )
+    parser.add_argument(
         "-d",
         "--discarded",
         type=int,
@@ -182,6 +204,8 @@ def rewrite_main(argv: Sequence[str] | None = None) -> int:
         min_confidence=args.min_confidence,
         protected_terms=tuple(args.protect),
         protected_terms_files=tuple(args.protect_file),
+        dictionaries=tuple(args.dictionary),
+        preferences=args.preferences,
         home=args.home,
         config=args.config,
     )

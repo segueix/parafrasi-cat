@@ -1,0 +1,7 @@
+# Feedback manual de l'autor sobre variants: recomptes explícits i inspeccionables.
+# El motor no hi entrena cap model; només llegeix aquests nombres.
+# Ordres: parafrasi-cat feedback preferred|acceptable|rejected VARIANT
+#         parafrasi-cat feedback show
+description: Feedback manual de l'autor sobre variants (recomptes explícits; cap model entrenat).
+prior: 3
+variants: {}

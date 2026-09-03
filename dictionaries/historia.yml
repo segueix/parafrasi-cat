@@ -1,0 +1,37 @@
+# Terminologia d'història i història de l'art. S'activa amb «--dictionary historia».
+description: Terminologia d'història i història de l'art (arqueologia, patrimoni, documentació).
+language: ca
+entries:
+  - term: sarcòfag
+    preferred: [sarcòfag]
+    accepted: [sarcòfag funerari]
+    avoid: [fèretre]
+    protected: true
+    pos: nom
+    notes: "No substituir en contextos arqueològics."
+  - term: monument funerari
+    preferred: [monument funerari]
+    accepted: [sepulcre, sepultura monumental]
+    protected: true
+    pos: nom
+    notes: "Terme descriptiu fixat per al projecte."
+  - term: crani
+    preferred: [crani]
+    accepted: [calavera]
+    pos: nom
+  - term: enterrament
+    preferred: [enterrament]
+    accepted: [sepeli, inhumació]
+    avoid: [enterro]
+    pos: nom
+    notes: "«enterro» és un castellanisme."
+  - term: segle
+    preferred: [segle]
+    avoid: [sigle]
+    pos: nom
+    notes: "«sigle» és una forma antiga; en la prosa actual s'escriu «segle»."
+  - term: document
+    preferred: [document]
+    accepted: [diploma, instrument]
+    pos: nom
+    notes: "Les formes acceptades designen tipus concrets de document; no s'hi substitueixen."

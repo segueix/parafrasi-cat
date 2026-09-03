@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from parafrasi_cat.analyzer.analysis import RuleBasedAnalyzer
 from parafrasi_cat.analyzer.lexicon import ClosedClassLexicon
 from parafrasi_cat.analyzer.sentences import DEFAULT_ABBREVIATIONS, SentenceSplitter
 from parafrasi_cat.candidates.generator import CandidateGenerator
+from parafrasi_cat.dictionaries.dictionary import DictionarySet
 from parafrasi_cat.morphology.registry import create_morphology_provider
 from parafrasi_cat.pipeline.config import PipelineConfig
 from parafrasi_cat.pipeline.pipeline import Pipeline
+from parafrasi_cat.preferences.author import AuthorPreferences
+from parafrasi_cat.preferences.evaluator import PreferenceEvaluator
+from parafrasi_cat.preferences.feedback import FeedbackStore
+from parafrasi_cat.preferences.resolver import PreferenceResolver
 from parafrasi_cat.protected.protector import default_protector
 from parafrasi_cat.resources import (
     ProjectPaths,
@@ -20,6 +26,7 @@ from parafrasi_cat.resources import (
     load_mapping,
     read_term_list,
 )
+from parafrasi_cat.rules.dictionary import DictionaryPreferenceRule
 from parafrasi_cat.rules.registry import RuleRegistry, default_registry
 from parafrasi_cat.rules.ruleset import RuleSet, RuleSetConfig, build_rule_set
 from parafrasi_cat.scoring.scorer import CompositeScorer
@@ -55,6 +62,11 @@ def build_pipeline(
 
     Tots els components es creen aquí de manera explícita perquè sigui fàcil
     substituir-ne qualsevol (un altre analitzador, més validadors, etc.).
+
+    Jerarquia de prioritats terminològiques que en resulta: fragments
+    protegits explícitament > termes protegits dels diccionaris > formes
+    preferides dels diccionaris > preferències explícites de l'autor (fitxer
+    i feedback) > empremta estadística > preferències generals del motor.
     """
     config = config or PipelineConfig()
     paths = ProjectPaths.discover(config.home)
@@ -63,11 +75,18 @@ def build_pipeline(
     lexicon = ClosedClassLexicon.load(lang)
     analyzer = RuleBasedAnalyzer(SentenceSplitter(_load_abbreviations(lang)), lexicon=lexicon)
 
+    dictionaries = load_dictionaries(config, paths)
+    author = load_author_preferences(config, paths)
+    feedback = load_feedback(config, author)
+
+    # Nivells 1 i 2: proteccions absolutes (protector i validadors).
     user_terms = _collect_user_terms(config, paths)
+    dictionary_terms = dictionaries.protected_terms
     protector = default_protector(
         analyzer,
         user_terms=user_terms,
         known_names=_read_optional_terms(paths, KNOWN_NAMES_FILE),
+        dictionary_terms=dictionary_terms,
         lexicon=lexicon,
     )
 
@@ -75,25 +94,54 @@ def build_pipeline(
     rule_set = build_rule_set(rule_config, registry or default_registry(), paths).up_to_level(
         config.level
     )
+    if dictionaries.substitutions and DictionaryPreferenceRule.DEFAULT_ID not in rule_set.rule_ids:
+        # Nivell 3: les formes a evitar dels diccionaris generen propostes de substitució.
+        rule_set = rule_set.with_extra_rules([DictionaryPreferenceRule(dictionaries)])
 
-    validators = build_validators(config, paths, analyzer, lexicon, rule_set, user_terms)
+    all_terms = tuple(dict.fromkeys((*user_terms, *dictionary_terms)))
+    validators = build_validators(config, paths, analyzer, lexicon, rule_set, all_terms)
 
     style_profile = load_style_profile(
         paths.resolve_style_profile(config.style_profile), paths=paths
     )
+    if author is not None and author.preferred_sentence_length is not None:
+        # La longitud de frase explícita de l'autor mana sobre la del perfil o l'empremta.
+        style_profile = replace(
+            style_profile, target_sentence_length=float(author.preferred_sentence_length)
+        )
+
+    # Nivells 3 i 4 (per a la puntuació) i deferència de l'empremta (nivell 5).
+    resolver = PreferenceResolver(
+        dictionaries=dictionaries,
+        author=author,
+        feedback=feedback,
+        protected_terms=user_terms,
+    )
     style_evaluator = None
     if config.use_style:
         # Si el perfil referencia una empremta de l'autor, l'avaluador també mesura
-        # la distància respecte de les seves preferències (variants, connectors, comes).
+        # la distància respecte de les seves preferències (variants, connectors, comes),
+        # excepte per a les formes que ja tenen una preferència explícita.
         style_resources = (
             StyleResources.load(paths, config.language, lexicon=lexicon)
             if style_profile.preferences is not None
             else None
         )
         style_evaluator = StyleEvaluator(
-            style_profile, analyzer, _load_connectors(lang), resources=style_resources
+            style_profile,
+            analyzer,
+            _load_connectors(lang),
+            resources=style_resources,
+            explicit_forms=resolver.explicit_forms(),
         )
-    scorer = CompositeScorer(config.scoring, style_evaluator)
+    preference_evaluator = None
+    if resolver.active:
+        preference_evaluator = PreferenceEvaluator(
+            resolver,
+            max_sentence_length=author.max_sentence_length if author is not None else None,
+            analyzer=analyzer,
+        )
+    scorer = CompositeScorer(config.scoring, style_evaluator, preference_evaluator)
 
     return Pipeline(
         analyzer=analyzer,
@@ -112,6 +160,8 @@ def build_pipeline(
         morphology=create_morphology_provider(config.morphology, lang, lexicon=lexicon),
         lexicon=lexicon,
         max_level=config.level,
+        dictionary_names=dictionaries.names,
+        preferences_name=author.name if author is not None else "",
     )
 
 
@@ -127,7 +177,7 @@ def build_validators(
 
     - fragments protegits, xifres i números romans, noms propis, dates, citacions,
       text entre cometes i negació (preservació factual);
-    - terminologia protegida per l'usuari;
+    - terminologia protegida per l'usuari i pels diccionaris del projecte;
     - marcadors d'atenuació i certesa, i classificació epistemològica explícita
       (només les regles amb ``allows_epistemic_change`` poden canviar-la);
     - gramaticalitat heurística i marge de longitud.
@@ -159,6 +209,31 @@ def build_validators(
     validators.append(GrammarHeuristicValidator())
     validators.append(LengthRatioValidator(*config.length_ratio))
     return validators
+
+
+def load_dictionaries(config: PipelineConfig, paths: ProjectPaths) -> DictionarySet:
+    """Diccionaris actius segons la configuració (noms dins de ``dictionaries/`` o rutes)."""
+    return DictionarySet.load(
+        paths.resolve_dictionary(reference) for reference in config.dictionaries
+    )
+
+
+def load_author_preferences(
+    config: PipelineConfig, paths: ProjectPaths
+) -> AuthorPreferences | None:
+    if not config.preferences:
+        return None
+    return AuthorPreferences.load(paths.resolve_preferences(config.preferences))
+
+
+def load_feedback(config: PipelineConfig, author: AuthorPreferences | None) -> FeedbackStore | None:
+    """Feedback manual: el fitxer de la configuració o el que indica el fitxer de preferències."""
+    file = config.feedback
+    if file is None and author is not None:
+        file = author.feedback_file
+    if file is None:
+        return None
+    return FeedbackStore.load(file)
 
 
 def _load_abbreviations(lang: Path) -> frozenset[str]:

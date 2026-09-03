@@ -25,7 +25,17 @@ FACTS = (
     "dos ossos",
     "dues serps",
 )
+#: Relacions completes (nom + modificador) que cap variant no pot trencar: no n'hi ha
+#: prou de conservar «dos ossos» i «dues serps»; cal conservar que els ossos són
+#: creuats i les serps, creuades. Només s'admet «també» entremig.
+RELATIONS = (("dos ossos", "creuats"), ("dues serps", "creuades"))
 NUMBERS = re.compile(r"\d+")
+
+
+def relation_kept(text: str, head: str, modifier: str) -> bool:
+    """Cert si ``head`` va seguit (com a màxim amb «també» entremig) de ``modifier``."""
+    pattern = rf"(?<![^\W\d_]){re.escape(head)}(?:\s+també)?\s+{re.escape(modifier)}(?![^\W\d_])"
+    return re.search(pattern, text) is not None
 
 
 @pytest.fixture(scope="module")
@@ -39,10 +49,13 @@ SARCOFAG = "sarcòfag fet per l’escultor Benedetto da Rovezzano"
 CRANIS = "dos cranis acompanyats de dos ossos creuats, així com dues serps també creuades."
 EXPECTED_FIRST = (
     f"El monument funerari d’Oddo Altoviti, {DATES}, és la primera referència itàlica.",
-    f"La primera referència itàlica constitueix {MONUMENT}, {DATES}.",
+    f"El monument funerari d’Oddo Altoviti, {DATES}, constitueix la primera referència itàlica.",
     f"La primera referència itàlica correspon al monument funerari d’Oddo Altoviti, {DATES}.",
     f"La primera referència itàlica és {MONUMENT}, que fou {DATES}.",
 )
+#: «constituir» té direcció (X constitueix Y = X forma Y): sense invertir els sintagmes,
+#: la variant amb «constitueix» no és una equivalència correcta d'aquesta frase.
+WRONG_CONSTITUEIX = f"La primera referència itàlica constitueix {MONUMENT}"
 EXPECTED_SECOND = (
     f"Aquest {SARCOFAG} presenta {CRANIS}",
     f"En aquest {SARCOFAG} apareixen {CRANIS}",
@@ -55,10 +68,24 @@ def test_requested_variants_are_generated(result: ParaphraseResult) -> None:
     first = result.alternatives(0)
     for expected in EXPECTED_FIRST:
         assert expected in first, expected
+    assert not any(alt.startswith(WRONG_CONSTITUEIX) for alt in first)
     second = result.alternatives(1)
     for expected in EXPECTED_SECOND:
         assert expected in second, expected
     assert len(first) >= 6 and len(second) >= 8
+
+
+def test_constitueix_keeps_its_direction() -> None:
+    pipeline = build_pipeline(PipelineConfig(rule_set="parafrasi"))
+    # Subjecte especificatiu («La causa principal és X»): cal invertir els sintagmes.
+    specificational = pipeline.run("La causa principal és la sequera.").alternatives(0)
+    assert "La sequera constitueix la causa principal." in specificational
+    assert "La causa principal constitueix la sequera." not in specificational
+    # Subjecte predicatiu («Aquests textos són la font principal»): substitució directa.
+    predicational = pipeline.run("Aquests textos són la font principal.").alternatives(0)
+    assert "Aquests textos constitueixen la font principal." in predicational
+    assert "La font principal constitueix aquests textos." not in predicational
+    assert not any(alt.startswith(WRONG_CONSTITUEIX) for alt in pipeline.run(TEXT).alternatives(0))
 
 
 def test_every_candidate_keeps_the_facts(result: ParaphraseResult) -> None:
@@ -84,6 +111,29 @@ def test_every_candidate_keeps_the_facts(result: ParaphraseResult) -> None:
         assert fact in result.output_text
 
 
+def test_every_candidate_keeps_complete_relations(result: ParaphraseResult) -> None:
+    # La comprovació és sobre la relació sencera, no només sobre el substantiu.
+    assert relation_kept(TEXT, "dos ossos", "creuats")
+    assert relation_kept(TEXT, "dues serps", "creuades")  # amb «també» entremig
+    assert not relation_kept("dos ossos i dues serps creuades", "dos ossos", "creuats")
+    assert not relation_kept("dues serps, i dos ossos creuats", "dues serps", "creuades")
+    assert not relation_kept("dos ossos", "dos ossos", "creuats")
+    assert not relation_kept("dues serps creuats", "dues serps", "creuades")
+    checked = 0
+    for sentence in result.sentences:
+        for head, modifier in RELATIONS:
+            if not relation_kept(sentence.source_text, head, modifier):
+                continue
+            for evaluated in sentence.candidates:
+                text = evaluated.candidate.text
+                assert relation_kept(text, head, modifier), (head, modifier, text)
+                checked += 1
+            assert relation_kept(sentence.output_text, head, modifier)
+    assert checked >= 2 * 8
+    for head, modifier in RELATIONS:
+        assert relation_kept(result.output_text, head, modifier)
+
+
 def test_candidates_are_deduplicated_and_bounded(result: ParaphraseResult) -> None:
     for sentence in result.sentences:
         texts = [c.candidate.text for c in sentence.candidates]
@@ -103,7 +153,8 @@ def test_candidates_are_deduplicated_and_bounded(result: ParaphraseResult) -> No
 
 def test_explanations_and_json(result: ParaphraseResult) -> None:
     report = result.explain()
-    assert "copula.es_a_constitueix" in report or "Candidat no seleccionat" in report
+    assert "copula.es_a_constitueix_invertit" in report or "Candidat no seleccionat" in report
+    assert WRONG_CONSTITUEIX not in report
     for transformation in result.transformations:
         assert transformation.explanation and transformation.rule_id
         assert transformation.metadata.get("category")
@@ -119,11 +170,23 @@ def test_low_risk_profile_excludes_medium_risk_rules() -> None:
 
     config = PipelineConfig(rule_set="parafrasi", max_semantic_risk=SemanticRisk.LOW)
     result = build_pipeline(config).run(TEXT)
-    first = result.alternatives(0)
-    assert not any(alt.startswith("El monument funerari") for alt in first)  # inversió = risc mitjà
-    assert any("constitueix" in alt for alt in first)
-    reasons = [r.reason for r in result.sentences[0].rejected_proposals]
-    assert any("risc semàntic" in reason for reason in reasons)
+    first = result.sentences[0]
+    # Les regles de risc mitjà (inversió amb «és», «correspon a») no entren en cap candidat...
+    used = {rule_id for e in first.candidates for rule_id in e.candidate.rule_ids}
+    assert not used & {
+        "ordre.inversio_copula",
+        "ordre.inversio_copula_amb_aposicio",
+        "copula.es_a_correspon_a",
+    }
+    assert not any("correspon al" in alt for alt in first.alternatives)
+    rejected = {r.transformation.rule_id: r.reason for r in first.rejected_proposals}
+    assert "risc semàntic" in rejected["ordre.inversio_copula_amb_aposicio"]
+    assert "risc semàntic" in rejected["copula.es_a_correspon_a"]
+    # ...però la variant correcta amb «constitueix» (sintagmes invertits) és de risc baix.
+    assert any(
+        alt.endswith("constitueix la primera referència itàlica.") for alt in first.alternatives
+    )
+    assert not any(alt.startswith(WRONG_CONSTITUEIX) for alt in first.alternatives)
 
 
 def test_cli_produces_variants(capsys: pytest.CaptureFixture[str]) -> None:

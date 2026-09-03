@@ -56,6 +56,11 @@ class ProjectPaths:
         """Directori de les empremtes estilístiques (``style/<autor>.json``)."""
         return self.root / "style"
 
+    @property
+    def preferences(self) -> Path:
+        """Directori de les preferències explícites de l'autor i del feedback."""
+        return self.root / "preferences"
+
     def language(self, code: str = "ca") -> Path:
         return self.resources / code
 
@@ -80,6 +85,14 @@ class ProjectPaths:
     def resolve_fingerprint(self, reference: str | Path) -> Path:
         """Resol una empremta estilística per nom (``style/<nom>.json``) o per ruta."""
         return self._resolve_named(reference, self.fingerprints, "empremta d'estil")
+
+    def resolve_dictionary(self, reference: str | Path) -> Path:
+        """Resol un diccionari terminològic per nom (``dictionaries/<nom>.yml``) o per ruta."""
+        return self._resolve_named(reference, self.dictionaries, "diccionari")
+
+    def resolve_preferences(self, reference: str | Path) -> Path:
+        """Resol un fitxer de preferències per nom (``preferences/<nom>.yml``) o per ruta."""
+        return self._resolve_named(reference, self.preferences, "fitxer de preferències")
 
     def _resolve_named(self, reference: str | Path, directory: Path, what: str) -> Path:
         text = str(reference)

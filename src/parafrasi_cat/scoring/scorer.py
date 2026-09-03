@@ -10,10 +10,15 @@ Cada candidat rep una puntuació separada per dimensió:
   hi ha un error;
 - ``semblanca_estil``: 1 − distància respecte del perfil o l'empremta (``None``
   si no hi ha avaluador d'estil);
+- ``preferencies_autor``: adequació a les preferències explícites (diccionaris
+  del projecte, fitxer de preferències de l'autor, feedback manual): 1 si només
+  introdueix formes preferides, 0 si n'introdueix d'evitades, ``None`` si cap
+  preferència no hi intervé;
 - ``grau_de_canvi``: proporció de caràcters canviats (0 = idèntic).
 
 Una puntuació global (``total``) combina el guany per transformacions amb
-les penalitzacions d'estil i gramaticalitat, però qualsevol error de
+les penalitzacions d'estil i gramaticalitat i amb el bonus (o la penalització)
+de les preferències explícites, però qualsevol error de
 preservació (factual, epistemològica, terminològica) o qualsevol error de
 validació **invalida** el candidat: ``valid`` és fals i ``total`` és −1.
 """
@@ -24,6 +29,7 @@ from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 from parafrasi_cat.candidates.candidate import Candidate
+from parafrasi_cat.preferences.evaluator import PreferenceEvaluator
 from parafrasi_cat.scoring.weights import ScoringWeights
 from parafrasi_cat.style.evaluator import StyleEvaluator
 from parafrasi_cat.validation.grammar import WARNING_PENALTY
@@ -35,6 +41,7 @@ DIMENSIONS: tuple[str, ...] = (
     "compliment_terminologic",
     "gramaticalitat",
     "semblanca_estil",
+    "preferencies_autor",
     "grau_de_canvi",
 )
 
@@ -46,6 +53,7 @@ _DIMENSION_LABELS = {
     "compliment_terminologic": "compliment terminològic",
     "gramaticalitat": "gramaticalitat",
     "semblanca_estil": "semblança amb l'estil",
+    "preferencies_autor": "preferències de l'autor",
     "grau_de_canvi": "grau de canvi",
 }
 
@@ -69,6 +77,8 @@ class ScoreBreakdown:
         dimensions: Puntuació 0-1 de cada dimensió (``None`` si no s'ha pogut mesurar).
         valid: Fals si alguna dimensió de preservació ha fallat o hi ha errors de validació.
         invalidating: Motius que invaliden el candidat.
+        preference_explanation: Per què les preferències explícites afavoreixen o
+            penalitzen el candidat (buit si no hi intervenen).
     """
 
     total: float
@@ -77,6 +87,7 @@ class ScoreBreakdown:
     dimensions: dict[str, float | None] = field(default_factory=dict)
     valid: bool = True
     invalidating: tuple[str, ...] = ()
+    preference_explanation: str = ""
 
     def dimension(self, name: str) -> float | None:
         return self.dimensions.get(name)
@@ -98,6 +109,7 @@ class ScoreBreakdown:
             "dimensions": dict(self.dimensions),
             "invalidating": list(self.invalidating),
             "explanation": self.explanation,
+            "preference_explanation": self.preference_explanation,
         }
 
 
@@ -114,15 +126,20 @@ class CompositeScorer:
     prefereix reredactar quan pot fer-ho sense risc, i deixar el text intacte
     en cas contrari. Amb un :class:`ScoringContext`, les dimensions de
     preservació es dedueixen de la validació i poden invalidar el candidat.
+    Amb un :class:`PreferenceEvaluator`, les preferències explícites de
+    l'autor (diccionaris, fitxer de preferències, feedback) afegeixen un bonus
+    o una penalització explicats.
     """
 
     def __init__(
         self,
         weights: ScoringWeights | None = None,
         style_evaluator: StyleEvaluator | None = None,
+        preference_evaluator: PreferenceEvaluator | None = None,
     ) -> None:
         self._weights = weights or ScoringWeights()
         self._style = style_evaluator
+        self._preferences = preference_evaluator
 
     @property
     def weights(self) -> ScoringWeights:
@@ -131,6 +148,10 @@ class CompositeScorer:
     @property
     def style_evaluator(self) -> StyleEvaluator | None:
         return self._style
+
+    @property
+    def preference_evaluator(self) -> PreferenceEvaluator | None:
+        return self._preferences
 
     def score(self, candidate: Candidate, ctx: ScoringContext | None = None) -> ScoreBreakdown:
         w = self._weights
@@ -175,10 +196,25 @@ class CompositeScorer:
             parts.append(f"distància d'estil {-style_penalty:+.3f}")
             dimensions["semblanca_estil"] = round(max(0.0, 1.0 - distance.total), 4)
 
+        preference_bonus = 0.0
+        preference_explanation = ""
+        if self._preferences is not None:
+            assessment = self._preferences.assess(candidate.source_text, candidate.text)
+            if assessment.applies:
+                preference_bonus = w.preferences * assessment.score
+                preference_explanation = assessment.explanation
+                components["preferencies"] = round(preference_bonus, 4)
+                parts.append(
+                    f"preferències de l'autor {preference_bonus:+.3f} ({preference_explanation})"
+                )
+                dimensions["preferencies_autor"] = round((assessment.score + 1.0) / 2.0, 4)
+
         dimensions["grau_de_canvi"] = round(candidate.change_ratio(), 4)
 
         valid = not invalidating
-        total = gain - style_penalty - grammar_penalty if valid else INVALID_TOTAL
+        total = (
+            gain - style_penalty - grammar_penalty + preference_bonus if valid else INVALID_TOTAL
+        )
         if not valid:
             parts.append("candidat invalidat: " + "; ".join(invalidating))
         return ScoreBreakdown(
@@ -188,6 +224,7 @@ class CompositeScorer:
             dimensions=dimensions,
             valid=valid,
             invalidating=tuple(invalidating),
+            preference_explanation=preference_explanation,
         )
 
 

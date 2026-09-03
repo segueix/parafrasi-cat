@@ -80,6 +80,7 @@ def default_protector(
     *,
     user_terms: Iterable[str] = (),
     known_names: Iterable[str] = (),
+    dictionary_terms: Iterable[str] = (),
     lexicon: ClosedClassLexicon | None = None,
 ) -> Protector:
     """Protector amb tots els detectors estàndard.
@@ -88,6 +89,8 @@ def default_protector(
         analyzer: Analitzador que fa servir el detector de noms propis.
         user_terms: Termes definits per l'usuari (coincidència sense distingir majúscules).
         known_names: Noms propis coneguts (coincidència exacta, distingint majúscules).
+        dictionary_terms: Termes protegits pels diccionaris del projecte (sense distingir
+            majúscules; detector ``user_term.dictionary``).
         lexicon: Lexicó de classes tancades per afinar el detector de noms propis;
             si no s'indica, s'agafa el de l'analitzador quan en té.
     """
@@ -114,4 +117,7 @@ def default_protector(
     terms = tuple(user_terms)
     if terms:
         detectors.append(UserTermDetector(terms))
+    dictionary = tuple(dictionary_terms)
+    if dictionary:
+        detectors.append(UserTermDetector(dictionary, detector_id="user_term.dictionary"))
     return Protector(detectors)

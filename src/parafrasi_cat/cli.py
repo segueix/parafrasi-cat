@@ -9,6 +9,8 @@ Exemples::
     parafrasi-cat style build corpus/author/
     parafrasi-cat style compare style/author.json style/altre.json
     parafrasi-cat rewrite input.txt --style style/author.json --level 3 --candidates 10
+    parafrasi-cat rewrite input.txt --dictionary historia --preferences preferences/author.yml
+    parafrasi-cat feedback preferred "obra de"
 """
 
 from __future__ import annotations
@@ -38,8 +40,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         epilog=(
             "Sense un conjunt de regles actiu, el text es retorna sense modificar. "
-            "Subordres: «parafrasi-cat rewrite FITXER» (reescriptura amb informe de candidats) "
-            "i «parafrasi-cat style build|compare|show» (empremtes d'estil)."
+            "Subordres: «parafrasi-cat rewrite FITXER» (reescriptura amb informe de candidats), "
+            "«parafrasi-cat style build|compare|show» (empremtes d'estil) i "
+            "«parafrasi-cat feedback preferred|acceptable|rejected|show» (feedback manual)."
         ),
     )
     parser.add_argument(
@@ -96,6 +99,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="fitxer amb termes protegits, un per línia (es pot repetir)",
     )
     parser.add_argument(
+        "--dictionary",
+        action="append",
+        default=[],
+        metavar="NOM|FITXER",
+        help=(
+            "diccionari terminològic del projecte (nom dins de dictionaries/ o ruta; "
+            "es pot repetir)"
+        ),
+    )
+    parser.add_argument(
+        "--preferences",
+        metavar="NOM|FITXER",
+        help="preferències explícites de l'autor (nom dins de preferences/ o ruta)",
+    )
+    parser.add_argument(
         "--max-risk", choices=[r.value for r in SemanticRisk], help="risc semàntic màxim acceptat"
     )
     parser.add_argument(
@@ -131,6 +149,10 @@ def load_config(args: argparse.Namespace) -> PipelineConfig:
         overrides["protected_terms"] = (*config.protected_terms, *args.protect)
     if args.protect_file:
         overrides["protected_terms_files"] = (*config.protected_terms_files, *args.protect_file)
+    if args.dictionary:
+        overrides["dictionaries"] = (*config.dictionaries, *args.dictionary)
+    if args.preferences:
+        overrides["preferences"] = args.preferences
     if args.max_risk:
         overrides["max_semantic_risk"] = SemanticRisk.parse(args.max_risk)
     if args.min_confidence is not None:
@@ -156,6 +178,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         from parafrasi_cat.rewrite import rewrite_main
 
         return rewrite_main(arguments[1:])
+    if arguments and arguments[0] == "feedback":
+        from parafrasi_cat.preferences.cli import feedback_main
+
+        return feedback_main(arguments[1:])
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
