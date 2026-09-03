@@ -72,7 +72,7 @@ pythonpath = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["src", "tests"]
+src = ["src", "tests", "scripts"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "N", "SIM"]
@@ -84,7 +84,7 @@ known-first-party = ["parafrasi_cat"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["src/parafrasi_cat", "tests"]
+files = ["src/parafrasi_cat", "tests", "scripts"]
 warn_unreachable = true
 pretty = true
 

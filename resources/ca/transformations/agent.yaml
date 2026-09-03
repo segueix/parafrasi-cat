@@ -17,7 +17,7 @@ rules:
     conditions:
       context:
         not_preceded_by: [ha, han, he, has, hem, heu, havia, havien, hauria, haurien, hagi, hagin, hagués, ho, "l'", el, la, els, les, es, "s'", em, et, ens, us, que]
-    transformation: "{p|map(fet=realitzat,feta=realitzada,fets=realitzats,fetes=realitzades)} per {ag}"
+    transformation: "{p|inflect(realitzar,fet=realitzat,feta=realitzada,fets=realitzats,fetes=realitzades)} per {ag}"
     examples:
       positive:
         - input: "En aquest sarcòfag fet per l'escultor Benedetto da Rovezzano hi ha dos cranis."
@@ -40,7 +40,7 @@ rules:
       - {text: [realitzat, realitzada, realitzats, realitzades], group: p}
       - {text: per}
       - {np: true, group: ag}
-    transformation: "{p|map(realitzat=fet,realitzada=feta,realitzats=fets,realitzades=fetes)} per {ag}"
+    transformation: "{p|inflect(fer,realitzat=fet,realitzada=feta,realitzats=fets,realitzades=fetes)} per {ag}"
     examples:
       positive:
         - input: "El sarcòfag realitzat per l'escultor és de marbre."

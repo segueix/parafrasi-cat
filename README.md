@@ -349,7 +349,8 @@ text ─► analyzer ─► protected ─► rules ─► candidates ─► vali
 |---|---|
 | `core/` | `Span`, `Transformation`, `SemanticRisk`, errors, utilitats de text. |
 | `analyzer/` | Frases, tokens, clítics, apòstrofs, numerals i lexicó de classes tancades. |
-| `morphology/` | Trets flexius interns i adaptadors opcionals (Apertium, FreeLing). |
+| `morphology/` | Trets flexius: recurs de Softcatalà, analitzador intern i adaptadors opcionals. |
+| `adapters/` | Eines externes locals i opcionals (LanguageTool) i detecció de recursos. |
 | `protected/` | Detectors de dates, xifres, romans, cometes, citacions, noms propis i termes. |
 | `rules/` | Motor de patrons, regles declaratives, registre de motors i conjunts de regles. |
 | `candidates/` | `Candidate` i generació de variants, combinacions i reaplicacions. |
@@ -375,12 +376,14 @@ make check       # tot
 
 Perquè quedi clar què es pot esperar del motor:
 
-- **No hi ha analitzador morfosintàctic.** Els límits dels sintagmes es
-  dedueixen amb heurístiques i un lexicó de classes tancades. En català hi ha
-  molta homografia entre noms i verbs, i és on es concentren els errors.
-- **La gramaticalitat de la sortida no es comprova a fons.** El validador
-  detecta contraccions incorrectes, signes desaparellats i defectes de
-  puntuació, però no concordança ni règim verbal.
+- **No hi ha analitzador sintàctic.** Amb el diccionari de Softcatalà importat,
+  el motor sap el lema i els trets de cada forma, però els límits dels
+  sintagmes es continuen deduint amb heurístiques. En català hi ha molta
+  homografia entre noms i verbs, i és on es concentren els errors.
+- **Sense LanguageTool, la gramaticalitat de la sortida no es comprova a fons.**
+  El validador intern detecta contraccions incorrectes, signes desaparellats i
+  defectes de puntuació, però no concordança ni règim verbal. Amb LanguageTool
+  local activat, la concordança sí que es comprova.
 - **La cobertura és limitada.** Amb 40 regles, moltes frases no encaixen amb
   cap i es retornen sense canvis.
 - **Les regles s'han desenvolupat sobre un corpus petit.** El rendiment sobre
@@ -389,11 +392,23 @@ Perquè quedi clar què es pot esperar del motor:
 Les proteccions de contingut, en canvi, són estructurals i es comproven a
 cada candidat.
 
-## Eines externes
+## Recursos lingüístics opcionals
 
-El motor no en necessita cap. Apertium i FreeLing es poden integrar com a
-adaptadors opcionals, locals i desactivats per defecte; les seves llicències
-estan documentades a
+El motor funciona sense cap recurs extern. Dos components opcionals, tots dos
+locals i desactivats per defecte, en milloren la qualitat:
+
+| Component | Aporta | Instal·lació |
+|---|---|---|
+| Morfologia de Softcatalà | Lema, categoria, gènere, nombre, persona, temps i mode d'1,19 milions de formes catalanes | `python scripts/import_softcatala.py --source /ruta/a/catalan-dict-tools` |
+| LanguageTool local | Validació de gramàtica, concordança i puntuació de cada candidat | `python scripts/install_languagetool.py` (cal Java) |
+
+Cap dels dos no es versiona en aquest repositori. LanguageTool **només valida**:
+no genera la paràfrasi ni reescriu mai el text. Un cop instal·lats, tot
+funciona fora de línia.
+
+Detalls i llicències a
+[`docs/recursos-linguistics.md`](docs/recursos-linguistics.md),
+[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) i
 [`docs/eines-externes-opcionals.md`](docs/eines-externes-opcionals.md).
 No s'ha copiat codi de cap altre repositori.
 

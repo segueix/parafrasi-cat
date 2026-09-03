@@ -44,6 +44,26 @@
     <label for="preferencies">Preferències de l'autor</label>
     <select id="preferencies" name="preferencies"></select>
 
+    <fieldset>
+      <legend>Recursos lingüístics</legend>
+      <ul id="recursos" class="recursos"></ul>
+      <div class="linia">
+        <input type="checkbox" id="languagetool">
+        <label for="languagetool" class="en-linia">Validació avançada de català</label>
+      </div>
+      <p id="ajuda-languagetool" class="ajuda"></p>
+      <button type="button" id="instal-la" class="secundari" hidden>
+        Instal·la la validació avançada de català
+      </button>
+      <div id="confirma-instal-lacio" class="confirmacio" hidden>
+        <p class="ajuda" id="detall-instal-lacio"></p>
+        <div class="botons">
+          <button type="button" id="confirma">Sí, baixa-ho i instal·la-ho</button>
+          <button type="button" id="cancel-la" class="secundari">Cancel·la</button>
+        </div>
+      </div>
+    </fieldset>
+
     <div class="linia">
       <input type="checkbox" id="historial-actiu">
       <label for="historial-actiu" class="en-linia">Desa un registre local d'aquesta sessió</label>
@@ -69,6 +89,7 @@
         <div><dt>Diccionaris</dt><dd id="resum-diccionaris"></dd></div>
         <div><dt>Preferències</dt><dd id="resum-preferencies"></dd></div>
         <div><dt>Candidats</dt><dd id="resum-candidats"></dd></div>
+        <div><dt>Validació avançada</dt><dd id="resum-languagetool"></dd></div>
       </dl>
 
       <h3>Text original</h3>

@@ -199,3 +199,79 @@ def test_cli_produces_variants(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_default_rule_set_is_still_identity() -> None:
     assert build_pipeline().run(TEXT).output_text == TEXT
+
+
+# --- fase 8A: morfologia de Softcatalà i validació local de LanguageTool ---------------------
+
+
+def test_generated_verb_forms_agree(result: ParaphraseResult) -> None:
+    """Les formes verbals que generen les regles concorden amb el seu subjecte."""
+    from parafrasi_cat.morphology.catalan import CatalanMorphology
+
+    morphology = CatalanMorphology.discover("resources/ca")
+    if morphology is None:
+        pytest.skip("El recurs morfològic de Softcatalà no s'ha importat")
+    # Cada forma verbal nova ha de ser una forma real del seu lema, no una invenció.
+    checked = 0
+    for sentence in result.sentences:
+        for evaluated in sentence.candidates:
+            for transformation in evaluated.candidate.transformations:
+                after = transformation.text_after.split()
+                for word in after:
+                    stripped = word.strip(",.;:()«»'’")
+                    if stripped in (
+                        "constitueix",
+                        "constitueixen",
+                        "apareix",
+                        "apareixen",
+                        "presenta",
+                        "presenten",
+                        "correspon",
+                        "corresponen",
+                        "realitzat",
+                        "realitzada",
+                        "realitzats",
+                        "realitzades",
+                    ):
+                        assert morphology.knows(stripped), stripped
+                        checked += 1
+    assert checked > 0
+    # I les parelles singular/plural són les que dona el diccionari, no un mapatge.
+    assert morphology.inflect_like("és", "constituir") == "constitueix"
+    assert morphology.inflect_like("són", "constituir") == "constitueixen"
+
+
+def test_singular_and_plural_subjects_get_the_right_verb() -> None:
+    """El nombre del subjecte decideix la forma verbal generada."""
+    pipeline = build_pipeline(PipelineConfig(rule_set="parafrasi", level=3))
+    singular = pipeline.run("Aquest text és la font principal.").alternatives(0)
+    plural = pipeline.run("Aquests textos són la font principal.").alternatives(0)
+    assert any("constitueix la font" in alt for alt in singular), singular
+    assert not any("constitueixen" in alt for alt in singular), singular
+    assert any("constitueixen la font" in alt for alt in plural), plural
+    assert not any("text constitueix" in alt for alt in plural), plural
+
+
+def test_languagetool_only_validates_and_changes_nothing() -> None:
+    """Amb LanguageTool actiu, el text de sortida no el toca ningú més que les regles."""
+    from parafrasi_cat.adapters.languagetool import LanguageToolClient
+
+    if not LanguageToolClient.discover(".").available:
+        pytest.skip("LanguageTool no està instal·lat")
+    plain = build_pipeline(PipelineConfig(rule_set="parafrasi", level=3)).run(TEXT)
+    checked = build_pipeline(PipelineConfig(rule_set="parafrasi", level=3, languagetool=True)).run(
+        TEXT
+    )
+    # Cada candidat acceptat amb LanguageTool també ho era sense: només se'n descarten.
+    plain_texts = {c.candidate.text for s in plain.sentences for c in s.candidates if c.accepted}
+    checked_texts = {
+        c.candidate.text for s in checked.sentences for c in s.candidates if c.accepted
+    }
+    assert checked_texts <= plain_texts, checked_texts - plain_texts
+    # I les dades protegides continuen intactes.
+    for fact in FACTS:
+        assert fact in checked.output_text, fact
+    for head, modifier in RELATIONS:
+        assert relation_kept(checked.output_text, head, modifier), (head, modifier)
+    assert not checked.output_text.startswith(WRONG_CONSTITUEIX)
+    assert [p.text for p in checked.protected_spans] == [p.text for p in plain.protected_spans]

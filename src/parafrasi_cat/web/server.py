@@ -140,6 +140,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._send_json(self._service.options())
         elif path == "/api/feedback":
             self._send_json(self._service.feedback_summary())
+        elif path == "/api/resources":
+            self._send_json(self._service.resources())
         elif path == "/api/history":
             self._send_json(self._service.history_entries())
         elif path == "/api/history/export":
@@ -167,6 +169,9 @@ class RequestHandler(BaseHTTPRequestHandler):
         elif path == "/api/history/enabled":
             enabled = bool(self._read_json().get("enabled", False))
             self._send_json(self._service.set_history_enabled(enabled))
+        elif path == "/api/resources/languagetool":
+            confirmed = bool(self._read_json().get("confirm", False))
+            self._send_json(self._service.install_languagetool(confirmed))
         else:
             self._send_error_json(f"Ruta desconeguda: {path}", HTTPStatus.NOT_FOUND)
 

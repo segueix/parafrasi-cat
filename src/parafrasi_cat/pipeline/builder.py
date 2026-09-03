@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+from parafrasi_cat.adapters.languagetool import LanguageToolClient, LanguageToolValidator
 from parafrasi_cat.analyzer.analysis import RuleBasedAnalyzer
 from parafrasi_cat.analyzer.lexicon import ClosedClassLexicon
 from parafrasi_cat.analyzer.sentences import DEFAULT_ABBREVIATIONS, SentenceSplitter
@@ -208,7 +209,24 @@ def build_validators(
         )
     validators.append(GrammarHeuristicValidator())
     validators.append(LengthRatioValidator(*config.length_ratio))
+    languagetool = build_languagetool_validator(config, paths)
+    if languagetool is not None:
+        validators.append(languagetool)
     return validators
+
+
+def build_languagetool_validator(
+    config: PipelineConfig, paths: ProjectPaths
+) -> LanguageToolValidator | None:
+    """Validador de LanguageTool si s'ha demanat i hi ha una instal·lació local.
+
+    Mai no és obligatori: sense Java o sense LanguageTool, es retorna ``None`` i
+    la canonada continua amb els validadors interns.
+    """
+    if not config.languagetool:
+        return None
+    client = LanguageToolClient.discover(paths.root)
+    return LanguageToolValidator(client) if client.available else None
 
 
 def load_dictionaries(config: PipelineConfig, paths: ProjectPaths) -> DictionarySet:

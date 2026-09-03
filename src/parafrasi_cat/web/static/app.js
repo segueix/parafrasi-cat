@@ -108,6 +108,73 @@ function diccionarisTriats() {
   return Array.from(document.querySelectorAll("input.diccionari:checked")).map((c) => c.value);
 }
 
+function mostrarRecursos(recursos, instal) {
+  const llista = $("recursos");
+  llista.replaceChildren();
+  for (const clau of ["morphology", "languagetool", "java"]) {
+    const recurs = recursos[clau];
+    const element = document.createElement("li");
+    element.className = recurs.active ? "actiu" : "inactiu";
+    const nom = document.createElement("span");
+    nom.textContent = `${recurs.component}: `;
+    const estat = document.createElement("span");
+    estat.className = "estat-recurs";
+    estat.textContent = `[${recurs.state}]`;
+    element.append(nom, estat, ` ${recurs.message}`);
+    if (recurs.detail) element.title = recurs.detail;
+    llista.append(element);
+  }
+  const actiu = recursos.languagetool.active;
+  $("languagetool").disabled = !actiu;
+  if (!actiu) $("languagetool").checked = false;
+  $("ajuda-languagetool").textContent = actiu
+    ? "Comprova gramàtica, concordança i puntuació de cada candidat. Només valida: mai no reescriu el text."
+    : "No està instal·lada. El motor continua funcionant amb les seves comprovacions internes.";
+  $("instal-la").hidden = actiu;
+  $("detall-instal-lacio").textContent =
+    `Component: ${instal.component}. Origen: ${instal.origin}. ` +
+    `Mida aproximada: ${instal.approximate_size_mb} MB. Llicència: ${instal.license}. ` +
+    `Requisit: ${instal.requirement}. ${instal.note}`;
+}
+
+async function refrescarRecursos() {
+  const recursos = await api("/api/resources");
+  mostrarRecursos(recursos, estat.opcions.languagetool_install);
+  return recursos;
+}
+
+async function demanarInstal·lacio() {
+  $("confirma-instal-lacio").hidden = false;
+  $("instal-la").hidden = true;
+}
+
+async function confirmarInstal·lacio() {
+  $("confirma").disabled = true;
+  try {
+    const resposta = await api("/api/resources/languagetool", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: true }),
+    });
+    missatge($("estat"), resposta.message + (resposta.command ? ` ${resposta.command}` : ""));
+    $("confirma-instal-lacio").hidden = true;
+    if (resposta.started) {
+      const inici = Date.now();
+      const repeticio = setInterval(async () => {
+        const recursos = await refrescarRecursos();
+        if (recursos.languagetool.active || Date.now() - inici > 900000) {
+          clearInterval(repeticio);
+          if (recursos.languagetool.active) missatge($("estat"), "Validació avançada instal·lada.");
+        }
+      }, 15000);
+    }
+  } catch (error) {
+    missatge($("estat"), error.message, true);
+  } finally {
+    $("confirma").disabled = false;
+  }
+}
+
 function mostrarEstatHistorial(historial) {
   $("historial-actiu").checked = historial.enabled;
   $("estat-historial").textContent = historial.enabled
@@ -125,6 +192,7 @@ async function carregarOpcions() {
   $("estil").value = "default";
   omplirDiccionaris(estat.opcions.dictionaries);
   omplirSelect($("preferencies"), estat.opcions.preferences, "cap");
+  mostrarRecursos(estat.opcions.resources, estat.opcions.languagetool_install);
   mostrarEstatHistorial(estat.opcions.history);
 }
 
@@ -150,6 +218,7 @@ async function generar(esdeveniment) {
         style_profile: $("estil").value,
         dictionaries: diccionarisTriats(),
         preferences: $("preferencies").value,
+        languagetool: $("languagetool").checked,
       }),
     });
     estat.resultat = resultat;
@@ -175,6 +244,7 @@ function mostrarResultat(resultat) {
   $("resum-preferencies").textContent = resultat.preferences || "cap";
   $("resum-candidats").textContent =
     `${resultat.n_candidates} (${resultat.n_rejected_candidates} rebutjats)`;
+  $("resum-languagetool").textContent = resultat.languagetool ? "activa" : "no activa";
 
   $("text-original").textContent = resultat.source_text;
   $("millor-candidat").textContent = resultat.output_text;
@@ -439,6 +509,12 @@ async function iniciar() {
   $("exporta").addEventListener("click", exportar);
   $("desa").addEventListener("click", desarAlRegistre);
   $("historial-actiu").addEventListener("change", canviarHistorial);
+  $("instal-la").addEventListener("click", demanarInstal·lacio);
+  $("confirma").addEventListener("click", confirmarInstal·lacio);
+  $("cancel-la").addEventListener("click", () => {
+    $("confirma-instal-lacio").hidden = true;
+    $("instal-la").hidden = false;
+  });
   $("exporta-historial").addEventListener("click", () => {
     window.location.assign("/api/history/export");
   });

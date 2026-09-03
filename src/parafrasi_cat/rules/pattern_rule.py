@@ -77,7 +77,11 @@ class PatternRule(Rule):
         if not tokens:
             return
         state = MatchState(
-            ctx.text, tokens, ctx.protected_spans, self._hints.for_lexicon(ctx.lexicon)
+            ctx.text,
+            tokens,
+            ctx.protected_spans,
+            self._hints.for_lexicon(ctx.lexicon),
+            ctx.morphology,
         )
         definition = self._definition
 

@@ -19,7 +19,10 @@ frase (sense espais), amb retrocés com en una expressió regular:
 Les plantilles referencien els grups: ``"{subj} constitueix {pred}"``. Filtres:
 ``{x|cap}``, ``{x|lower}``, ``{x|de}`` (contracció amb «de»), ``{x|a}``,
 ``{np|agree(apareix,apareixen)}`` (concordança de nombre),
-``{p|map(fet=realitzat,feta=realitzada)}``.
+``{p|map(fet=realitzat,feta=realitzada)}``,
+``{cop|inflect(constituir,és=constitueix,són=constitueixen)}`` (canvi de verb
+conservant persona, nombre i gènere: primer amb el recurs morfològic i, si no
+en sap prou, amb el mapatge explícit que ve a continuació).
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ from parafrasi_cat.core.errors import ConfigError
 from parafrasi_cat.core.spans import Span
 from parafrasi_cat.core.text import LETTER, match_casing, phrase_pattern
 from parafrasi_cat.morphology.guesser import guess
+from parafrasi_cat.morphology.provider import MorphologyProvider, NullMorphology, inflect_like
 from parafrasi_cat.protected.spans import ProtectedSpan
 
 # --- Coneixement gramatical mínim -----------------------------------------------
@@ -247,6 +251,8 @@ class MatchState:
     tokens: tuple[Token, ...]
     protected: tuple[ProtectedSpan, ...]
     hints: GrammarHints
+    morphology: MorphologyProvider = field(default_factory=NullMorphology)
+    """Recurs morfològic per a les plantilles. Sense recurs, els mapatges manen."""
 
     def is_protected_token(self, index: int) -> bool:
         span = self.tokens[index].span
@@ -737,6 +743,23 @@ def contract_a(text: str) -> str:
     return "a " + text
 
 
+def number_of(state: MatchState, tokens: Sequence[Token]) -> str | None:
+    """Nombre d'un sintagma: primer pel determinant i, si no n'hi ha, per morfologia.
+
+    L'heurística del determinant falla amb sintagmes sense article («cranis
+    humans»); aleshores es demana el nombre del primer nom que el recurs
+    morfològic conegui.
+    """
+    number = state.hints.number_of(tokens)
+    if number is not None:
+        return number
+    for token in tokens:
+        for entry in state.morphology.analyze(token.text):
+            if entry.features.pos in ("noun", "adj") and entry.features.number is not None:
+                return entry.features.number
+    return None
+
+
 def _apply_filter(
     name: str, text: str, tokens: Sequence[Token], state: MatchState, protected_first: bool
 ) -> str | None:
@@ -754,9 +777,12 @@ def _apply_filter(
         return text.strip()
     if name == "nocomma":
         return text.rstrip(", ")
+    inflect = re.fullmatch(r"inflect\((.*)\)", name)
+    if inflect:
+        return _inflect(inflect.group(1), text, state)
     agree = re.fullmatch(r"agree\(([^,()]+),([^,()]+)\)", name)
     if agree:
-        number = state.hints.number_of(tokens)
+        number = number_of(state, tokens)
         if number is None and len(tokens) == 1 and is_participle(tokens[0].text):
             number = participle_number(tokens[0].text)
         if number is None:
@@ -773,6 +799,31 @@ def _apply_filter(
             return None
         return match_casing(text, replacement)
     raise ConfigError(f"Filtre de plantilla desconegut: «{name}»")
+
+
+def _inflect(arguments: str, text: str, state: MatchState) -> str | None:
+    """Filtre ``inflect(lema, forma=reserva, ...)``.
+
+    Prioritat explícita: primer el recurs morfològic, que conjuga el lema amb
+    els trets de la forma trobada; si no en sap prou, el mapatge de reserva que
+    la mateixa regla declara; si tampoc no hi és, no es proposa res.
+    """
+    lemma = ""
+    fallback: dict[str, str] = {}
+    for argument in arguments.split(","):
+        key, separator, value = argument.partition("=")
+        if separator:
+            fallback[normalize_form(key)] = value.strip()
+        elif not lemma:
+            lemma = key.strip()
+    if not lemma:
+        raise ConfigError(f"El filtre «inflect({arguments})» necessita un lema")
+    generated = inflect_like(state.morphology, text, lemma)
+    if generated is None:
+        generated = fallback.get(normalize_form(text))
+    if generated is None:
+        return None
+    return match_casing(text, generated)
 
 
 def render_template(template: str, match: Match, state: MatchState) -> str | None:

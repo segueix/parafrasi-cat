@@ -45,7 +45,7 @@ rules:
       ["és a dir", "és clar", "és possible", "és necessari", "és probable", "és evident",
        "és cert", "és el més", "és la més", "és el menys", "és la menys", "són els més",
        "són les més", "són els menys", "són les menys"]
-    transformation: "{subj} {cop|map(és=constitueix,són=constitueixen)} {pred}"
+    transformation: "{subj} {cop|inflect(constituir,és=constitueix,són=constitueixen)} {pred}"
     examples:
       positive:
         - input: "Aquests textos són la font principal."
@@ -140,7 +140,7 @@ rules:
     conditions:
       groups:
         pred: {starts_with: ["@determiner"]}
-    transformation: "{v|map(constitueix=és,constitueixen=són)} {pred}"
+    transformation: "{v|inflect(ser,constitueix=és,constitueixen=són)} {pred}"
     examples:
       positive:
         - input: "Aquest fet constitueix una novetat important."
@@ -170,7 +170,7 @@ rules:
       context:
         not_followed_by: [que, qui, "on"]
     exceptions: ["és a dir", "és clar"]
-    transformation: "{subj} {cop|map(és=correspon,són=corresponen)} {pred|a}"
+    transformation: "{subj} {cop|inflect(correspondre,és=correspon,són=corresponen)} {pred|a}"
     examples:
       positive:
         - input: "La primera referència itàlica és el monument funerari d'Oddo Altoviti."

@@ -11,6 +11,8 @@ pels components de la fase 6 i de ``web.history``.
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -19,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from parafrasi_cat import __version__
+from parafrasi_cat.adapters.status import resources_status
 from parafrasi_cat.analyzer.analysis import RuleBasedAnalyzer
 from parafrasi_cat.core.errors import ConfigError, ParafrasiError
 from parafrasi_cat.dictionaries.dictionary import TermDictionary
@@ -42,6 +45,7 @@ from parafrasi_cat.style.observations import DocumentObserver, StyleResources
 from parafrasi_cat.web.history import DEFAULT_HISTORY_FILE, HistoryLog
 
 DEFAULT_RULE_SET = "parafrasi"
+INSTALLER_SCRIPT = "scripts/install_languagetool.py"
 DEFAULT_STYLE_PROFILE = "default"
 MAX_TEXT_CHARS = 20000
 
@@ -107,6 +111,7 @@ class RewriteRequest:
     dictionaries: tuple[str, ...] = ()
     preferences: str = ""
     rule_set: str = DEFAULT_RULE_SET
+    languagetool: bool = False
 
     def __post_init__(self) -> None:
         if not self.text.strip():
@@ -135,6 +140,7 @@ class RewriteRequest:
             dictionaries=_as_names(data.get("dictionaries")),
             preferences=str(data.get("preferences") or ""),
             rule_set=str(data.get("rule_set") or DEFAULT_RULE_SET),
+            languagetool=bool(data.get("languagetool", False)),
         )
 
     def to_config(self, home: Path | None = None) -> PipelineConfig:
@@ -145,6 +151,7 @@ class RewriteRequest:
             style_profile=self.style_profile,
             dictionaries=self.dictionaries,
             preferences=self.preferences or None,
+            languagetool=self.languagetool,
         )
         return mode_settings(self.mode).apply(base, self.level)
 
@@ -236,7 +243,13 @@ class RewriteService:
             "dictionaries": self.dictionaries(),
             "preferences": self.preferences(),
             "history": self._history.status(),
+            "resources": self.resources(),
+            "languagetool_install": install_info(),
         }
+
+    def resources(self) -> JsonDict:
+        """Estat dels recursos lingüístics opcionals (morfologia, LanguageTool, Java)."""
+        return resources_status(self._paths.root).to_dict()
 
     def style_profiles(self) -> list[JsonDict]:
         """Perfils d'estil (``resources/style/*.yaml``) i empremtes (``style/*.json``)."""
@@ -337,6 +350,7 @@ class RewriteService:
             "preferences": result.preferences_name,
             "preferences_id": request.preferences,
             "mode": settings.to_dict(),
+            "languagetool": self._languagetool_used(config),
             "level": effective,
             "requested_level": requested,
             "level_capped": effective < requested,
@@ -346,6 +360,12 @@ class RewriteService:
             "protected_spans": [_protected(span) for span in result.protected_spans],
             "units": self._units(result),
         }
+
+    def _languagetool_used(self, config: PipelineConfig) -> bool:
+        """Cert si la validació de LanguageTool ha intervingut realment."""
+        if not config.languagetool:
+            return False
+        return any(v.validator_id == "languagetool" for v in self.pipeline_for(config).validators)
 
     def _units(self, result: ParaphraseResult) -> list[JsonDict]:
         units: list[dict[str, object]] = []
@@ -524,6 +544,50 @@ class RewriteService:
             ],
         }
 
+    # -- instal·lació de components opcionals ------------------------------------------------
+
+    def install_languagetool(self, confirmed: bool) -> JsonDict:
+        """Instal·la LanguageTool, però només amb confirmació explícita.
+
+        Sense confirmació no es baixa res: només es retorna la informació del
+        component perquè la interfície la pugui ensenyar. La descàrrega la fa
+        ``scripts/install_languagetool.py``, que és fora del paquet.
+        """
+        info = install_info()
+        if not confirmed:
+            return {**info, "started": False, "message": "Cal confirmar-ho abans de baixar res."}
+        script = self._paths.root / INSTALLER_SCRIPT
+        if not script.is_file():
+            return {
+                **info,
+                "started": False,
+                "message": (
+                    "No s'ha trobat l'instal·lador en aquesta còpia. Executeu aquesta ordre "
+                    "en un terminal:"
+                ),
+                "command": f"python {INSTALLER_SCRIPT} --yes",
+            }
+        process = subprocess.Popen(  # noqa: S603 - ruta pròpia del projecte, sense shell
+            [
+                sys.executable,
+                str(script),
+                "--yes",
+                "--target",
+                str(self._paths.root / "vendor/languagetool"),
+            ],
+            cwd=self._paths.root,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return {
+            **info,
+            "started": True,
+            "pid": process.pid,
+            "message": (
+                "S'està baixant. Pot trigar uns minuts; l'estat s'actualitzarà quan acabi."
+            ),
+        }
+
     # -- historial ---------------------------------------------------------------------------
 
     def set_history_enabled(self, enabled: bool) -> JsonDict:
@@ -545,6 +609,23 @@ class RewriteService:
 
     def history_export(self) -> str:
         return self._history.export_json()
+
+
+def install_info() -> JsonDict:
+    """Descripció del component opcional, per ensenyar-la abans de baixar res."""
+    return {
+        "component": "LanguageTool",
+        "purpose": "Validació avançada de gramàtica, concordança i puntuació en català.",
+        "origin": "https://languagetool.org/download/LanguageTool-stable.zip",
+        "license": "LGPL-2.1-or-later",
+        "approximate_size_mb": 250,
+        "requirement": "Java",
+        "offline_after_install": True,
+        "note": (
+            "La descàrrega es fa una sola vegada. Després, LanguageTool s'executa en aquest "
+            "ordinador i no s'envia cap text enlloc."
+        ),
+    }
 
 
 def _protected(span: ProtectedSpan) -> JsonDict:
