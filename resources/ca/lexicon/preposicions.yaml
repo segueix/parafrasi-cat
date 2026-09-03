@@ -1,0 +1,84 @@
+# Preposicions simples i locucions prepositives del català.
+description: Preposicions simples, compostes i locucions prepositives.
+pos: adp
+entries:
+  - {form: a, subtype: simple}
+  - {form: amb, subtype: simple}
+  - {form: de, subtype: simple}
+  - {form: "d'", lemma: de, subtype: simple elidida}
+  - {form: en, subtype: simple, note: coincideix amb l'article personal i el pronom feble}
+  - {form: per, subtype: simple}
+  - {form: per a, subtype: composta}
+  - {form: cap a, subtype: composta}
+  - {form: contra, subtype: simple}
+  - {form: des de, subtype: composta}
+  - {form: durant, subtype: simple}
+  - {form: entre, subtype: simple}
+  - {form: fins, subtype: simple}
+  - {form: fins a, subtype: composta}
+  - {form: malgrat, subtype: simple}
+  - {form: mitjançant, subtype: simple}
+  - {form: segons, subtype: simple}
+  - {form: sense, subtype: simple}
+  - {form: sobre, subtype: simple}
+  - {form: sota, subtype: simple}
+  - {form: vers, subtype: simple, register: formal}
+  - {form: envers, subtype: simple, register: formal}
+  - {form: devers, subtype: simple, register: formal}
+  - {form: ultra, subtype: simple, register: formal}
+  - {form: via, subtype: simple}
+  - {form: excepte, subtype: simple}
+  - {form: llevat de, subtype: locució}
+  - {form: tret de, subtype: locució}
+  - {form: salvant, subtype: simple, register: formal}
+  - {form: a partir de, subtype: locució}
+  - {form: a través de, subtype: locució}
+  - {form: arran de, subtype: locució}
+  - {form: a causa de, subtype: locució}
+  - {form: gràcies a, subtype: locució}
+  - {form: en lloc de, subtype: locució}
+  - {form: en comptes de, subtype: locució}
+  - {form: a més de, subtype: locució}
+  - {form: a favor de, subtype: locució}
+  - {form: en contra de, subtype: locució}
+  - {form: respecte a, subtype: locució}
+  - {form: respecte de, subtype: locució}
+  - {form: d'acord amb, subtype: locució}
+  - {form: al voltant de, subtype: locució}
+  - {form: entorn de, subtype: locució}
+  - {form: enfront de, subtype: locució}
+  - {form: davant de, subtype: locució}
+  - {form: darrere de, subtype: locució}
+  - {form: dins de, subtype: locució}
+  - {form: fora de, subtype: locució}
+  - {form: prop de, subtype: locució}
+  - {form: lluny de, subtype: locució}
+  - {form: abans de, subtype: locució}
+  - {form: després de, subtype: locució}
+  - {form: per mitjà de, subtype: locució}
+  - {form: a fi de, subtype: locució}
+  - {form: per tal de, subtype: locució}
+  - {form: quant a, subtype: locució}
+  - {form: pel que fa a, subtype: locució}
+  - {form: tocant a, subtype: locució}
+  - {form: referent a, subtype: locució}
+  - {form: en relació amb, subtype: locució}
+  - {form: amb relació a, subtype: locució}
+  - {form: a càrrec de, subtype: locució}
+  - {form: en nom de, subtype: locució}
+  - {form: per raó de, subtype: locució}
+  - {form: en virtut de, subtype: locució}
+  - {form: d'ençà de, subtype: locució}
+  - {form: a diferència de, subtype: locució}
+  - {form: en cas de, subtype: locució}
+  - {form: en el marc de, subtype: locució}
+  - {form: per part de, subtype: locució}
+  - {form: a l'entorn de, subtype: locució}
+  - {form: al llarg de, subtype: locució}
+  - {form: al cap de, subtype: locució}
+  - {form: al costat de, subtype: locució}
+  - {form: en mig de, subtype: locució}
+  - {form: enmig de, subtype: locució}
+  - {form: a dins de, subtype: locució}
+  - {form: a sobre de, subtype: locució}
+  - {form: a sota de, subtype: locució}

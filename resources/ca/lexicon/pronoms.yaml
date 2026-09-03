@@ -1,0 +1,179 @@
+# Pronoms del català. Els pronoms febles s'enumeren amb totes les variants
+# (proclítiques, enclítiques, elidides i reforçades) i la forma canònica.
+description: Pronoms febles (totes les variants), forts, demostratius, possessius, relatius, interrogatius i indefinits.
+pos: pron
+entries:
+  # --- pronoms febles (subtype: feble; canonical: forma de referència) ---
+  - {form: em, canonical: em, subtype: feble, person: "1", number: sg, function: CD/CI/reflexiu, note: forma plena}
+  - {form: "'m", canonical: em, subtype: feble, person: "1", number: sg, function: CD/CI/reflexiu, note: reduïda enclítica}
+  - {form: "m'", canonical: em, subtype: feble, person: "1", number: sg, function: CD/CI/reflexiu, note: elidida}
+  - {form: -me, canonical: em, subtype: feble, person: "1", number: sg, function: CD/CI/reflexiu, note: plena enclítica}
+  - {form: me, canonical: em, subtype: feble, person: "1", number: sg, function: CD/CI/reflexiu, note: reforçada (me'n)}
+  - {form: et, canonical: et, subtype: feble, person: "2", number: sg, function: CD/CI/reflexiu}
+  - {form: "'t", canonical: et, subtype: feble, person: "2", number: sg, function: CD/CI/reflexiu}
+  - {form: "t'", canonical: et, subtype: feble, person: "2", number: sg, function: CD/CI/reflexiu}
+  - {form: -te, canonical: et, subtype: feble, person: "2", number: sg, function: CD/CI/reflexiu}
+  - {form: te, canonical: et, subtype: feble, person: "2", number: sg, function: CD/CI/reflexiu, note: reforçada (te'n)}
+  - {form: es, canonical: es, subtype: feble, person: "3", function: reflexiu/impersonal}
+  - {form: "'s", canonical: es, subtype: feble, person: "3", function: reflexiu/impersonal}
+  - {form: "s'", canonical: es, subtype: feble, person: "3", function: reflexiu/impersonal}
+  - {form: -se, canonical: es, subtype: feble, person: "3", function: reflexiu/impersonal}
+  - {form: se, canonical: es, subtype: feble, person: "3", function: reflexiu/impersonal, note: reforçada (se'n, se li)}
+  - {form: el, canonical: el, subtype: feble, person: "3", gender: m, number: sg, function: CD, note: coincideix amb l'article}
+  - {form: "'l", canonical: el, subtype: feble, person: "3", gender: m, number: sg, function: CD}
+  - {form: "l'", canonical: el, subtype: feble, person: "3", gender: m, number: sg, function: CD, note: coincideix amb l'article elidit}
+  - {form: -lo, canonical: el, subtype: feble, person: "3", gender: m, number: sg, function: CD}
+  - {form: la, canonical: la, subtype: feble, person: "3", gender: f, number: sg, function: CD, note: coincideix amb l'article}
+  - {form: "l'", canonical: la, subtype: feble, person: "3", gender: f, number: sg, function: CD, note: coincideix amb l'article elidit}
+  - {form: -la, canonical: la, subtype: feble, person: "3", gender: f, number: sg, function: CD}
+  - {form: els, canonical: els, subtype: feble, person: "3", gender: m, number: pl, function: CD/CI, note: coincideix amb l'article}
+  - {form: "'ls", canonical: els, subtype: feble, person: "3", gender: m, number: pl, function: CD/CI}
+  - {form: -los, canonical: els, subtype: feble, person: "3", gender: m, number: pl, function: CD/CI}
+  - {form: les, canonical: les, subtype: feble, person: "3", gender: f, number: pl, function: CD, note: coincideix amb l'article}
+  - {form: -les, canonical: les, subtype: feble, person: "3", gender: f, number: pl, function: CD}
+  - {form: li, canonical: li, subtype: feble, person: "3", number: sg, function: CI}
+  - {form: -li, canonical: li, subtype: feble, person: "3", number: sg, function: CI}
+  - {form: ho, canonical: ho, subtype: feble, person: "3", function: CD neutre}
+  - {form: -ho, canonical: ho, subtype: feble, person: "3", function: CD neutre}
+  - {form: hi, canonical: hi, subtype: feble, function: adverbial locatiu / CI}
+  - {form: -hi, canonical: hi, subtype: feble, function: adverbial locatiu / CI}
+  - {form: en, canonical: en, subtype: feble, function: adverbial partitiu, note: coincideix amb la preposició i l'article personal}
+  - {form: "'n", canonical: en, subtype: feble, function: adverbial partitiu}
+  - {form: "n'", canonical: en, subtype: feble, function: adverbial partitiu}
+  - {form: -ne, canonical: en, subtype: feble, function: adverbial partitiu}
+  - {form: ne, canonical: en, subtype: feble, function: adverbial partitiu, note: reforçada}
+  - {form: ens, canonical: ens, subtype: feble, person: "1", number: pl, function: CD/CI/reflexiu}
+  - {form: "'ns", canonical: ens, subtype: feble, person: "1", number: pl, function: CD/CI/reflexiu}
+  - {form: -nos, canonical: ens, subtype: feble, person: "1", number: pl, function: CD/CI/reflexiu}
+  - {form: nos, canonical: ens, subtype: feble, person: "1", number: pl, function: CD/CI/reflexiu, note: reforçada}
+  - {form: us, canonical: us, subtype: feble, person: "2", number: pl, function: CD/CI/reflexiu}
+  - {form: -vos, canonical: us, subtype: feble, person: "2", number: pl, function: CD/CI/reflexiu}
+  - {form: vos, canonical: us, subtype: feble, person: "2", number: pl, function: CD/CI/reflexiu, note: reforçada}
+  # --- pronoms forts ---
+  - {form: jo, subtype: fort, person: "1", number: sg}
+  - {form: mi, subtype: fort, person: "1", number: sg, note: darrere de preposició}
+  - {form: tu, subtype: fort, person: "2", number: sg}
+  - {form: ell, subtype: fort, person: "3", gender: m, number: sg}
+  - {form: ella, subtype: fort, person: "3", gender: f, number: sg}
+  - {form: nosaltres, subtype: fort, person: "1", number: pl}
+  - {form: vosaltres, subtype: fort, person: "2", number: pl}
+  - {form: ells, subtype: fort, person: "3", gender: m, number: pl}
+  - {form: elles, subtype: fort, person: "3", gender: f, number: pl}
+  - {form: vostè, subtype: fort, person: "3", number: sg, note: tractament de respecte}
+  - {form: vostès, subtype: fort, person: "3", number: pl, note: tractament de respecte}
+  - {form: vós, subtype: fort, person: "2", number: sg, note: tractament de respecte}
+  - {form: si, subtype: fort, person: "3", note: reflexiu darrere de preposició (per si mateix)}
+  - {form: hom, subtype: fort, person: "3", number: sg, register: formal, note: impersonal}
+  # --- demostratius ---
+  - {form: aquest, subtype: demostratiu, gender: m, number: sg}
+  - {form: aquesta, subtype: demostratiu, gender: f, number: sg}
+  - {form: aquests, subtype: demostratiu, gender: m, number: pl}
+  - {form: aquestes, subtype: demostratiu, gender: f, number: pl}
+  - {form: aqueix, subtype: demostratiu, gender: m, number: sg}
+  - {form: aqueixa, subtype: demostratiu, gender: f, number: sg}
+  - {form: aqueixos, subtype: demostratiu, gender: m, number: pl}
+  - {form: aqueixes, subtype: demostratiu, gender: f, number: pl}
+  - {form: aquell, subtype: demostratiu, gender: m, number: sg}
+  - {form: aquella, subtype: demostratiu, gender: f, number: sg}
+  - {form: aquells, subtype: demostratiu, gender: m, number: pl}
+  - {form: aquelles, subtype: demostratiu, gender: f, number: pl}
+  - {form: això, subtype: demostratiu neutre}
+  - {form: allò, subtype: demostratiu neutre}
+  - {form: açò, subtype: demostratiu neutre, register: dialectal}
+  # --- possessius ---
+  - {form: meu, subtype: possessiu, person: "1", gender: m, number: sg}
+  - {form: meva, subtype: possessiu, person: "1", gender: f, number: sg}
+  - {form: meus, subtype: possessiu, person: "1", gender: m, number: pl}
+  - {form: meves, subtype: possessiu, person: "1", gender: f, number: pl}
+  - {form: teu, subtype: possessiu, person: "2", gender: m, number: sg}
+  - {form: teva, subtype: possessiu, person: "2", gender: f, number: sg}
+  - {form: teus, subtype: possessiu, person: "2", gender: m, number: pl}
+  - {form: teves, subtype: possessiu, person: "2", gender: f, number: pl}
+  - {form: seu, subtype: possessiu, person: "3", gender: m, number: sg}
+  - {form: seva, subtype: possessiu, person: "3", gender: f, number: sg}
+  - {form: seus, subtype: possessiu, person: "3", gender: m, number: pl}
+  - {form: seves, subtype: possessiu, person: "3", gender: f, number: pl}
+  - {form: nostre, subtype: possessiu, person: "1", gender: m, number: sg}
+  - {form: nostra, subtype: possessiu, person: "1", gender: f, number: sg}
+  - {form: nostres, subtype: possessiu, person: "1", number: pl}
+  - {form: vostre, subtype: possessiu, person: "2", gender: m, number: sg}
+  - {form: vostra, subtype: possessiu, person: "2", gender: f, number: sg}
+  - {form: vostres, subtype: possessiu, person: "2", number: pl}
+  - {form: llur, subtype: possessiu, person: "3", number: sg, register: formal}
+  - {form: llurs, subtype: possessiu, person: "3", number: pl, register: formal}
+  - {form: mon, subtype: possessiu àton, person: "1", gender: m, number: sg}
+  - {form: ma, subtype: possessiu àton, person: "1", gender: f, number: sg}
+  - {form: mos, subtype: possessiu àton, person: "1", gender: m, number: pl}
+  - {form: mes, subtype: possessiu àton, person: "1", gender: f, number: pl}
+  - {form: ton, subtype: possessiu àton, person: "2", gender: m, number: sg}
+  - {form: ta, subtype: possessiu àton, person: "2", gender: f, number: sg}
+  - {form: tos, subtype: possessiu àton, person: "2", gender: m, number: pl}
+  - {form: tes, subtype: possessiu àton, person: "2", gender: f, number: pl}
+  - {form: son, subtype: possessiu àton, person: "3", gender: m, number: sg, note: coincideix amb el nom «son»}
+  - {form: sa, subtype: possessiu àton, person: "3", gender: f, number: sg}
+  - {form: sos, subtype: possessiu àton, person: "3", gender: m, number: pl}
+  - {form: ses, subtype: possessiu àton, person: "3", gender: f, number: pl}
+  # --- relatius i interrogatius ---
+  - {form: que, subtype: relatiu, note: també conjunció}
+  - {form: què, subtype: relatiu/interrogatiu}
+  - {form: qui, subtype: relatiu/interrogatiu}
+  - {form: "on", subtype: relatiu/interrogatiu}
+  - {form: quan, subtype: relatiu/interrogatiu, note: també conjunció}
+  - {form: com, subtype: relatiu/interrogatiu, note: també conjunció}
+  - {form: qual, subtype: relatiu, number: sg}
+  - {form: quals, subtype: relatiu, number: pl}
+  - {form: quin, subtype: interrogatiu, gender: m, number: sg}
+  - {form: quina, subtype: interrogatiu, gender: f, number: sg}
+  - {form: quins, subtype: interrogatiu, gender: m, number: pl}
+  - {form: quines, subtype: interrogatiu, gender: f, number: pl}
+  - {form: quant, subtype: interrogatiu, gender: m, number: sg}
+  - {form: quanta, subtype: interrogatiu, gender: f, number: sg}
+  - {form: quants, subtype: interrogatiu, gender: m, number: pl}
+  - {form: quantes, subtype: interrogatiu, gender: f, number: pl}
+  - {form: per què, subtype: interrogatiu}
+  # --- indefinits ---
+  - {form: algú, subtype: indefinit}
+  - {form: ningú, subtype: indefinit}
+  - {form: res, subtype: indefinit}
+  - {form: tothom, subtype: indefinit}
+  - {form: cadascú, subtype: indefinit}
+  - {form: cadascun, subtype: indefinit, gender: m, number: sg}
+  - {form: cadascuna, subtype: indefinit, gender: f, number: sg}
+  - {form: cada, subtype: indefinit}
+  - {form: quelcom, subtype: indefinit, register: formal}
+  - {form: altri, subtype: indefinit, register: formal}
+  - {form: tot, subtype: indefinit, gender: m, number: sg}
+  - {form: tota, subtype: indefinit, gender: f, number: sg}
+  - {form: tots, subtype: indefinit, gender: m, number: pl}
+  - {form: totes, subtype: indefinit, gender: f, number: pl}
+  - {form: algun, subtype: indefinit, gender: m, number: sg}
+  - {form: alguna, subtype: indefinit, gender: f, number: sg}
+  - {form: alguns, subtype: indefinit, gender: m, number: pl}
+  - {form: algunes, subtype: indefinit, gender: f, number: pl}
+  - {form: cap, subtype: indefinit, note: coincideix amb el nom «cap» i la preposició «cap a»}
+  - {form: altre, subtype: indefinit, gender: m, number: sg}
+  - {form: altra, subtype: indefinit, gender: f, number: sg}
+  - {form: altres, subtype: indefinit, number: pl}
+  - {form: mateix, subtype: indefinit, gender: m, number: sg}
+  - {form: mateixa, subtype: indefinit, gender: f, number: sg}
+  - {form: mateixos, subtype: indefinit, gender: m, number: pl}
+  - {form: mateixes, subtype: indefinit, gender: f, number: pl}
+  - {form: qualsevol, subtype: indefinit, number: sg}
+  - {form: qualssevol, subtype: indefinit, number: pl}
+  - {form: molt, subtype: indefinit, gender: m, number: sg, note: també adverbi}
+  - {form: molta, subtype: indefinit, gender: f, number: sg}
+  - {form: molts, subtype: indefinit, gender: m, number: pl}
+  - {form: moltes, subtype: indefinit, gender: f, number: pl}
+  - {form: poc, subtype: indefinit, gender: m, number: sg, note: també adverbi}
+  - {form: poca, subtype: indefinit, gender: f, number: sg}
+  - {form: pocs, subtype: indefinit, gender: m, number: pl}
+  - {form: poques, subtype: indefinit, gender: f, number: pl}
+  - {form: diversos, subtype: indefinit, gender: m, number: pl}
+  - {form: diverses, subtype: indefinit, gender: f, number: pl}
+  - {form: ambdós, subtype: indefinit, gender: m, number: pl, register: formal}
+  - {form: ambdues, subtype: indefinit, gender: f, number: pl, register: formal}
+  - {form: sengles, subtype: indefinit, number: pl, register: formal}
+  - {form: tal, subtype: indefinit, number: sg}
+  - {form: tals, subtype: indefinit, number: pl}
+  - {form: un mateix, subtype: indefinit, gender: m, number: sg}
+  - {form: una mateixa, subtype: indefinit, gender: f, number: sg}

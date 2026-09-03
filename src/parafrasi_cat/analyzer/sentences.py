@@ -6,11 +6,17 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from parafrasi_cat.analyzer.tokens import Token, Tokenizer
+from parafrasi_cat.analyzer.apostrophes import Apostrophe, find_apostrophes
+from parafrasi_cat.analyzer.clitics import WeakPronoun
+from parafrasi_cat.analyzer.expressions import MultiwordExpression
+from parafrasi_cat.analyzer.hyphens import HyphenatedForm, find_hyphenated_forms
+from parafrasi_cat.analyzer.numerals import RomanNumeral, roman_to_int
+from parafrasi_cat.analyzer.tokens import Token, Tokenizer, TokenKind, TokenSubkind
 from parafrasi_cat.core.spans import Span
 
 #: Abreviatures habituals en català (sense punt final, en minúscules) després
-#: de les quals un punt no marca final de frase.
+#: de les quals un punt no marca final de frase. Inclou les abreviatures
+#: llatines corrents en textos acadèmics (cf., et al., op. cit., ibid., ca.).
 DEFAULT_ABBREVIATIONS: frozenset[str] = frozenset(
     {
         "sr",
@@ -100,6 +106,26 @@ DEFAULT_ABBREVIATIONS: frozenset[str] = frozenset(
         "excma",
         "rev",
         "revda",
+        "vs",
+        "apud",
+        "viz",
+        "fol",
+        "fols",
+        "ff",
+        "mss",
+        "doc",
+        "docs",
+        "sec",
+        "secc",
+        "sig",
+        "sigs",
+        "lín",
+        "làm",
+        "pàssim",
+        "passim",
+        "supra",
+        "infra",
+        "cfr",
     }
 )
 
@@ -117,19 +143,54 @@ _OPENERS = '«“"([‘'
 class Sentence:
     """Una frase amb el seu text, la posició al document i els tokens.
 
-    Els intervals dels tokens són relatius al text de la frase; ``span`` és
-    relatiu al document sencer.
+    Els intervals dels tokens i de totes les anotacions són relatius al text
+    de la frase; ``span`` és relatiu al document sencer.
+
+    ``pronouns`` i ``expressions`` les omple l'analitzador
+    (:class:`~parafrasi_cat.analyzer.analysis.RuleBasedAnalyzer`); el
+    segmentador de frases per si sol les deixa buides.
     """
 
     index: int
     text: str
     span: Span
     tokens: tuple[Token, ...]
+    paragraph_index: int = 0
+    pronouns: tuple[WeakPronoun, ...] = ()
+    expressions: tuple[MultiwordExpression, ...] = ()
 
     @property
     def words(self) -> tuple[Token, ...]:
         """Tokens amb contingut lèxic (paraules, clítics i nombres)."""
         return tuple(token for token in self.tokens if token.is_lexical)
+
+    @property
+    def clitics(self) -> tuple[Token, ...]:
+        return tuple(token for token in self.tokens if token.is_clitic)
+
+    @property
+    def punctuation(self) -> tuple[Token, ...]:
+        return tuple(token for token in self.tokens if token.is_punct)
+
+    @property
+    def numbers(self) -> tuple[Token, ...]:
+        return tuple(token for token in self.tokens if token.kind is TokenKind.NUMBER)
+
+    @property
+    def roman_numerals(self) -> tuple[RomanNumeral, ...]:
+        return tuple(
+            RomanNumeral(t.text, roman_to_int(t.text), t.span, ordinal=t.text.endswith("è"))
+            for t in self.tokens
+            if t.subkind is TokenSubkind.ROMAN_NUMERAL
+        )
+
+    @property
+    def apostrophes(self) -> tuple[Apostrophe, ...]:
+        return find_apostrophes(self.tokens, self.pronouns)
+
+    @property
+    def hyphenated_forms(self) -> tuple[HyphenatedForm, ...]:
+        return find_hyphenated_forms(self.text, self.tokens)
 
     def absolute(self, span: Span) -> Span:
         """Converteix un interval relatiu a la frase en un de relatiu al document."""
@@ -138,9 +199,15 @@ class Sentence:
     def to_dict(self) -> dict[str, object]:
         return {
             "index": self.index,
+            "paragraph_index": self.paragraph_index,
             "text": self.text,
             "span": self.span.to_dict(),
             "tokens": [token.to_dict() for token in self.tokens],
+            "pronouns": [p.to_dict() for p in self.pronouns],
+            "expressions": [e.to_dict() for e in self.expressions],
+            "apostrophes": [a.to_dict() for a in self.apostrophes],
+            "hyphenated_forms": [h.to_dict() for h in self.hyphenated_forms],
+            "roman_numerals": [r.to_dict() for r in self.roman_numerals],
         }
 
 
@@ -168,6 +235,10 @@ class SentenceSplitter:
     @property
     def abbreviations(self) -> frozenset[str]:
         return self._abbreviations
+
+    @property
+    def tokenizer(self) -> Tokenizer:
+        return self._tokenizer
 
     def boundaries(self, text: str) -> list[int]:
         """Posicions (exclusives) on acaba una frase."""

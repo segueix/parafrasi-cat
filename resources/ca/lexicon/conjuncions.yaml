@@ -1,0 +1,59 @@
+# Conjuncions coordinants i subordinants, simples i compostes.
+description: Conjuncions coordinants i subordinants, incloses les locucions conjuntives.
+pos: conj
+entries:
+  - {form: i, subtype: coordinant, function: copulativa}
+  - {form: ni, subtype: coordinant, function: copulativa negativa}
+  - {form: o, subtype: coordinant, function: disjuntiva}
+  - {form: o bé, subtype: coordinant, function: disjuntiva}
+  - {form: però, subtype: coordinant, function: adversativa}
+  - {form: sinó, subtype: coordinant, function: adversativa}
+  - {form: sinó que, subtype: coordinant, function: adversativa}
+  - {form: doncs, subtype: coordinant, function: consecutiva, note: també marcador discursiu}
+  - {form: car, subtype: coordinant, function: causal, register: formal}
+  - {form: que, subtype: subordinant, function: completiva}
+  - {form: si, subtype: subordinant, function: condicional}
+  - {form: perquè, subtype: subordinant, function: causal o final}
+  - {form: com, subtype: subordinant, function: modal o causal}
+  - {form: com que, subtype: subordinant, function: causal}
+  - {form: ja que, subtype: subordinant, function: causal}
+  - {form: atès que, subtype: subordinant, function: causal, register: formal}
+  - {form: puix que, subtype: subordinant, function: causal, register: formal}
+  - {form: vist que, subtype: subordinant, function: causal}
+  - {form: per tal com, subtype: subordinant, function: causal, register: formal}
+  - {form: quan, subtype: subordinant, function: temporal}
+  - {form: mentre, subtype: subordinant, function: temporal}
+  - {form: mentre que, subtype: subordinant, function: adversativa}
+  - {form: abans que, subtype: subordinant, function: temporal}
+  - {form: després que, subtype: subordinant, function: temporal}
+  - {form: fins que, subtype: subordinant, function: temporal}
+  - {form: des que, subtype: subordinant, function: temporal}
+  - {form: sempre que, subtype: subordinant, function: temporal o condicional}
+  - {form: així que, subtype: subordinant, function: temporal o consecutiva}
+  - {form: tan bon punt, subtype: subordinant, function: temporal}
+  - {form: a mesura que, subtype: subordinant, function: temporal}
+  - {form: encara que, subtype: subordinant, function: concessiva}
+  - {form: tot i que, subtype: subordinant, function: concessiva}
+  - {form: malgrat que, subtype: subordinant, function: concessiva}
+  - {form: per bé que, subtype: subordinant, function: concessiva, register: formal}
+  - {form: si bé, subtype: subordinant, function: concessiva, register: formal}
+  - {form: per més que, subtype: subordinant, function: concessiva}
+  - {form: baldament, subtype: subordinant, function: concessiva, register: formal}
+  - {form: per tal que, subtype: subordinant, function: final}
+  - {form: a fi que, subtype: subordinant, function: final, register: formal}
+  - {form: de manera que, subtype: subordinant, function: consecutiva}
+  - {form: de tal manera que, subtype: subordinant, function: consecutiva}
+  - {form: de forma que, subtype: subordinant, function: consecutiva}
+  - {form: llevat que, subtype: subordinant, function: condicional}
+  - {form: tret que, subtype: subordinant, function: condicional}
+  - {form: posat que, subtype: subordinant, function: condicional, register: formal}
+  - {form: en cas que, subtype: subordinant, function: condicional}
+  - {form: mentre no, subtype: subordinant, function: condicional}
+  - {form: sense que, subtype: subordinant, function: modal}
+  - {form: com si, subtype: subordinant, function: modal}
+  - {form: tal com, subtype: subordinant, function: modal}
+  - {form: així com, subtype: subordinant, function: modal o copulativa}
+  - {form: tant si, subtype: subordinant, function: concessiva}
+  - {form: ara que, subtype: subordinant, function: temporal o causal}
+  - {form: que no, subtype: subordinant, function: comparativa}
+  - {form: "on", subtype: subordinant, function: locativa, note: també pronom relatiu i interrogatiu}

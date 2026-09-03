@@ -53,11 +53,23 @@ class MorphFeatures:
 
 @dataclass(frozen=True, slots=True)
 class LexicalEntry:
-    """Una forma flexionada amb el seu lema i els seus trets."""
+    """Una forma flexionada amb el seu lema i els seus trets.
+
+    ``confidence`` (0-1) i ``source`` indiquen d'on prové l'anàlisi (lexicó,
+    diccionari, endevinador, eina externa) i quina fiabilitat té.
+    """
 
     form: str
     lemma: str
     features: MorphFeatures = MorphFeatures()
+    confidence: float = 1.0
+    source: str = ""
 
     def to_dict(self) -> dict[str, object]:
-        return {"form": self.form, "lemma": self.lemma, "features": self.features.to_dict()}
+        return {
+            "form": self.form,
+            "lemma": self.lemma,
+            "features": self.features.to_dict(),
+            "confidence": self.confidence,
+            "source": self.source,
+        }

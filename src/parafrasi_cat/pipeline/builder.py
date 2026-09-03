@@ -5,13 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from parafrasi_cat.analyzer.analysis import RuleBasedAnalyzer
+from parafrasi_cat.analyzer.lexicon import ClosedClassLexicon
 from parafrasi_cat.analyzer.sentences import DEFAULT_ABBREVIATIONS, SentenceSplitter
 from parafrasi_cat.candidates.generator import CandidateGenerator
-from parafrasi_cat.morphology.provider import (
-    DictionaryMorphology,
-    MorphologyProvider,
-    NullMorphology,
-)
+from parafrasi_cat.morphology.registry import create_morphology_provider
 from parafrasi_cat.pipeline.config import PipelineConfig
 from parafrasi_cat.pipeline.pipeline import Pipeline
 from parafrasi_cat.protected.protector import default_protector
@@ -55,12 +52,14 @@ def build_pipeline(
     paths = ProjectPaths.discover(config.home)
     lang = paths.language(config.language)
 
-    analyzer = RuleBasedAnalyzer(SentenceSplitter(_load_abbreviations(lang)))
+    lexicon = ClosedClassLexicon.load(lang)
+    analyzer = RuleBasedAnalyzer(SentenceSplitter(_load_abbreviations(lang)), lexicon=lexicon)
 
     protector = default_protector(
         analyzer,
         user_terms=_collect_user_terms(config, paths),
         known_names=_read_optional_terms(paths, KNOWN_NAMES_FILE),
+        lexicon=lexicon,
     )
 
     rule_config = RuleSetConfig.load(paths.resolve_rule_set(config.rule_set))
@@ -96,7 +95,7 @@ def build_pipeline(
         max_semantic_risk=config.max_semantic_risk,
         min_confidence=config.min_confidence,
         style_profile=style_profile,
-        morphology=_load_morphology(lang),
+        morphology=create_morphology_provider(config.morphology, lang, lexicon=lexicon),
     )
 
 
@@ -118,13 +117,6 @@ def _load_connectors(lang: Path) -> tuple[str, ...]:
         for connector in as_mapping_list(group, "connectors"):
             forms.append(as_str(connector, "form"))
     return tuple(dict.fromkeys(forms))
-
-
-def _load_morphology(lang: Path) -> MorphologyProvider:
-    file = lang / "morphology" / "formes.yaml"
-    if file.is_file():
-        return DictionaryMorphology.from_file(file)
-    return NullMorphology()
 
 
 def _read_optional_terms(paths: ProjectPaths, relative: str) -> tuple[str, ...]:

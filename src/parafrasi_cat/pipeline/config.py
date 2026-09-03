@@ -31,6 +31,8 @@ class PipelineConfig:
         language: Codi de llengua dels recursos (només ``ca`` en aquesta fase).
         rule_set: Nom (``rules/<nom>.yaml``) o ruta del conjunt de regles.
         style_profile: Nom (``resources/style/<nom>.yaml``) o ruta del perfil d'estil.
+        morphology: Nom del proveïdor morfològic (``internal``, ``dictionary``, ``null``,
+            ``apertium``, ``freeling``); vegeu ``parafrasi_cat.morphology.registry``.
         protected_terms: Termes addicionals que cap regla pot tocar.
         protected_terms_files: Fitxers amb termes protegits (un per línia).
         max_semantic_risk: Risc màxim acceptat; ``None`` = el del conjunt de regles.
@@ -46,6 +48,7 @@ class PipelineConfig:
     language: str = "ca"
     rule_set: str = "default"
     style_profile: str = "default"
+    morphology: str = "internal"
     protected_terms: tuple[str, ...] = ()
     protected_terms_files: tuple[Path, ...] = ()
     max_semantic_risk: SemanticRisk | None = None
@@ -101,6 +104,7 @@ class PipelineConfig:
             style_profile=_maybe_path(
                 as_str(data, "style_profile", defaults.style_profile), base_dir
             ),
+            morphology=as_str(data, "morphology", defaults.morphology),
             protected_terms=as_str_list(data, "protected_terms"),
             protected_terms_files=tuple(
                 _resolve_path(f, base_dir) for f in as_str_list(data, "protected_terms_files")
@@ -132,6 +136,7 @@ class PipelineConfig:
             "language": self.language,
             "rule_set": self.rule_set,
             "style_profile": self.style_profile,
+            "morphology": self.morphology,
             "protected_terms": list(self.protected_terms),
             "protected_terms_files": [str(f) for f in self.protected_terms_files],
             "max_semantic_risk": None
