@@ -1,0 +1,48 @@
+# Família 4: verb ↔ construcció nominal amb verb lleuger, només per als parells registrats.
+description: Nominalització amb verb lleuger («van analitzar X» ↔ «van fer l'anàlisi de X»).
+language: ca
+rules:
+  - rule_id: nominal.verb_a_nom
+    engine: nominalization
+    category: nominalitzacio
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.65
+    description: "Verb d'acció → verb lleuger + nom d'acció"
+    direction: to_noun
+    pairs: resources/ca/transformations/nominalitzacions.yaml
+    light_verbs: [fer, realitzar, dur a terme]
+    examples:
+      positive:
+        - input: "Van analitzar les dades del jaciment."
+          output: "Van fer l'anàlisi de les dades del jaciment."
+        - input: "Van analitzar les dades del jaciment."
+          output: "Van dur a terme l'anàlisi de les dades del jaciment."
+        - input: "L'equip revisa la datació del sarcòfag."
+          output: "L'equip fa la revisió de la datació del sarcòfag."
+      negative:
+        - "Van analitzar-les ahir."
+        - "L'anàlisi és correcta."
+
+  - rule_id: nominal.nom_a_verb
+    engine: nominalization
+    category: nominalitzacio
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.75
+    description: "Verb lleuger + nom d'acció → verb d'acció"
+    direction: to_verb
+    pairs: resources/ca/transformations/nominalitzacions.yaml
+    examples:
+      positive:
+        - input: "Van fer l'anàlisi de les dades del jaciment."
+          output: "Van analitzar les dades del jaciment."
+        - input: "L'equip fa la revisió de la datació del sarcòfag."
+          output: "L'equip revisa la datació del sarcòfag."
+        - input: "Van realitzar l'excavació del jaciment."
+          output: "Van excavar el jaciment."
+      negative:
+        - "Van fer l'anàlisi."
+        - "Fan una casa de fusta."

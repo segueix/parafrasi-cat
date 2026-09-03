@@ -1,0 +1,33 @@
+# Parells verb ↔ nom d'acció per a la nominalització amb verb lleuger
+# («van analitzar les dades» ↔ «van fer l'anàlisi de les dades»).
+# Les formes de present s'indiquen explícitament per no haver de conjugar.
+description: Parells verb–nom d'acció amb gènere del nom i formes de present (3a persona).
+entries:
+  - {verb: analitzar, noun: anàlisi, gender: f, present_sg: analitza, present_pl: analitzen}
+  - {verb: estudiar, noun: estudi, gender: m, present_sg: estudia, present_pl: estudien}
+  - {verb: revisar, noun: revisió, gender: f, present_sg: revisa, present_pl: revisen}
+  - {verb: construir, noun: construcció, gender: f, present_sg: construeix, present_pl: construeixen}
+  - {verb: reconstruir, noun: reconstrucció, gender: f, present_sg: reconstrueix, present_pl: reconstrueixen}
+  - {verb: publicar, noun: publicació, gender: f, present_sg: publica, present_pl: publiquen}
+  - {verb: descriure, noun: descripció, gender: f, present_sg: descriu, present_pl: descriuen}
+  - {verb: interpretar, noun: interpretació, gender: f, present_sg: interpreta, present_pl: interpreten}
+  - {verb: avaluar, noun: avaluació, gender: f, present_sg: avalua, present_pl: avaluen}
+  - {verb: presentar, noun: presentació, gender: f, present_sg: presenta, present_pl: presenten}
+  - {verb: restaurar, noun: restauració, gender: f, present_sg: restaura, present_pl: restauren}
+  - {verb: traduir, noun: traducció, gender: f, present_sg: tradueix, present_pl: tradueixen}
+  - {verb: examinar, noun: examen, gender: m, present_sg: examina, present_pl: examinen}
+  - {verb: observar, noun: observació, gender: f, present_sg: observa, present_pl: observen}
+  - {verb: comparar, noun: comparació, gender: f, present_sg: compara, present_pl: comparen}
+  - {verb: classificar, noun: classificació, gender: f, present_sg: classifica, present_pl: classifiquen}
+  - {verb: definir, noun: definició, gender: f, present_sg: defineix, present_pl: defineixen}
+  - {verb: identificar, noun: identificació, gender: f, present_sg: identifica, present_pl: identifiquen}
+  - {verb: datar, noun: datació, gender: f, present_sg: data, present_pl: daten}
+  - {verb: excavar, noun: excavació, gender: f, present_sg: excava, present_pl: excaven}
+  - {verb: documentar, noun: documentació, gender: f, present_sg: documenta, present_pl: documenten}
+  - {verb: inventariar, noun: inventari, gender: m, present_sg: inventaria, present_pl: inventarien}
+  - {verb: catalogar, noun: catalogació, gender: f, present_sg: cataloga, present_pl: cataloguen}
+  - {verb: explorar, noun: exploració, gender: f, present_sg: explora, present_pl: exploren}
+  - {verb: transcriure, noun: transcripció, gender: f, present_sg: transcriu, present_pl: transcriuen}
+  - {verb: editar, noun: edició, gender: f, present_sg: edita, present_pl: editen}
+  - {verb: verificar, noun: verificació, gender: f, present_sg: verifica, present_pl: verifiquen}
+  - {verb: mesurar, noun: mesurament, gender: m, present_sg: mesura, present_pl: mesuren}

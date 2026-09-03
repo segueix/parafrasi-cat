@@ -1,0 +1,22 @@
+# Conjunt de regles de parafraseig: totes les famílies (nivells 1 a 4).
+# Ús: parafrasi-cat --rules parafrasi --explain "Text."
+# Amb --max-risk low queden fora les regles de risc mitjà (inversions, «correspon a»...).
+name: parafrasi
+description: Totes les famílies de regles de parafraseig (lèxic, connectors, verbal, còpula, agent, presència, ordre, temporals, subordinades, fusió, divisió, puntuació).
+max_semantic_risk: medium
+min_confidence: 0.55
+include:
+  - resources/ca/transformations/substitucions_lexiques.yaml
+  - resources/ca/transformations/connectors_equivalents.yaml
+  - resources/ca/transformations/verbal.yaml
+  - resources/ca/transformations/nominalitzacio.yaml
+  - resources/ca/transformations/copula.yaml
+  - resources/ca/transformations/agent.yaml
+  - resources/ca/transformations/presencia.yaml
+  - resources/ca/transformations/ordre.yaml
+  - resources/ca/transformations/temporals.yaml
+  - resources/ca/transformations/subordinades.yaml
+  - resources/ca/transformations/fusio.yaml
+  - resources/ca/transformations/divisio.yaml
+  - resources/ca/transformations/puntuacio.yaml
+rules: []

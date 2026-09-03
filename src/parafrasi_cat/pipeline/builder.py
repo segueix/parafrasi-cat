@@ -89,6 +89,7 @@ def build_pipeline(
         generator=CandidateGenerator(
             max_transformations=config.max_transformations_per_sentence,
             max_candidates=config.max_candidates_per_sentence,
+            max_depth=config.candidate_depth,
         ),
         validators=validators,
         scorer=scorer,
@@ -96,6 +97,7 @@ def build_pipeline(
         min_confidence=config.min_confidence,
         style_profile=style_profile,
         morphology=create_morphology_provider(config.morphology, lang, lexicon=lexicon),
+        lexicon=lexicon,
     )
 
 

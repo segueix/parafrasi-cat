@@ -1,0 +1,135 @@
+# Família 2: connectors equivalents (mateixa funció discursiva i mateix lloc sintàctic).
+# «slot»: sentence_initial (a l'inici de frase, seguit de coma), conjunction
+# (conjunció subordinant), medial (locució en qualsevol posició).
+description: Classes de connectors intercanviables.
+language: ca
+rules:
+  - rule_id: connector.equivalents
+    engine: connector
+    category: connector
+    level: 2
+    transformation_type: connector
+    semantic_risk: low
+    confidence: 0.75
+    description: "Connector → connector equivalent de la mateixa classe i el mateix slot"
+    registers: [neutre, formal]
+    classes:
+      - id: contrast_inicial
+        slot: sentence_initial
+        function: contrast
+        members:
+          - {form: no obstant això, register: formal}
+          - {form: tanmateix, register: formal}
+          - {form: així i tot, register: neutre}
+          - {form: amb tot, register: formal}
+          - {form: malgrat tot, register: neutre}
+      - id: concessiva
+        slot: conjunction
+        function: concessió
+        members:
+          - {form: tot i que}
+          - {form: encara que}
+          - {form: malgrat que}
+      - id: causal
+        slot: conjunction
+        function: causa
+        members:
+          - {form: ja que}
+          - {form: atès que, register: formal}
+          - {form: puix que, register: formal}
+      - id: consequencia_inicial
+        slot: sentence_initial
+        function: conseqüència
+        members:
+          - {form: per tant}
+          - {form: així doncs}
+          - {form: en conseqüència, register: formal}
+          - {form: per consegüent, register: formal}
+      - id: addicio_inicial
+        slot: sentence_initial
+        function: addició
+        members:
+          - {form: a més}
+          - {form: a més a més}
+          - {form: així mateix, register: formal}
+          - {form: endemés, register: formal}
+      - id: exemplificacio
+        slot: medial
+        function: exemplificació
+        members:
+          - {form: per exemple}
+          - {form: a tall d'exemple, register: formal}
+      - id: reformulacio
+        slot: medial
+        function: reformulació
+        members:
+          - {form: és a dir}
+          - {form: en altres paraules}
+          - {form: dit d'una altra manera}
+          - {form: o sigui, register: col·loquial}
+      - id: ordre_primer
+        slot: sentence_initial
+        function: ordre
+        members:
+          - {form: en primer lloc}
+          - {form: primerament, register: formal}
+          - {form: per començar}
+      - id: ordre_final
+        slot: sentence_initial
+        function: ordre
+        members:
+          - {form: finalment}
+          - {form: per acabar}
+          - {form: en darrer lloc}
+          - {form: per últim}
+      - id: conclusio_inicial
+        slot: sentence_initial
+        function: conclusió
+        members:
+          - {form: en resum}
+          - {form: en síntesi, register: formal}
+          - {form: en definitiva}
+          - {form: en conclusió, register: formal}
+      - id: temps_inicial
+        slot: sentence_initial
+        function: temps
+        members:
+          - {form: després}
+          - {form: tot seguit}
+          - {form: a continuació}
+    examples:
+      positive:
+        - input: "No obstant això, cal revisar el capítol IV."
+          output: "Tanmateix, cal revisar el capítol IV."
+        - input: "No obstant això, cal revisar el capítol IV."
+          output: "Així i tot, cal revisar el capítol IV."
+        - input: "Sortirem tot i que plou."
+          output: "Sortirem encara que plou."
+        - input: "Ho farem, és a dir, ho intentarem."
+          output: "Ho farem, en altres paraules, ho intentarem."
+      negative:
+        - "És a dir que no vindrà tanmateix."
+        - "Tot seguit va marxar."
+
+  - rule_id: connector.aixi_com_a_i_tambe
+    engine: connector
+    category: connector
+    level: 2
+    transformation_type: connector
+    semantic_risk: low
+    confidence: 0.7
+    description: "«així com» (addició nominal) → «i també»"
+    classes:
+      - id: addicio_nominal
+        slot: medial
+        function: addició
+        members:
+          - {form: així com}
+        targets:
+          - {form: i també}
+    examples:
+      positive:
+        - input: "Hi ha dos cranis acompanyats de dos ossos creuats, així com dues serps també creuades."
+          output: "Hi ha dos cranis acompanyats de dos ossos creuats, i també dues serps també creuades."
+      negative:
+        - "Ho va fer així com li van dir."

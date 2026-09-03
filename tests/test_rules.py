@@ -92,7 +92,8 @@ def test_lexical_rule_from_file(paths: ProjectPaths) -> None:
 
 def test_registry(paths: ProjectPaths) -> None:
     registry = default_registry()
-    assert registry.available() == ("lexical.substitution",)
+    assert "lexical.substitution" in registry.available()
+    assert "pattern" in registry.available()
     assert "diccionari" in registry.describe("lexical.substitution")
     rule = registry.create(
         "lexical.substitution",

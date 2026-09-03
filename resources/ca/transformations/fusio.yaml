@@ -1,0 +1,46 @@
+# Família 11: fusió de frases compatibles (regla de paràgraf, nivell 4).
+description: Fusió de dues frases consecutives segons el senyal inicial de la segona.
+language: ca
+rules:
+  - rule_id: fusio.frases_compatibles
+    engine: fusion
+    category: fusio
+    level: 4
+    transformation_type: sentence_merge
+    semantic_risk: low
+    confidence: 0.6
+    description: "Fusió de dues frases consecutives compatibles"
+    strategies:
+      - id: contrast_pero
+        triggers: [però]
+        joiner: ", "
+        max_words: 40
+      - id: connector_punt_i_coma
+        triggers: [tanmateix, no obstant això, a més, a més a més, així mateix, per tant, en conseqüència, així doncs, d'altra banda, en canvi, finalment, després, aleshores, llavors, també, així i tot, amb tot, malgrat tot, en efecte, de fet, a continuació, tot seguit, per aquest motiu, per això]
+        joiner: "; "
+        max_words: 45
+      - id: anafora_demostrativa
+        triggers: [en aquest, en aquesta, en aquests, en aquestes, aquest, aquesta, aquests, aquestes, això, hi]
+        joiner: ", i "
+        max_words: 50
+        semantic_risk: medium
+      - id: frases_curtes
+        triggers: []
+        joiner: " i "
+        max_words: 16
+        max_words_each: 8
+        semantic_risk: medium
+    examples:
+      positive:
+        - input: "Plou molt. Tanmateix, sortirem."
+          output: "Plou molt; tanmateix, sortirem."
+        - input: "Plou molt. Però sortirem."
+          output: "Plou molt, però sortirem."
+        - input: "Plou. Fa fred."
+          output: "Plou i fa fred."
+        - input: "El monument és de marbre. En aquest sarcòfag hi ha dos cranis."
+          output: "El monument és de marbre, i en aquest sarcòfag hi ha dos cranis."
+      negative:
+        - "Plou molt! Sortirem."
+        - "Plou molt? Sortirem."
+        - "Vegeu la pàg. Després tornarem."

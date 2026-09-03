@@ -51,8 +51,16 @@ class LexicalSubstitutionRule(Rule):
         transformation_type: TransformationType = TransformationType.LEXICAL,
         description: str = "Substitució lèxica basada en diccionari",
         source_name: str = "",
+        category: str = "lexic",
+        level: int = 1,
     ) -> None:
-        super().__init__(rule_id, transformation_type=transformation_type, description=description)
+        super().__init__(
+            rule_id,
+            transformation_type=transformation_type,
+            description=description,
+            category=category,
+            level=level,
+        )
         self._entries = tuple(entries)
         self._patterns = tuple((entry, phrase_pattern(entry.source)) for entry in self._entries)
         self._source_name = source_name
@@ -99,6 +107,8 @@ class LexicalSubstitutionRule(Rule):
         path: str | Path,
         *,
         rule_id: str = DEFAULT_ID,
+        category: str = "lexic",
+        level: int = 1,
     ) -> LexicalSubstitutionRule:
         """Carrega un diccionari de substitucions en YAML/JSON.
 
@@ -139,4 +149,6 @@ class LexicalSubstitutionRule(Rule):
             transformation_type=default_type,
             description=as_str(data, "description", "Substitució lèxica basada en diccionari"),
             source_name=Path(path).name,
+            category=category,
+            level=level,
         )

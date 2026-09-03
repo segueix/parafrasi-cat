@@ -6,18 +6,20 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
+from parafrasi_cat.core.spans import Span
 from parafrasi_cat.core.transformation import Transformation, apply_transformations
 
 
 @dataclass(frozen=True, slots=True)
 class Candidate:
-    """Versió alternativa d'una frase.
+    """Versió alternativa d'una frase (o d'un paràgraf).
 
     Atributs:
-        sentence_index: Índex de la frase dins del document.
-        source_text: Text original de la frase.
+        sentence_index: Índex de la frase (o del paràgraf) dins del document.
+        source_text: Text original.
         text: Text del candidat (igual a ``source_text`` si és el candidat identitat).
-        transformations: Transformacions aplicades, ordenades per posició.
+        transformations: Transformacions aplicades, ordenades per posició i
+            relatives a ``source_text``.
     """
 
     sentence_index: int
@@ -33,11 +35,25 @@ class Candidate:
     def n_transformations(self) -> int:
         return len(self.transformations)
 
+    @property
+    def rule_ids(self) -> tuple[str, ...]:
+        return tuple(t.rule_id for t in self.transformations)
+
     def change_ratio(self) -> float:
         """Proporció de caràcters canviats (0 = idèntic, 1 = completament diferent)."""
         if self.source_text == self.text:
             return 0.0
         return 1.0 - SequenceMatcher(a=self.source_text, b=self.text, autojunk=False).ratio()
+
+    def result_spans(self) -> tuple[Span, ...]:
+        """Interval que ocupa el ``text_after`` de cada transformació dins de ``text``."""
+        spans: list[Span] = []
+        shift = 0
+        for transformation in self.transformations:
+            start = transformation.changed_span.start + shift
+            spans.append(Span(start, start + len(transformation.text_after)))
+            shift += len(transformation.text_after) - transformation.changed_span.length
+        return tuple(spans)
 
     @classmethod
     def identity(cls, sentence_index: int, source_text: str) -> Candidate:

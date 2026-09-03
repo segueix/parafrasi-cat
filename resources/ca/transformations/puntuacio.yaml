@@ -1,0 +1,106 @@
+# Família 13: canvis controlats de puntuació.
+description: Punt i coma → punt; parèntesis i guions → comes.
+language: ca
+rules:
+  - rule_id: puntuacio.punt_i_coma_a_punt
+    engine: pattern
+    category: puntuacio
+    level: 4
+    transformation_type: punctuation
+    semantic_risk: low
+    confidence: 0.75
+    description: "«A; B.» → «A. B.» quan A i B són clàusules amb verb conjugat"
+    pattern:
+      - {start: true}
+      - {seq: true, group: a, min_tokens: 2, no_semicolon: true}
+      - {text: ";"}
+      - {seq: true, group: b, min_tokens: 2, greedy: true, no_semicolon: true}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        a: {has_finite_verb: true}
+        b: {has_finite_verb: true}
+    transformation: "{a}. {b|cap}"
+    examples:
+      positive:
+        - input: "Plou molt; sortirem igualment."
+          output: "Plou molt. Sortirem igualment."
+      negative:
+        - "Plou molt; molt."
+
+  - rule_id: puntuacio.parentesi_a_comes
+    engine: pattern
+    category: puntuacio
+    level: 3
+    transformation_type: punctuation
+    semantic_risk: low
+    confidence: 0.7
+    description: "«X (Y) Z» → «X, Y, Z» (incís entre parèntesis → incís entre comes)"
+    pattern:
+      - {text: "("}
+      - {seq: true, group: inner, max_tokens: 8, no_punct: true}
+      - {text: ")"}
+    conditions:
+      groups:
+        inner: {not_protected: true}
+      context:
+        preceded_by: ["@word"]
+        not_followed_by: ["@punct", "@end"]
+    transformation: ", {inner},"
+    examples:
+      positive:
+        - input: "El monument (un sarcòfag de marbre) és a Florència."
+          output: "El monument, un sarcòfag de marbre, és a Florència."
+      negative:
+        - "Segons Fabra (1918), la norma és clara."
+        - "És a Florència (Itàlia)."
+
+  - rule_id: puntuacio.parentesi_final_a_coma
+    engine: pattern
+    category: puntuacio
+    level: 3
+    transformation_type: punctuation
+    semantic_risk: low
+    confidence: 0.7
+    description: "«X (Y).» → «X, Y.» (incís entre parèntesis al final de la frase)"
+    pattern:
+      - {text: "("}
+      - {seq: true, group: inner, max_tokens: 8, no_punct: true}
+      - {text: ")"}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        inner: {not_protected: true}
+      context:
+        preceded_by: ["@word"]
+    transformation: ", {inner}"
+    examples:
+      positive:
+        - input: "El sarcòfag és de marbre (un material car)."
+          output: "El sarcòfag és de marbre, un material car."
+      negative:
+        - "Segons Fabra (1918)."
+
+  - rule_id: puntuacio.guions_a_comes
+    engine: pattern
+    category: puntuacio
+    level: 3
+    transformation_type: punctuation
+    semantic_risk: low
+    confidence: 0.75
+    description: "«X — Y — Z» → «X, Y, Z» (incís entre guions → incís entre comes)"
+    pattern:
+      - {text: ["—", "–"]}
+      - {seq: true, group: inner, max_tokens: 10, no_punct: true}
+      - {text: ["—", "–"]}
+    conditions:
+      context:
+        preceded_by: ["@word"]
+        not_followed_by: ["@punct", "@end"]
+    transformation: ", {inner},"
+    examples:
+      positive:
+        - input: "El monument — un sarcòfag de marbre — és a Florència."
+          output: "El monument, un sarcòfag de marbre, és a Florència."
+      negative:
+        - "— Vine — va dir."

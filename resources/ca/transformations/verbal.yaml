@@ -1,0 +1,137 @@
+# Família 3: canvis verbals segurs.
+description: Passat perifràstic ↔ passat simple; «cal» ↔ «és necessari».
+language: ca
+rules:
+  - rule_id: verbal.perifrastic_a_simple
+    engine: periphrastic_past
+    category: verbal
+    level: 3
+    transformation_type: morphological
+    semantic_risk: low
+    confidence: 0.7
+    description: "Passat perifràstic → passat simple («va encarregar» → «encarregà», «van ser» → «foren»)"
+    direction: to_simple
+    irregulars: resources/ca/transformations/passat_simple_irregular.yaml
+    examples:
+      positive:
+        - input: "Va encarregar el monument el 1507."
+          output: "Encarregà el monument el 1507."
+        - input: "El monument va ser encarregat el 1507 i els cranis van ser afegits més tard."
+          output: "El monument fou encarregat el 1507 i els cranis van ser afegits més tard."
+        - input: "El monument va ser encarregat el 1507 i els cranis van ser afegits més tard."
+          output: "El monument va ser encarregat el 1507 i els cranis foren afegits més tard."
+        - input: "Ells van finalitzar el sarcòfag."
+          output: "Ells finalitzaren el sarcòfag."
+      negative:
+        - "Va a Roma cada any."
+        - "Va veure'l ahir."
+
+  - rule_id: verbal.simple_a_perifrastic
+    engine: periphrastic_past
+    category: verbal
+    level: 3
+    transformation_type: morphological
+    semantic_risk: low
+    confidence: 0.7
+    description: "Passat simple → passat perifràstic («fou» → «va ser», «encarregaren» → «van encarregar»)"
+    direction: to_periphrastic
+    irregulars: resources/ca/transformations/passat_simple_irregular.yaml
+    examples:
+      positive:
+        - input: "El monument fou encarregat el 1507 i finalitzat el 1516."
+          output: "El monument va ser encarregat el 1507 i finalitzat el 1516."
+        - input: "Els mestres finalitzaren el sarcòfag."
+          output: "Els mestres van finalitzar el sarcòfag."
+        - input: "Altoviti el rebé i no el pagà."
+          output: "Altoviti el va rebre i no el pagà."
+      negative:
+        - "El sofà és al menjador."
+        - "Demà vindrà."
+
+  - rule_id: verbal.cal_inf_a_es_necessari
+    engine: pattern
+    category: verbal
+    level: 2
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.8
+    description: "«cal INF» → «és necessari INF»"
+    pattern:
+      - {text: [cal, calia, caldrà, caldria], group: v}
+      - {infinitive: true, group: inf}
+    transformation: "{v|map(cal=és necessari,calia=era necessari,caldrà=serà necessari,caldria=seria necessari)} {inf}"
+    examples:
+      positive:
+        - input: "Cal revisar el capítol IV."
+          output: "És necessari revisar el capítol IV."
+        - input: "Probablement caldria revisar la datació."
+          output: "Probablement seria necessari revisar la datació."
+      negative:
+        - "Cal que vinguis."
+        - "Cal a casa."
+
+  - rule_id: verbal.cal_que_a_es_necessari_que
+    engine: pattern
+    category: verbal
+    level: 2
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.8
+    description: "«cal que» → «és necessari que»"
+    pattern:
+      - {text: [cal, calia, caldrà, caldria], group: v}
+      - {text: que}
+    transformation: "{v|map(cal=és necessari,calia=era necessari,caldrà=serà necessari,caldria=seria necessari)} que"
+    examples:
+      positive:
+        - input: "Cal que revisem el capítol IV."
+          output: "És necessari que revisem el capítol IV."
+      negative:
+        - "Cal revisar el capítol IV."
+
+  - rule_id: verbal.es_necessari_inf_a_cal
+    engine: pattern
+    category: verbal
+    level: 2
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.8
+    description: "«és necessari INF» → «cal INF»"
+    pattern:
+      - {text: [és, era, serà, seria], group: v}
+      - {text: necessari}
+      - {infinitive: true, group: inf}
+    conditions:
+      context:
+        not_preceded_by: ["no"]
+    transformation: "{v|map(és=cal,era=calia,serà=caldrà,seria=caldria)} {inf}"
+    examples:
+      positive:
+        - input: "És necessari revisar el capítol IV."
+          output: "Cal revisar el capítol IV."
+      negative:
+        - "No és necessari revisar el capítol IV."
+        - "És necessari un canvi."
+
+  - rule_id: verbal.es_necessari_que_a_cal_que
+    engine: pattern
+    category: verbal
+    level: 2
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.8
+    description: "«és necessari que» → «cal que»"
+    pattern:
+      - {text: [és, era, serà, seria], group: v}
+      - {text: necessari}
+      - {text: que}
+    conditions:
+      context:
+        not_preceded_by: ["no"]
+    transformation: "{v|map(és=cal,era=calia,serà=caldrà,seria=caldria)} que"
+    examples:
+      positive:
+        - input: "Era necessari que vinguessin."
+          output: "Calia que vinguessin."
+      negative:
+        - "No era necessari que vinguessin."
