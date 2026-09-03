@@ -51,6 +51,11 @@ class ProjectPaths:
     def style(self) -> Path:
         return self.resources / "style"
 
+    @property
+    def fingerprints(self) -> Path:
+        """Directori de les empremtes estilístiques (``style/<autor>.json``)."""
+        return self.root / "style"
+
     def language(self, code: str = "ca") -> Path:
         return self.resources / code
 
@@ -71,6 +76,10 @@ class ProjectPaths:
     def resolve_style_profile(self, reference: str | Path) -> Path:
         """Resol un perfil d'estil per nom (``resources/style/<nom>.yaml``) o per ruta."""
         return self._resolve_named(reference, self.style, "perfil d'estil")
+
+    def resolve_fingerprint(self, reference: str | Path) -> Path:
+        """Resol una empremta estilística per nom (``style/<nom>.json``) o per ruta."""
+        return self._resolve_named(reference, self.fingerprints, "empremta d'estil")
 
     def _resolve_named(self, reference: str | Path, directory: Path, what: str) -> Path:
         text = str(reference)

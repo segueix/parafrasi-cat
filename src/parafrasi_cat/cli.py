@@ -6,6 +6,9 @@ Exemples::
     echo "Text" | parafrasi-cat
     parafrasi-cat --input fitxer.txt --explain
     parafrasi-cat --rules exemple-lexic --json "Gairebé sempre plou."
+    parafrasi-cat style build corpus/author/
+    parafrasi-cat style compare style/author.json style/altre.json
+    parafrasi-cat rewrite input.txt --style style/author.json --level 3 --candidates 10
 """
 
 from __future__ import annotations
@@ -33,7 +36,11 @@ def build_parser() -> argparse.ArgumentParser:
             "Motor local de reredacció en català basat en regles. "
             "No fa servir cap LLM ni cap servei extern: tot s'executa a l'ordinador."
         ),
-        epilog="Sense un conjunt de regles actiu, el text es retorna sense modificar.",
+        epilog=(
+            "Sense un conjunt de regles actiu, el text es retorna sense modificar. "
+            "Subordres: «parafrasi-cat rewrite FITXER» (reescriptura amb informe de candidats) "
+            "i «parafrasi-cat style build|compare|show» (empremtes d'estil)."
+        ),
     )
     parser.add_argument(
         "text",
@@ -140,6 +147,15 @@ def read_input(args: argparse.Namespace) -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments and arguments[0] == "style":
+        from parafrasi_cat.style.cli import style_main
+
+        return style_main(arguments[1:])
+    if arguments and arguments[0] == "rewrite":
+        from parafrasi_cat.rewrite import rewrite_main
+
+        return rewrite_main(arguments[1:])
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

@@ -1,0 +1,58 @@
+# Família 9: reubicació de complements temporals (inici ↔ final de frase).
+description: Complements temporals d'oració (anys, segles, dates) moguts entre l'inici i el final.
+language: ca
+rules:
+  - rule_id: temporal.inicial_a_final
+    engine: pattern
+    category: temporal
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.75
+    description: "«T, Y» → «Y T» (complement temporal inicial al final de la frase)"
+    pattern:
+      - {start: true}
+      - {temporal: true, group: t, intro: true}
+      - {text: ","}
+      - {seq: true, group: rest, greedy: true, min_tokens: 3}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        rest: {has_finite_verb: true, no_relative: true, no_comma: true, not_ends_with_participle: true}
+    transformation: "{rest|cap} {t|lower}"
+    examples:
+      positive:
+        - input: "Al segle XIX, la població de Girona era d'aproximadament 15.000 habitants."
+          output: "La població de Girona era d'aproximadament 15.000 habitants al segle XIX."
+        - input: "El 1507, Oddo Altoviti va encarregar el monument."
+          output: "Oddo Altoviti va encarregar el monument el 1507."
+      negative:
+        - "El 1507, el monument que va encarregar Altoviti era a Florència."
+        - "En aquest sarcòfag, hi ha dos cranis."
+
+  - rule_id: temporal.final_a_inicial
+    engine: pattern
+    category: temporal
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.7
+    description: "«Y T» → «T, Y» (complement temporal final a l'inici de la frase)"
+    pattern:
+      - {start: true}
+      - {seq: true, group: rest, min_tokens: 3}
+      - {temporal: true, group: t, intro: true}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        rest: {has_finite_verb: true, no_relative: true, no_comma: true, not_ends_with_participle: true, not_ends_with: [el, la, "l'", els, les, de, "d'", a, en, per, des, fins, durant, entre, al, als, del, dels, i, o]}
+    transformation: "{t|cap}, {rest|lower}"
+    examples:
+      positive:
+        - input: "Va encarregar el monument el 1507."
+          output: "El 1507, va encarregar el monument."
+        - input: "La població de Girona era d'aproximadament 15.000 habitants al segle XIX."
+          output: "Al segle XIX, la població de Girona era d'aproximadament 15.000 habitants."
+      negative:
+        - "La primera referència itàlica és el monument funerari d'Oddo Altoviti, encarregat el 1507 i finalitzat el 1516."
+        - "El monument fou finalitzat el 1516."

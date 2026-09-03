@@ -31,6 +31,8 @@ class PipelineConfig:
         language: Codi de llengua dels recursos (només ``ca`` en aquesta fase).
         rule_set: Nom (``rules/<nom>.yaml``) o ruta del conjunt de regles.
         style_profile: Nom (``resources/style/<nom>.yaml``) o ruta del perfil d'estil.
+        morphology: Nom del proveïdor morfològic (``internal``, ``dictionary``, ``null``,
+            ``apertium``, ``freeling``); vegeu ``parafrasi_cat.morphology.registry``.
         protected_terms: Termes addicionals que cap regla pot tocar.
         protected_terms_files: Fitxers amb termes protegits (un per línia).
         max_semantic_risk: Risc màxim acceptat; ``None`` = el del conjunt de regles.
@@ -38,6 +40,8 @@ class PipelineConfig:
         scoring: Pesos de la puntuació.
         max_transformations_per_sentence: Límit de transformacions combinades per frase.
         max_candidates_per_sentence: Límit de candidats avaluats per frase.
+        candidate_depth: Nivells de reaplicació de regles sobre els candidats (1 = cap).
+        level: Nivell màxim de les regles actives (1 lèxic … 5 paràgraf); ``None`` = totes.
         length_ratio: Marge de longitud (mínim, màxim) acceptat respecte de l'original.
         use_style: Si és fals, no es calcula la distància d'estil.
     """
@@ -46,6 +50,7 @@ class PipelineConfig:
     language: str = "ca"
     rule_set: str = "default"
     style_profile: str = "default"
+    morphology: str = "internal"
     protected_terms: tuple[str, ...] = ()
     protected_terms_files: tuple[Path, ...] = ()
     max_semantic_risk: SemanticRisk | None = None
@@ -53,12 +58,18 @@ class PipelineConfig:
     scoring: ScoringWeights = field(default_factory=ScoringWeights)
     max_transformations_per_sentence: int = 3
     max_candidates_per_sentence: int = 20
+    candidate_depth: int = 2
+    level: int | None = None
     length_ratio: tuple[float, float] = (0.6, 1.6)
     use_style: bool = True
 
     def __post_init__(self) -> None:
+        if self.level is not None and not 1 <= self.level <= 5:
+            raise ConfigError("level ha d'estar entre 1 i 5")
         if self.min_confidence is not None and not 0.0 <= self.min_confidence <= 1.0:
             raise ConfigError("min_confidence ha d'estar entre 0 i 1")
+        if self.candidate_depth < 1:
+            raise ConfigError("candidate_depth ha de ser almenys 1")
         if self.max_transformations_per_sentence < 1 or self.max_candidates_per_sentence < 1:
             raise ConfigError("Els límits de transformacions i candidats han de ser almenys 1")
         low, high = self.length_ratio
@@ -101,6 +112,7 @@ class PipelineConfig:
             style_profile=_maybe_path(
                 as_str(data, "style_profile", defaults.style_profile), base_dir
             ),
+            morphology=as_str(data, "morphology", defaults.morphology),
             protected_terms=as_str_list(data, "protected_terms"),
             protected_terms_files=tuple(
                 _resolve_path(f, base_dir) for f in as_str_list(data, "protected_terms_files")
@@ -114,6 +126,8 @@ class PipelineConfig:
             max_candidates_per_sentence=as_int(
                 data, "max_candidates_per_sentence", defaults.max_candidates_per_sentence
             ),
+            candidate_depth=as_int(data, "candidate_depth", defaults.candidate_depth),
+            level=as_int(data, "level") if data.get("level") is not None else None,
             length_ratio=(
                 as_float(ratio, "min", defaults.length_ratio[0]),
                 as_float(ratio, "max", defaults.length_ratio[1]),
@@ -132,6 +146,7 @@ class PipelineConfig:
             "language": self.language,
             "rule_set": self.rule_set,
             "style_profile": self.style_profile,
+            "morphology": self.morphology,
             "protected_terms": list(self.protected_terms),
             "protected_terms_files": [str(f) for f in self.protected_terms_files],
             "max_semantic_risk": None
@@ -141,6 +156,8 @@ class PipelineConfig:
             "scoring": self.scoring.to_dict(),
             "max_transformations_per_sentence": self.max_transformations_per_sentence,
             "max_candidates_per_sentence": self.max_candidates_per_sentence,
+            "candidate_depth": self.candidate_depth,
+            "level": self.level,
             "length_ratio": {"min": self.length_ratio[0], "max": self.length_ratio[1]},
             "use_style": self.use_style,
         }

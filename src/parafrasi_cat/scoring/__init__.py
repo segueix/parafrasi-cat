@@ -1,7 +1,27 @@
-"""Puntuació i selecció de candidats."""
+"""Puntuació i selecció de candidats.
 
-from parafrasi_cat.scoring.scorer import CompositeScorer, ScoreBreakdown, Scorer
-from parafrasi_cat.scoring.selection import select_best
+La puntuació és multidimensional (preservació factual, epistemològica,
+terminològica, gramaticalitat, semblança d'estil, grau de canvi) i qualsevol
+error de preservació invalida el candidat.
+"""
+
+from parafrasi_cat.scoring.scorer import (
+    DIMENSIONS,
+    CompositeScorer,
+    ScoreBreakdown,
+    Scorer,
+    ScoringContext,
+)
+from parafrasi_cat.scoring.selection import rank, select_best
 from parafrasi_cat.scoring.weights import ScoringWeights
 
-__all__ = ["CompositeScorer", "ScoreBreakdown", "Scorer", "ScoringWeights", "select_best"]
+__all__ = [
+    "DIMENSIONS",
+    "CompositeScorer",
+    "ScoreBreakdown",
+    "Scorer",
+    "ScoringContext",
+    "ScoringWeights",
+    "rank",
+    "select_best",
+]

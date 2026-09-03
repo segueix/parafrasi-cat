@@ -5,13 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from parafrasi_cat.analyzer.analysis import RuleBasedAnalyzer
+from parafrasi_cat.analyzer.lexicon import ClosedClassLexicon
 from parafrasi_cat.analyzer.sentences import DEFAULT_ABBREVIATIONS, SentenceSplitter
 from parafrasi_cat.candidates.generator import CandidateGenerator
-from parafrasi_cat.morphology.provider import (
-    DictionaryMorphology,
-    MorphologyProvider,
-    NullMorphology,
-)
+from parafrasi_cat.morphology.registry import create_morphology_provider
 from parafrasi_cat.pipeline.config import PipelineConfig
 from parafrasi_cat.pipeline.pipeline import Pipeline
 from parafrasi_cat.protected.protector import default_protector
@@ -24,11 +21,19 @@ from parafrasi_cat.resources import (
     read_term_list,
 )
 from parafrasi_cat.rules.registry import RuleRegistry, default_registry
-from parafrasi_cat.rules.ruleset import RuleSetConfig, build_rule_set
+from parafrasi_cat.rules.ruleset import RuleSet, RuleSetConfig, build_rule_set
 from parafrasi_cat.scoring.scorer import CompositeScorer
 from parafrasi_cat.style.evaluator import StyleEvaluator
+from parafrasi_cat.style.observations import StyleResources
 from parafrasi_cat.style.profile import load_style_profile
 from parafrasi_cat.validation.base import Validator
+from parafrasi_cat.validation.epistemic import (
+    EPISTEMOLOGY_FILE,
+    EpistemicLexicon,
+    EpistemicValidator,
+)
+from parafrasi_cat.validation.factual import ProtectedTermValidator, factual_validators
+from parafrasi_cat.validation.grammar import GrammarHeuristicValidator
 from parafrasi_cat.validation.invariants import (
     HedgeValidator,
     LengthRatioValidator,
@@ -55,32 +60,39 @@ def build_pipeline(
     paths = ProjectPaths.discover(config.home)
     lang = paths.language(config.language)
 
-    analyzer = RuleBasedAnalyzer(SentenceSplitter(_load_abbreviations(lang)))
+    lexicon = ClosedClassLexicon.load(lang)
+    analyzer = RuleBasedAnalyzer(SentenceSplitter(_load_abbreviations(lang)), lexicon=lexicon)
 
+    user_terms = _collect_user_terms(config, paths)
     protector = default_protector(
         analyzer,
-        user_terms=_collect_user_terms(config, paths),
+        user_terms=user_terms,
         known_names=_read_optional_terms(paths, KNOWN_NAMES_FILE),
+        lexicon=lexicon,
     )
 
     rule_config = RuleSetConfig.load(paths.resolve_rule_set(config.rule_set))
-    rule_set = build_rule_set(rule_config, registry or default_registry(), paths)
+    rule_set = build_rule_set(rule_config, registry or default_registry(), paths).up_to_level(
+        config.level
+    )
 
-    modality = load_mapping(lang / "lexicon" / "modalitat.yaml")
-    validators: list[Validator] = [
-        ProtectedSpanValidator(),
-        NumericInvariantValidator(),
-        NegationValidator(
-            as_str_list(modality, "negation"), as_str_list(modality, "negation_exceptions")
-        ),
-        HedgeValidator(as_str_list(modality, "hedges"), as_str_list(modality, "certainty")),
-        LengthRatioValidator(*config.length_ratio),
-    ]
+    validators = build_validators(config, paths, analyzer, lexicon, rule_set, user_terms)
 
-    style_profile = load_style_profile(paths.resolve_style_profile(config.style_profile))
+    style_profile = load_style_profile(
+        paths.resolve_style_profile(config.style_profile), paths=paths
+    )
     style_evaluator = None
     if config.use_style:
-        style_evaluator = StyleEvaluator(style_profile, analyzer, _load_connectors(lang))
+        # Si el perfil referencia una empremta de l'autor, l'avaluador també mesura
+        # la distància respecte de les seves preferències (variants, connectors, comes).
+        style_resources = (
+            StyleResources.load(paths, config.language, lexicon=lexicon)
+            if style_profile.preferences is not None
+            else None
+        )
+        style_evaluator = StyleEvaluator(
+            style_profile, analyzer, _load_connectors(lang), resources=style_resources
+        )
     scorer = CompositeScorer(config.scoring, style_evaluator)
 
     return Pipeline(
@@ -90,14 +102,63 @@ def build_pipeline(
         generator=CandidateGenerator(
             max_transformations=config.max_transformations_per_sentence,
             max_candidates=config.max_candidates_per_sentence,
+            max_depth=config.candidate_depth,
         ),
         validators=validators,
         scorer=scorer,
         max_semantic_risk=config.max_semantic_risk,
         min_confidence=config.min_confidence,
         style_profile=style_profile,
-        morphology=_load_morphology(lang),
+        morphology=create_morphology_provider(config.morphology, lang, lexicon=lexicon),
+        lexicon=lexicon,
+        max_level=config.level,
     )
+
+
+def build_validators(
+    config: PipelineConfig,
+    paths: ProjectPaths,
+    analyzer: RuleBasedAnalyzer,
+    lexicon: ClosedClassLexicon,
+    rule_set: RuleSet,
+    user_terms: tuple[str, ...] = (),
+) -> list[Validator]:
+    """Validadors en ordre de prioritat: contingut, terminologia, epistemologia, gramàtica.
+
+    - fragments protegits, xifres i números romans, noms propis, dates, citacions,
+      text entre cometes i negació (preservació factual);
+    - terminologia protegida per l'usuari;
+    - marcadors d'atenuació i certesa, i classificació epistemològica explícita
+      (només les regles amb ``allows_epistemic_change`` poden canviar-la);
+    - gramaticalitat heurística i marge de longitud.
+    """
+    lang = paths.language(config.language)
+    modality = load_mapping(lang / "lexicon" / "modalitat.yaml")
+    validators: list[Validator] = [
+        ProtectedSpanValidator(),
+        NumericInvariantValidator(),
+        *factual_validators(analyzer, lexicon=lexicon),
+        NegationValidator(
+            as_str_list(modality, "negation"), as_str_list(modality, "negation_exceptions")
+        ),
+    ]
+    if user_terms:
+        validators.append(ProtectedTermValidator(user_terms))
+    validators.append(
+        HedgeValidator(
+            as_str_list(modality, "hedges"),
+            as_str_list(modality, "certainty"),
+            rule_set.epistemic_rule_ids,
+        )
+    )
+    epistemology = lang / EPISTEMOLOGY_FILE
+    if epistemology.is_file():
+        validators.append(
+            EpistemicValidator(EpistemicLexicon.load(epistemology), rule_set.epistemic_rule_ids)
+        )
+    validators.append(GrammarHeuristicValidator())
+    validators.append(LengthRatioValidator(*config.length_ratio))
+    return validators
 
 
 def _load_abbreviations(lang: Path) -> frozenset[str]:
@@ -118,13 +179,6 @@ def _load_connectors(lang: Path) -> tuple[str, ...]:
         for connector in as_mapping_list(group, "connectors"):
             forms.append(as_str(connector, "form"))
     return tuple(dict.fromkeys(forms))
-
-
-def _load_morphology(lang: Path) -> MorphologyProvider:
-    file = lang / "morphology" / "formes.yaml"
-    if file.is_file():
-        return DictionaryMorphology.from_file(file)
-    return NullMorphology()
 
 
 def _read_optional_terms(paths: ProjectPaths, relative: str) -> tuple[str, ...]:

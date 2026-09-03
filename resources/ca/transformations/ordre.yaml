@@ -1,0 +1,112 @@
+# Família 8: canvi controlat d'ordre de complements.
+description: Inversió de la còpula identificativa i reubicació de «segons X».
+language: ca
+rules:
+  - rule_id: ordre.inversio_copula
+    engine: pattern
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: medium
+    confidence: 0.65
+    description: "«X és Y» → «Y és X» quan tots dos són sintagmes nominals definits (còpula identificativa)"
+    pattern:
+      - {start: true}
+      - {np: true, group: subj}
+      - {text: [és, són], group: cop}
+      - {np: true, group: pred}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        subj: {definite: true, no_finite_verb: true}
+        pred: {definite: true}
+    transformation: "{pred|cap} {cop} {subj|lower}"
+    examples:
+      positive:
+        - input: "La primera referència itàlica és el monument funerari d'Oddo Altoviti."
+          output: "El monument funerari d'Oddo Altoviti és la primera referència itàlica."
+      negative:
+        - "El gat és un animal."
+        - "La primera referència és el monument, i la segona és el retaule."
+
+  - rule_id: ordre.inversio_copula_amb_aposicio
+    engine: pattern
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: medium
+    confidence: 0.6
+    description: "«X és Y, PART...» → «Y, PART..., és X» (l'aposició participial segueix el nom que modifica)"
+    pattern:
+      - {start: true}
+      - {np: true, group: subj}
+      - {text: [és, són], group: cop}
+      - {np: true, group: pred}
+      - {text: ","}
+      - {participle: true, group: part}
+      - {seq: true, group: tail, greedy: true, no_comma: true}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        subj: {definite: true, no_finite_verb: true}
+        pred: {definite: true}
+        tail: {no_finite_verb: true}
+    transformation: "{pred|cap}, {part} {tail}, {cop} {subj|lower}"
+    examples:
+      positive:
+        - input: "La primera referència itàlica és el monument funerari d'Oddo Altoviti, encarregat el 1507 i finalitzat el 1516."
+          output: "El monument funerari d'Oddo Altoviti, encarregat el 1507 i finalitzat el 1516, és la primera referència itàlica."
+      negative:
+        - "La primera referència itàlica és el monument funerari, que fou encarregat el 1507."
+
+  - rule_id: ordre.segons_inicial_a_final
+    engine: pattern
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.75
+    description: "«Segons X, Y» → «Y, segons X»"
+    pattern:
+      - {start: true}
+      - {text: segons}
+      - {np: true, group: src}
+      - {text: ","}
+      - {seq: true, group: rest, greedy: true, min_tokens: 3}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        rest: {has_finite_verb: true}
+    transformation: "{rest|cap}, segons {src}"
+    examples:
+      positive:
+        - input: "Segons Fabra, la norma és clara."
+          output: "La norma és clara, segons Fabra."
+      negative:
+        - "Segons ell."
+
+  - rule_id: ordre.segons_final_a_inicial
+    engine: pattern
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.75
+    description: "«Y, segons X» → «Segons X, Y»"
+    pattern:
+      - {start: true}
+      - {seq: true, group: rest, min_tokens: 3, no_comma: true}
+      - {text: ","}
+      - {text: segons}
+      - {np: true, group: src}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        rest: {has_finite_verb: true}
+    transformation: "Segons {src}, {rest|lower}"
+    examples:
+      positive:
+        - input: "La norma és clara, segons Fabra."
+          output: "Segons Fabra, la norma és clara."
+      negative:
+        - "La norma, segons Fabra, és clara."

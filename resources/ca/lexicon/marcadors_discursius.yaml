@@ -1,0 +1,85 @@
+# Marcadors discursius: unitats que organitzen el text o la interacció sense
+# aportar contingut proposicional. Complementen resources/ca/connectors/connectors.yaml.
+description: Marcadors discursius agrupats per funció (estructuració, reformulació, èmfasi, interacció...).
+pos: adv
+entries:
+  # estructuració del discurs
+  - {form: d'una banda, function: estructuració, register: neutre}
+  - {form: d'altra banda, function: estructuració, register: neutre}
+  - {form: per una banda, function: estructuració, register: neutre}
+  - {form: per altra banda, function: estructuració, register: neutre}
+  - {form: per un costat, function: estructuració, register: neutre}
+  - {form: per l'altre, function: estructuració, register: neutre}
+  - {form: en primer lloc, function: estructuració, register: neutre}
+  - {form: en segon lloc, function: estructuració, register: neutre}
+  - {form: en tercer lloc, function: estructuració, register: neutre}
+  - {form: en darrer lloc, function: estructuració, register: neutre}
+  - {form: en darrer terme, function: estructuració, register: formal}
+  - {form: per començar, function: estructuració, register: neutre}
+  - {form: per acabar, function: estructuració, register: neutre}
+  - {form: per últim, function: estructuració, register: neutre}
+  - {form: a continuació, function: estructuració, register: neutre}
+  - {form: tot seguit, function: estructuració, register: neutre}
+  - {form: pel que fa a, function: estructuració, register: neutre}
+  - {form: quant a, function: estructuració, register: neutre}
+  - {form: respecte a, function: estructuració, register: neutre}
+  - {form: en aquest sentit, function: estructuració, register: formal}
+  - {form: en aquest punt, function: estructuració, register: neutre}
+  # reformulació i exemplificació
+  - {form: és a dir, function: reformulació, register: neutre}
+  - {form: o sigui, function: reformulació, register: col·loquial}
+  - {form: en altres paraules, function: reformulació, register: neutre}
+  - {form: dit d'una altra manera, function: reformulació, register: neutre}
+  - {form: dit altrament, function: reformulació, register: formal}
+  - {form: això és, function: reformulació, register: formal}
+  - {form: per exemple, function: exemplificació, register: neutre}
+  - {form: com ara, function: exemplificació, register: neutre}
+  - {form: a tall d'exemple, function: exemplificació, register: formal}
+  - {form: en concret, function: exemplificació, register: neutre}
+  - {form: en particular, function: exemplificació, register: neutre}
+  # èmfasi i confirmació
+  - {form: de fet, function: èmfasi, register: neutre}
+  - {form: en efecte, function: èmfasi, register: formal}
+  - {form: efectivament, function: èmfasi, register: neutre}
+  - {form: en realitat, function: èmfasi, register: neutre}
+  - {form: sens dubte, function: èmfasi, register: neutre}
+  - {form: certament, function: èmfasi, register: formal}
+  - {form: és clar, function: èmfasi, register: neutre}
+  - {form: i tant, function: èmfasi, register: col·loquial}
+  - {form: sobretot, function: èmfasi, register: neutre}
+  - {form: fins i tot, function: èmfasi, register: neutre}
+  - {form: precisament, function: èmfasi, register: neutre}
+  - {form: justament, function: èmfasi, register: neutre}
+  # resum i conclusió
+  - {form: en resum, function: conclusió, register: neutre}
+  - {form: en síntesi, function: conclusió, register: formal}
+  - {form: en conclusió, function: conclusió, register: formal}
+  - {form: en definitiva, function: conclusió, register: neutre}
+  - {form: al capdavall, function: conclusió, register: neutre}
+  - {form: al cap i a la fi, function: conclusió, register: neutre}
+  - {form: comptat i debatut, function: conclusió, register: col·loquial}
+  - {form: tot plegat, function: conclusió, register: neutre}
+  - {form: en suma, function: conclusió, register: formal}
+  # digressió i canvi de tema
+  - {form: per cert, function: digressió, register: neutre}
+  - {form: a propòsit, function: digressió, register: neutre}
+  - {form: dit això, function: digressió, register: neutre}
+  - {form: això sí, function: digressió, register: neutre}
+  - {form: en qualsevol cas, function: digressió, register: neutre}
+  - {form: en tot cas, function: digressió, register: neutre}
+  - {form: de tota manera, function: digressió, register: neutre}
+  - {form: de totes maneres, function: digressió, register: neutre}
+  - {form: sigui com sigui, function: digressió, register: neutre}
+  - {form: fos com fos, function: digressió, register: neutre}
+  # interacció (registre oral)
+  - {form: bé, function: interacció, register: col·loquial}
+  - {form: doncs, function: interacció, register: neutre}
+  - {form: vaja, function: interacció, register: col·loquial}
+  - {form: mira, function: interacció, register: col·loquial}
+  - {form: escolta, function: interacció, register: col·loquial}
+  - {form: a veure, function: interacció, register: col·loquial}
+  - {form: vinga, function: interacció, register: col·loquial}
+  - {form: oi, function: interacció, register: col·loquial}
+  - {form: eh, function: interacció, register: col·loquial}
+  - {form: home, function: interacció, register: col·loquial, note: coincideix amb el nom «home»}
+  - {form: dona, function: interacció, register: col·loquial, note: coincideix amb el nom «dona»}

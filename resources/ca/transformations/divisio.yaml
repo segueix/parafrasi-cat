@@ -1,0 +1,66 @@
+# Família 12: divisió de frases llargues en el límit entre dues clàusules coordinades.
+description: Divisió d'una frase llarga per «, i» / «, però» quan els dos costats tenen verb conjugat.
+language: ca
+rules:
+  - rule_id: divisio.coordinada_i
+    engine: pattern
+    category: divisio
+    level: 4
+    transformation_type: sentence_split
+    semantic_risk: low
+    confidence: 0.65
+    description: "«A, i B.» → «A. B.» quan A i B són clàusules amb verb conjugat"
+    pattern:
+      - {start: true}
+      - {seq: true, group: a, min_tokens: 6}
+      - {text: ","}
+      - {text: i}
+      - {seq: true, group: b, min_tokens: 5, greedy: true}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        a: {has_finite_verb: true}
+        b: {has_finite_verb: true, not_starts_with: [que, també, sobretot, fins, ni, "no", tampoc]}
+      sentence:
+        min_tokens: 18
+    transformation: "{a}. {b|cap}"
+    examples:
+      positive:
+        - input: "El monument fou encarregat el 1507 pel mercader Oddo Altoviti, i l'escultor Benedetto da Rovezzano el va finalitzar el 1516 a Florència."
+          output: "El monument fou encarregat el 1507 pel mercader Oddo Altoviti. L'escultor Benedetto da Rovezzano el va finalitzar el 1516 a Florència."
+      negative:
+        - "La primera referència itàlica és el monument funerari d'Oddo Altoviti, encarregat el 1507 i finalitzat el 1516."
+        - "Plou, i fa fred."
+
+  - rule_id: divisio.coordinada_pero
+    engine: pattern
+    category: divisio
+    level: 4
+    transformation_type: sentence_split
+    semantic_risk: low
+    confidence: 0.65
+    description: "«A, però B.» → «A. Tanmateix, B.» / «A. Però B.»"
+    pattern:
+      - {start: true}
+      - {seq: true, group: a, min_tokens: 5}
+      - {text: ","}
+      - {text: però}
+      - {seq: true, group: b, min_tokens: 4, greedy: true}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        a: {has_finite_verb: true}
+        b: {has_finite_verb: true}
+      sentence:
+        min_tokens: 14
+    transformations:
+      - "{a}. Tanmateix, {b}"
+      - "{a}. Però {b}"
+    examples:
+      positive:
+        - input: "El monument fou encarregat el 1507 pel mercader Oddo Altoviti, però l'escultor no el va finalitzar fins al 1516."
+          output: "El monument fou encarregat el 1507 pel mercader Oddo Altoviti. Tanmateix, l'escultor no el va finalitzar fins al 1516."
+        - input: "El monument fou encarregat el 1507 pel mercader Oddo Altoviti, però l'escultor no el va finalitzar fins al 1516."
+          output: "El monument fou encarregat el 1507 pel mercader Oddo Altoviti. Però l'escultor no el va finalitzar fins al 1516."
+      negative:
+        - "Plou, però sortirem."

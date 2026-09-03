@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 
-from parafrasi_cat.analyzer.analysis import Analyzer
+from parafrasi_cat.analyzer.analysis import Analyzer, RuleBasedAnalyzer
+from parafrasi_cat.analyzer.lexicon import ClosedClassLexicon
 from parafrasi_cat.core.spans import Span
 from parafrasi_cat.protected.detectors import (
     CitationDetector,
@@ -79,6 +80,7 @@ def default_protector(
     *,
     user_terms: Iterable[str] = (),
     known_names: Iterable[str] = (),
+    lexicon: ClosedClassLexicon | None = None,
 ) -> Protector:
     """Protector amb tots els detectors estàndard.
 
@@ -86,14 +88,18 @@ def default_protector(
         analyzer: Analitzador que fa servir el detector de noms propis.
         user_terms: Termes definits per l'usuari (coincidència sense distingir majúscules).
         known_names: Noms propis coneguts (coincidència exacta, distingint majúscules).
+        lexicon: Lexicó de classes tancades per afinar el detector de noms propis;
+            si no s'indica, s'agafa el de l'analitzador quan en té.
     """
+    if lexicon is None and isinstance(analyzer, RuleBasedAnalyzer):
+        lexicon = analyzer.lexicon
     detectors: list[Detector] = [
         QuotedTextDetector(),
         CitationDetector(),
         DateDetector(),
         RomanNumeralDetector(),
         NumberDetector(),
-        ProperNounDetector(analyzer),
+        ProperNounDetector(analyzer, lexicon=lexicon),
     ]
     names = tuple(known_names)
     if names:

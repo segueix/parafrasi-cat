@@ -1,0 +1,91 @@
+# Família 5: «és X» ↔ «constitueix X» (i «correspon a X»).
+# Només s'aplica quan el predicat és un sintagma nominal amb determinant, de
+# manera que «és clar», «és a dir», «és de fusta» o «és molt antic» queden fora.
+description: Còpula identificativa «NP és NP» → «constitueix», «correspon a», i el retorn.
+language: ca
+rules:
+  - rule_id: copula.es_a_constitueix
+    engine: pattern
+    category: copula
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.75
+    description: "«X és Y» → «X constitueix Y» quan Y és un sintagma nominal amb determinant"
+    pattern:
+      - {start: true}
+      - {np: true, group: subj}
+      - {text: [és, són], group: cop}
+      - {np: true, group: pred}
+    conditions:
+      groups:
+        subj: {no_finite_verb: true}
+        pred: {starts_with: ["@determiner"]}
+      context:
+        not_followed_by: [que, qui, "on"]
+    exceptions: ["és a dir", "és clar", "és possible", "és necessari", "és probable", "és evident", "és cert"]
+    transformation: "{subj} {cop|map(és=constitueix,són=constitueixen)} {pred}"
+    examples:
+      positive:
+        - input: "La primera referència itàlica és el monument funerari d'Oddo Altoviti, encarregat el 1507 i finalitzat el 1516."
+          output: "La primera referència itàlica constitueix el monument funerari d'Oddo Altoviti, encarregat el 1507 i finalitzat el 1516."
+        - input: "Aquests textos són la font principal."
+          output: "Aquests textos constitueixen la font principal."
+      negative:
+        - "El monument és molt antic."
+        - "És a dir, no ho sabem."
+        - "La casa és de fusta."
+        - "Els textos són els que ho expliquen."
+
+  - rule_id: copula.constitueix_a_es
+    engine: pattern
+    category: copula
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.8
+    description: "«X constitueix Y» → «X és Y»"
+    pattern:
+      - {text: [constitueix, constitueixen], group: v}
+      - {np: true, group: pred}
+    conditions:
+      groups:
+        pred: {starts_with: ["@determiner"]}
+    transformation: "{v|map(constitueix=és,constitueixen=són)} {pred}"
+    examples:
+      positive:
+        - input: "Aquest fet constitueix una novetat important."
+          output: "Aquest fet és una novetat important."
+        - input: "Els dos cranis constitueixen el motiu central."
+          output: "Els dos cranis són el motiu central."
+      negative:
+        - "Aquest fet constitueix, sens dubte, una novetat."
+
+  - rule_id: copula.es_a_correspon_a
+    engine: pattern
+    category: copula
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: medium
+    confidence: 0.6
+    description: "«X és Y» → «X correspon a Y» quan X i Y són sintagmes nominals definits"
+    pattern:
+      - {start: true}
+      - {np: true, group: subj}
+      - {text: [és, són], group: cop}
+      - {np: true, group: pred}
+    conditions:
+      groups:
+        subj: {definite: true, no_finite_verb: true}
+        pred: {definite: true}
+      context:
+        not_followed_by: [que, qui, "on"]
+    exceptions: ["és a dir", "és clar"]
+    transformation: "{subj} {cop|map(és=correspon,són=corresponen)} {pred|a}"
+    examples:
+      positive:
+        - input: "La primera referència itàlica és el monument funerari d'Oddo Altoviti."
+          output: "La primera referència itàlica correspon al monument funerari d'Oddo Altoviti."
+      negative:
+        - "El gat és un animal."
+        - "La casa és de fusta."

@@ -15,11 +15,33 @@ class ValidationSeverity(StrEnum):
     """El candidat és acceptable però convé revisar-lo."""
 
 
+class ValidationDimension(StrEnum):
+    """Dimensió que avalua un validador; la puntuació les reporta per separat."""
+
+    FACTUAL = "factual"
+    """Preservació del contingut: noms, dates, xifres, citacions, negació."""
+
+    TERMINOLOGY = "terminology"
+    """Terminologia protegida per l'usuari."""
+
+    EPISTEMIC = "epistemic"
+    """Força i funció epistemològica (hipòtesi, certesa, demostració...)."""
+
+    GRAMMAR = "grammar"
+    """Gramaticalitat heurística."""
+
+    LENGTH = "length"
+    """Marge de longitud."""
+
+    OTHER = "other"
+
+
 @dataclass(frozen=True, slots=True)
 class ValidationIssue:
     validator_id: str
     severity: ValidationSeverity
     message: str
+    dimension: ValidationDimension = ValidationDimension.OTHER
 
     def describe(self) -> str:
         return f"[{self.validator_id}] {self.severity.value}: {self.message}"
@@ -29,6 +51,7 @@ class ValidationIssue:
             "validator_id": self.validator_id,
             "severity": self.severity.value,
             "message": self.message,
+            "dimension": self.dimension.value,
         }
 
 
@@ -54,12 +77,36 @@ class ValidationResult:
         return cls(())
 
     @classmethod
-    def error(cls, validator_id: str, message: str) -> ValidationResult:
-        return cls((ValidationIssue(validator_id, ValidationSeverity.ERROR, message),))
+    def error(
+        cls,
+        validator_id: str,
+        message: str,
+        dimension: ValidationDimension = ValidationDimension.OTHER,
+    ) -> ValidationResult:
+        return cls((ValidationIssue(validator_id, ValidationSeverity.ERROR, message, dimension),))
 
     @classmethod
-    def warning(cls, validator_id: str, message: str) -> ValidationResult:
-        return cls((ValidationIssue(validator_id, ValidationSeverity.WARNING, message),))
+    def warning(
+        cls,
+        validator_id: str,
+        message: str,
+        dimension: ValidationDimension = ValidationDimension.OTHER,
+    ) -> ValidationResult:
+        return cls((ValidationIssue(validator_id, ValidationSeverity.WARNING, message, dimension),))
+
+    def in_dimension(self, dimension: ValidationDimension) -> tuple[ValidationIssue, ...]:
+        return tuple(i for i in self.issues if i.dimension is dimension)
+
+    def errors_in(self, dimension: ValidationDimension) -> tuple[ValidationIssue, ...]:
+        return tuple(i for i in self.errors if i.dimension is dimension)
+
+    def warnings_in(self, dimension: ValidationDimension) -> tuple[ValidationIssue, ...]:
+        return tuple(i for i in self.warnings if i.dimension is dimension)
+
+    @property
+    def summary(self) -> str:
+        """Motius dels errors en una línia (buit si no n'hi ha)."""
+        return "; ".join(i.message for i in self.errors)
 
     @classmethod
     def merge(cls, results: Iterable[ValidationResult]) -> ValidationResult:

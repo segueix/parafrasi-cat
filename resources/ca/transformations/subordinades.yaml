@@ -1,0 +1,108 @@
+# Família 10: transformacions segures de subordinades.
+description: Relatives passives ↔ participis; «quan va + INF» → «en + INF».
+language: ca
+rules:
+  - rule_id: subordinada.relativa_passiva_a_participi
+    engine: pattern
+    category: subordinada
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.8
+    description: "«N que fou PART» → «N PART» (reducció de la relativa passiva)"
+    pattern:
+      - {text: que}
+      - {text: [fou, foren], group: aux}
+      - {participle: true, group: part}
+    conditions:
+      context:
+        preceded_by: ["@word", ","]
+    transformation: "{part}"
+    examples:
+      positive:
+        - input: "El monument que fou encarregat el 1507 és a Florència."
+          output: "El monument encarregat el 1507 és a Florència."
+        - input: "Les escultures que foren realitzades per Gaudí són a Barcelona."
+          output: "Les escultures realitzades per Gaudí són a Barcelona."
+      negative:
+        - "Sé que fou difícil."
+
+  - rule_id: subordinada.relativa_passiva_perifrastica_a_participi
+    engine: pattern
+    category: subordinada
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.8
+    description: "«N que va ser PART» → «N PART»"
+    pattern:
+      - {text: que}
+      - {text: [va, van], group: aux}
+      - {text: ser}
+      - {participle: true, group: part}
+    conditions:
+      context:
+        preceded_by: ["@word", ","]
+    transformation: "{part}"
+    examples:
+      positive:
+        - input: "El monument que va ser encarregat el 1507 és a Florència."
+          output: "El monument encarregat el 1507 és a Florència."
+      negative:
+        - "Diuen que va ser difícil."
+
+  - rule_id: subordinada.participi_a_relativa_passiva
+    engine: pattern
+    category: subordinada
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.7
+    description: "«N, PART ...» → «N, que fou PART ...» (aposició participial amb data o agent)"
+    pattern:
+      - {text: ","}
+      - {participle: true, group: part}
+      - {seq: true, group: rest, greedy: true, no_comma: true}
+      - {boundary: true}
+    conditions:
+      groups:
+        rest: {contains_any: ["@temporal", per], no_finite_verb: true}
+      context:
+        preceded_by: ["@word"]
+    transformation: ", que {part|agree(fou,foren)} {part} {rest}"
+    examples:
+      positive:
+        - input: "La primera referència itàlica és el monument funerari d'Oddo Altoviti, encarregat el 1507 i finalitzat el 1516."
+          output: "La primera referència itàlica és el monument funerari d'Oddo Altoviti, que fou encarregat el 1507 i finalitzat el 1516."
+        - input: "Les escultures, realitzades per Gaudí, són a Barcelona."
+          output: "Les escultures, que foren realitzades per Gaudí, són a Barcelona."
+      negative:
+        - "El monument, antic i sever, és a Florència."
+        - "Va venir, cansat, i va marxar."
+
+  - rule_id: subordinada.quan_va_inf_a_en_inf
+    engine: pattern
+    category: subordinada
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: medium
+    confidence: 0.6
+    description: "«Quan va INF ..., Y» → «En INF ..., Y» (subordinada temporal → infinitiu)"
+    pattern:
+      - {start: true}
+      - {text: quan}
+      - {text: [va, van]}
+      - {infinitive: true, group: inf}
+      - {seq: true, group: rest, no_comma: true}
+      - {text: ","}
+    conditions:
+      groups:
+        rest: {no_finite_verb: true}
+    transformation: "En {inf} {rest},"
+    examples:
+      positive:
+        - input: "Quan va arribar a Roma, va conèixer l'escultor."
+          output: "En arribar a Roma, va conèixer l'escultor."
+      negative:
+        - "Quan va ploure, vam sortir."
+        - "Va arribar a Roma quan va poder."

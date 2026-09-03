@@ -1,0 +1,319 @@
+# Formes dels verbs auxiliars i modals del català. Generat a partir de taules
+# de conjugació; es pot editar a mà. Cada forma porta lema, persona, nombre,
+# temps i mode; «subtype» indica el tipus d'auxiliar.
+description: Formes dels auxiliars (haver, ser, estar, anar) i dels modals (poder, deure, voler, caldre, soler).
+pos: aux
+entries:
+  # --- haver: auxiliar dels temps compostos (he cantat) i de la perífrasi d'obligació (haver de) ---
+  - {form: he, lemma: haver, person: "1", number: sg, tense: pres, mood: ind, subtype: auxiliar de perfet}
+  - {form: has, lemma: haver, person: "2", number: sg, tense: pres, mood: ind, subtype: auxiliar de perfet}
+  - {form: ha, lemma: haver, person: "3", number: sg, tense: pres, mood: ind, subtype: auxiliar de perfet}
+  - {form: hem, lemma: haver, person: "1", number: pl, tense: pres, mood: ind, subtype: auxiliar de perfet}
+  - {form: heu, lemma: haver, person: "2", number: pl, tense: pres, mood: ind, subtype: auxiliar de perfet}
+  - {form: han, lemma: haver, person: "3", number: pl, tense: pres, mood: ind, subtype: auxiliar de perfet}
+  - {form: havia, lemma: haver, persons: ["1", "3"], number: sg, tense: impf, mood: ind, subtype: auxiliar de perfet}
+  - {form: havies, lemma: haver, person: "2", number: sg, tense: impf, mood: ind, subtype: auxiliar de perfet}
+  - {form: havíem, lemma: haver, person: "1", number: pl, tense: impf, mood: ind, subtype: auxiliar de perfet}
+  - {form: havíeu, lemma: haver, person: "2", number: pl, tense: impf, mood: ind, subtype: auxiliar de perfet}
+  - {form: havien, lemma: haver, person: "3", number: pl, tense: impf, mood: ind, subtype: auxiliar de perfet}
+  - {form: hauré, lemma: haver, person: "1", number: sg, tense: fut, mood: ind, subtype: auxiliar de perfet}
+  - {form: hauràs, lemma: haver, person: "2", number: sg, tense: fut, mood: ind, subtype: auxiliar de perfet}
+  - {form: haurà, lemma: haver, person: "3", number: sg, tense: fut, mood: ind, subtype: auxiliar de perfet}
+  - {form: haurem, lemma: haver, person: "1", number: pl, tense: fut, mood: ind, subtype: auxiliar de perfet}
+  - {form: haureu, lemma: haver, person: "2", number: pl, tense: fut, mood: ind, subtype: auxiliar de perfet}
+  - {form: hauran, lemma: haver, person: "3", number: pl, tense: fut, mood: ind, subtype: auxiliar de perfet}
+  - {form: hauria, lemma: haver, persons: ["1", "3"], number: sg, tense: cond, mood: ind, subtype: auxiliar de perfet}
+  - {form: hauries, lemma: haver, person: "2", number: sg, tense: cond, mood: ind, subtype: auxiliar de perfet}
+  - {form: hauríem, lemma: haver, person: "1", number: pl, tense: cond, mood: ind, subtype: auxiliar de perfet}
+  - {form: hauríeu, lemma: haver, person: "2", number: pl, tense: cond, mood: ind, subtype: auxiliar de perfet}
+  - {form: haurien, lemma: haver, person: "3", number: pl, tense: cond, mood: ind, subtype: auxiliar de perfet}
+  - {form: hagi, lemma: haver, persons: ["1", "3"], number: sg, tense: pres, mood: subj, subtype: auxiliar de perfet}
+  - {form: hagis, lemma: haver, person: "2", number: sg, tense: pres, mood: subj, subtype: auxiliar de perfet}
+  - {form: hàgim, lemma: haver, person: "1", number: pl, tense: pres, mood: subj, subtype: auxiliar de perfet, variants: [haguem]}
+  - {form: hàgiu, lemma: haver, person: "2", number: pl, tense: pres, mood: subj, subtype: auxiliar de perfet, variants: [hagueu]}
+  - {form: hagin, lemma: haver, person: "3", number: pl, tense: pres, mood: subj, subtype: auxiliar de perfet}
+  - {form: hagués, lemma: haver, persons: ["1", "3"], number: sg, tense: impf, mood: subj, subtype: auxiliar de perfet}
+  - {form: haguessis, lemma: haver, person: "2", number: sg, tense: impf, mood: subj, subtype: auxiliar de perfet}
+  - {form: haguéssim, lemma: haver, person: "1", number: pl, tense: impf, mood: subj, subtype: auxiliar de perfet}
+  - {form: haguéssiu, lemma: haver, person: "2", number: pl, tense: impf, mood: subj, subtype: auxiliar de perfet}
+  - {form: haguessin, lemma: haver, person: "3", number: pl, tense: impf, mood: subj, subtype: auxiliar de perfet}
+  - {form: haver, lemma: haver, mood: inf, subtype: auxiliar de perfet}
+  - {form: havent, lemma: haver, mood: ger, subtype: auxiliar de perfet}
+  - {form: hagut, lemma: haver, gender: m, number: sg, mood: part, subtype: auxiliar de perfet}
+  - {form: haguda, lemma: haver, gender: f, number: sg, mood: part, subtype: auxiliar de perfet}
+  - {form: haguts, lemma: haver, gender: m, number: pl, mood: part, subtype: auxiliar de perfet}
+  - {form: hagudes, lemma: haver, gender: f, number: pl, mood: part, subtype: auxiliar de perfet}
+  # --- ser: verb copulatiu, auxiliar de la passiva (fou encarregat) i dels temps compostos d'alguns verbs en registre antic ---
+  - {form: soc, lemma: ser, person: "1", number: sg, tense: pres, mood: ind, subtype: copulatiu i auxiliar de passiva, variants: [sóc]}
+  - {form: ets, lemma: ser, person: "2", number: sg, tense: pres, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: és, lemma: ser, person: "3", number: sg, tense: pres, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: som, lemma: ser, person: "1", number: pl, tense: pres, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: sou, lemma: ser, person: "2", number: pl, tense: pres, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: són, lemma: ser, person: "3", number: pl, tense: pres, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: era, lemma: ser, persons: ["1", "3"], number: sg, tense: impf, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: eres, lemma: ser, person: "2", number: sg, tense: impf, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: érem, lemma: ser, person: "1", number: pl, tense: impf, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: éreu, lemma: ser, person: "2", number: pl, tense: impf, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: eren, lemma: ser, person: "3", number: pl, tense: impf, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: fui, lemma: ser, person: "1", number: sg, tense: past, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: fores, lemma: ser, person: "2", number: sg, tense: past, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: fou, lemma: ser, person: "3", number: sg, tense: past, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: fórem, lemma: ser, person: "1", number: pl, tense: past, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: fóreu, lemma: ser, person: "2", number: pl, tense: past, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: foren, lemma: ser, person: "3", number: pl, tense: past, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: seré, lemma: ser, person: "1", number: sg, tense: fut, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: seràs, lemma: ser, person: "2", number: sg, tense: fut, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: serà, lemma: ser, person: "3", number: sg, tense: fut, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: serem, lemma: ser, person: "1", number: pl, tense: fut, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: sereu, lemma: ser, person: "2", number: pl, tense: fut, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: seran, lemma: ser, person: "3", number: pl, tense: fut, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: seria, lemma: ser, persons: ["1", "3"], number: sg, tense: cond, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: series, lemma: ser, person: "2", number: sg, tense: cond, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: seríem, lemma: ser, person: "1", number: pl, tense: cond, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: seríeu, lemma: ser, person: "2", number: pl, tense: cond, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: serien, lemma: ser, person: "3", number: pl, tense: cond, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: fora, lemma: ser, persons: ["1", "3"], number: sg, tense: cond, mood: ind, subtype: copulatiu i auxiliar de passiva, variants: [fóra]}
+  - {form: fores, lemma: ser, person: "2", number: sg, tense: cond, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: fórem, lemma: ser, person: "1", number: pl, tense: cond, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: fóreu, lemma: ser, person: "2", number: pl, tense: cond, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: foren, lemma: ser, person: "3", number: pl, tense: cond, mood: ind, subtype: copulatiu i auxiliar de passiva}
+  - {form: sigui, lemma: ser, persons: ["1", "3"], number: sg, tense: pres, mood: subj, subtype: copulatiu i auxiliar de passiva}
+  - {form: siguis, lemma: ser, person: "2", number: sg, tense: pres, mood: subj, subtype: copulatiu i auxiliar de passiva}
+  - {form: siguem, lemma: ser, person: "1", number: pl, tense: pres, mood: subj, subtype: copulatiu i auxiliar de passiva}
+  - {form: sigueu, lemma: ser, person: "2", number: pl, tense: pres, mood: subj, subtype: copulatiu i auxiliar de passiva}
+  - {form: siguin, lemma: ser, person: "3", number: pl, tense: pres, mood: subj, subtype: copulatiu i auxiliar de passiva}
+  - {form: fos, lemma: ser, persons: ["1", "3"], number: sg, tense: impf, mood: subj, subtype: copulatiu i auxiliar de passiva}
+  - {form: fossis, lemma: ser, person: "2", number: sg, tense: impf, mood: subj, subtype: copulatiu i auxiliar de passiva}
+  - {form: fóssim, lemma: ser, person: "1", number: pl, tense: impf, mood: subj, subtype: copulatiu i auxiliar de passiva}
+  - {form: fóssiu, lemma: ser, person: "2", number: pl, tense: impf, mood: subj, subtype: copulatiu i auxiliar de passiva}
+  - {form: fossin, lemma: ser, person: "3", number: pl, tense: impf, mood: subj, subtype: copulatiu i auxiliar de passiva}
+  - {form: sigues, lemma: ser, person: "2", number: sg, mood: imp, subtype: copulatiu i auxiliar de passiva}
+  - {form: sigui, lemma: ser, person: "3", number: sg, mood: imp, subtype: copulatiu i auxiliar de passiva}
+  - {form: siguem, lemma: ser, person: "1", number: pl, mood: imp, subtype: copulatiu i auxiliar de passiva}
+  - {form: sigueu, lemma: ser, person: "2", number: pl, mood: imp, subtype: copulatiu i auxiliar de passiva}
+  - {form: siguin, lemma: ser, person: "3", number: pl, mood: imp, subtype: copulatiu i auxiliar de passiva}
+  - {form: ser, lemma: ser, mood: inf, subtype: copulatiu i auxiliar de passiva}
+  - {form: ésser, lemma: ser, mood: inf, subtype: copulatiu i auxiliar de passiva}
+  - {form: sent, lemma: ser, mood: ger, subtype: copulatiu i auxiliar de passiva}
+  - {form: essent, lemma: ser, mood: ger, subtype: copulatiu i auxiliar de passiva}
+  - {form: estat, lemma: ser, gender: m, number: sg, mood: part, subtype: copulatiu i auxiliar de passiva}
+  - {form: estada, lemma: ser, gender: f, number: sg, mood: part, subtype: copulatiu i auxiliar de passiva}
+  - {form: estats, lemma: ser, gender: m, number: pl, mood: part, subtype: copulatiu i auxiliar de passiva}
+  - {form: estades, lemma: ser, gender: f, number: pl, mood: part, subtype: copulatiu i auxiliar de passiva}
+  - {form: sigut, lemma: ser, gender: m, number: sg, mood: part, subtype: copulatiu i auxiliar de passiva}
+  - {form: siguda, lemma: ser, gender: f, number: sg, mood: part, subtype: copulatiu i auxiliar de passiva}
+  - {form: siguts, lemma: ser, gender: m, number: pl, mood: part, subtype: copulatiu i auxiliar de passiva}
+  - {form: sigudes, lemma: ser, gender: f, number: pl, mood: part, subtype: copulatiu i auxiliar de passiva}
+  # --- estar: verb copulatiu i auxiliar de perífrasis (estar fent) ---
+  - {form: estic, lemma: estar, person: "1", number: sg, tense: pres, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estàs, lemma: estar, person: "2", number: sg, tense: pres, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: està, lemma: estar, person: "3", number: sg, tense: pres, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estem, lemma: estar, person: "1", number: pl, tense: pres, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: esteu, lemma: estar, person: "2", number: pl, tense: pres, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estan, lemma: estar, person: "3", number: pl, tense: pres, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estava, lemma: estar, persons: ["1", "3"], number: sg, tense: impf, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estaves, lemma: estar, person: "2", number: sg, tense: impf, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estàvem, lemma: estar, person: "1", number: pl, tense: impf, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estàveu, lemma: estar, person: "2", number: pl, tense: impf, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estaven, lemma: estar, person: "3", number: pl, tense: impf, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estiguí, lemma: estar, person: "1", number: sg, tense: past, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estigueres, lemma: estar, person: "2", number: sg, tense: past, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estigué, lemma: estar, person: "3", number: sg, tense: past, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estiguérem, lemma: estar, person: "1", number: pl, tense: past, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estiguéreu, lemma: estar, person: "2", number: pl, tense: past, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estigueren, lemma: estar, person: "3", number: pl, tense: past, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estaré, lemma: estar, person: "1", number: sg, tense: fut, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estaràs, lemma: estar, person: "2", number: sg, tense: fut, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estarà, lemma: estar, person: "3", number: sg, tense: fut, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estarem, lemma: estar, person: "1", number: pl, tense: fut, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estareu, lemma: estar, person: "2", number: pl, tense: fut, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estaran, lemma: estar, person: "3", number: pl, tense: fut, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estaria, lemma: estar, persons: ["1", "3"], number: sg, tense: cond, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estaries, lemma: estar, person: "2", number: sg, tense: cond, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estaríem, lemma: estar, person: "1", number: pl, tense: cond, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estaríeu, lemma: estar, person: "2", number: pl, tense: cond, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estarien, lemma: estar, person: "3", number: pl, tense: cond, mood: ind, subtype: copulatiu i auxiliar aspectual}
+  - {form: estigui, lemma: estar, persons: ["1", "3"], number: sg, tense: pres, mood: subj, subtype: copulatiu i auxiliar aspectual}
+  - {form: estiguis, lemma: estar, person: "2", number: sg, tense: pres, mood: subj, subtype: copulatiu i auxiliar aspectual}
+  - {form: estiguem, lemma: estar, person: "1", number: pl, tense: pres, mood: subj, subtype: copulatiu i auxiliar aspectual}
+  - {form: estigueu, lemma: estar, person: "2", number: pl, tense: pres, mood: subj, subtype: copulatiu i auxiliar aspectual}
+  - {form: estiguin, lemma: estar, person: "3", number: pl, tense: pres, mood: subj, subtype: copulatiu i auxiliar aspectual}
+  - {form: estigués, lemma: estar, persons: ["1", "3"], number: sg, tense: impf, mood: subj, subtype: copulatiu i auxiliar aspectual}
+  - {form: estiguessis, lemma: estar, person: "2", number: sg, tense: impf, mood: subj, subtype: copulatiu i auxiliar aspectual}
+  - {form: estiguéssim, lemma: estar, person: "1", number: pl, tense: impf, mood: subj, subtype: copulatiu i auxiliar aspectual}
+  - {form: estiguéssiu, lemma: estar, person: "2", number: pl, tense: impf, mood: subj, subtype: copulatiu i auxiliar aspectual}
+  - {form: estiguessin, lemma: estar, person: "3", number: pl, tense: impf, mood: subj, subtype: copulatiu i auxiliar aspectual}
+  - {form: estar, lemma: estar, mood: inf, subtype: copulatiu i auxiliar aspectual}
+  - {form: estant, lemma: estar, mood: ger, subtype: copulatiu i auxiliar aspectual}
+  - {form: estat, lemma: estar, gender: m, number: sg, mood: part, subtype: copulatiu i auxiliar aspectual}
+  - {form: estada, lemma: estar, gender: f, number: sg, mood: part, subtype: copulatiu i auxiliar aspectual}
+  - {form: estats, lemma: estar, gender: m, number: pl, mood: part, subtype: copulatiu i auxiliar aspectual}
+  - {form: estades, lemma: estar, gender: f, number: pl, mood: part, subtype: copulatiu i auxiliar aspectual}
+  # --- anar: només les formes auxiliars (va cantar); com a verb de moviment, «va» és ambigu ---
+  - {form: vaig, lemma: anar, person: "1", number: sg, tense: pres, mood: ind, subtype: auxiliar del passat perifràstic, variants: [vàreig]}
+  - {form: vas, lemma: anar, person: "2", number: sg, tense: pres, mood: ind, subtype: auxiliar del passat perifràstic, variants: [vares]}
+  - {form: va, lemma: anar, person: "3", number: sg, tense: pres, mood: ind, subtype: auxiliar del passat perifràstic}
+  - {form: vam, lemma: anar, person: "1", number: pl, tense: pres, mood: ind, subtype: auxiliar del passat perifràstic, variants: [vàrem]}
+  - {form: vau, lemma: anar, person: "2", number: pl, tense: pres, mood: ind, subtype: auxiliar del passat perifràstic, variants: [vàreu]}
+  - {form: van, lemma: anar, person: "3", number: pl, tense: pres, mood: ind, subtype: auxiliar del passat perifràstic, variants: [varen]}
+  # --- poder: modal de possibilitat o capacitat (podria haver conegut) ---
+  - {form: puc, lemma: poder, person: "1", number: sg, tense: pres, mood: ind, subtype: modal}
+  - {form: pots, lemma: poder, person: "2", number: sg, tense: pres, mood: ind, subtype: modal}
+  - {form: pot, lemma: poder, person: "3", number: sg, tense: pres, mood: ind, subtype: modal}
+  - {form: podem, lemma: poder, person: "1", number: pl, tense: pres, mood: ind, subtype: modal}
+  - {form: podeu, lemma: poder, person: "2", number: pl, tense: pres, mood: ind, subtype: modal}
+  - {form: poden, lemma: poder, person: "3", number: pl, tense: pres, mood: ind, subtype: modal}
+  - {form: podia, lemma: poder, persons: ["1", "3"], number: sg, tense: impf, mood: ind, subtype: modal}
+  - {form: podies, lemma: poder, person: "2", number: sg, tense: impf, mood: ind, subtype: modal}
+  - {form: podíem, lemma: poder, person: "1", number: pl, tense: impf, mood: ind, subtype: modal}
+  - {form: podíeu, lemma: poder, person: "2", number: pl, tense: impf, mood: ind, subtype: modal}
+  - {form: podien, lemma: poder, person: "3", number: pl, tense: impf, mood: ind, subtype: modal}
+  - {form: poguí, lemma: poder, person: "1", number: sg, tense: past, mood: ind, subtype: modal}
+  - {form: pogueres, lemma: poder, person: "2", number: sg, tense: past, mood: ind, subtype: modal}
+  - {form: pogué, lemma: poder, person: "3", number: sg, tense: past, mood: ind, subtype: modal}
+  - {form: poguérem, lemma: poder, person: "1", number: pl, tense: past, mood: ind, subtype: modal}
+  - {form: poguéreu, lemma: poder, person: "2", number: pl, tense: past, mood: ind, subtype: modal}
+  - {form: pogueren, lemma: poder, person: "3", number: pl, tense: past, mood: ind, subtype: modal}
+  - {form: podré, lemma: poder, person: "1", number: sg, tense: fut, mood: ind, subtype: modal}
+  - {form: podràs, lemma: poder, person: "2", number: sg, tense: fut, mood: ind, subtype: modal}
+  - {form: podrà, lemma: poder, person: "3", number: sg, tense: fut, mood: ind, subtype: modal}
+  - {form: podrem, lemma: poder, person: "1", number: pl, tense: fut, mood: ind, subtype: modal}
+  - {form: podreu, lemma: poder, person: "2", number: pl, tense: fut, mood: ind, subtype: modal}
+  - {form: podran, lemma: poder, person: "3", number: pl, tense: fut, mood: ind, subtype: modal}
+  - {form: podria, lemma: poder, persons: ["1", "3"], number: sg, tense: cond, mood: ind, subtype: modal}
+  - {form: podries, lemma: poder, person: "2", number: sg, tense: cond, mood: ind, subtype: modal}
+  - {form: podríem, lemma: poder, person: "1", number: pl, tense: cond, mood: ind, subtype: modal}
+  - {form: podríeu, lemma: poder, person: "2", number: pl, tense: cond, mood: ind, subtype: modal}
+  - {form: podrien, lemma: poder, person: "3", number: pl, tense: cond, mood: ind, subtype: modal}
+  - {form: pugui, lemma: poder, persons: ["1", "3"], number: sg, tense: pres, mood: subj, subtype: modal}
+  - {form: puguis, lemma: poder, person: "2", number: sg, tense: pres, mood: subj, subtype: modal}
+  - {form: puguem, lemma: poder, person: "1", number: pl, tense: pres, mood: subj, subtype: modal}
+  - {form: pugueu, lemma: poder, person: "2", number: pl, tense: pres, mood: subj, subtype: modal}
+  - {form: puguin, lemma: poder, person: "3", number: pl, tense: pres, mood: subj, subtype: modal}
+  - {form: pogués, lemma: poder, persons: ["1", "3"], number: sg, tense: impf, mood: subj, subtype: modal}
+  - {form: poguessis, lemma: poder, person: "2", number: sg, tense: impf, mood: subj, subtype: modal}
+  - {form: poguéssim, lemma: poder, person: "1", number: pl, tense: impf, mood: subj, subtype: modal}
+  - {form: poguéssiu, lemma: poder, person: "2", number: pl, tense: impf, mood: subj, subtype: modal}
+  - {form: poguessin, lemma: poder, person: "3", number: pl, tense: impf, mood: subj, subtype: modal}
+  - {form: poder, lemma: poder, mood: inf, subtype: modal}
+  - {form: podent, lemma: poder, mood: ger, subtype: modal}
+  - {form: pogut, lemma: poder, gender: m, number: sg, mood: part, subtype: modal}
+  - {form: poguda, lemma: poder, gender: f, number: sg, mood: part, subtype: modal}
+  - {form: poguts, lemma: poder, gender: m, number: pl, mood: part, subtype: modal}
+  - {form: pogudes, lemma: poder, gender: f, number: pl, mood: part, subtype: modal}
+  # --- deure: modal d'obligació o probabilitat (deu ser) ---
+  - {form: dec, lemma: deure, person: "1", number: sg, tense: pres, mood: ind, subtype: modal}
+  - {form: deus, lemma: deure, person: "2", number: sg, tense: pres, mood: ind, subtype: modal}
+  - {form: deu, lemma: deure, person: "3", number: sg, tense: pres, mood: ind, subtype: modal}
+  - {form: devem, lemma: deure, person: "1", number: pl, tense: pres, mood: ind, subtype: modal}
+  - {form: deveu, lemma: deure, person: "2", number: pl, tense: pres, mood: ind, subtype: modal}
+  - {form: deuen, lemma: deure, person: "3", number: pl, tense: pres, mood: ind, subtype: modal}
+  - {form: devia, lemma: deure, persons: ["1", "3"], number: sg, tense: impf, mood: ind, subtype: modal}
+  - {form: devies, lemma: deure, person: "2", number: sg, tense: impf, mood: ind, subtype: modal}
+  - {form: devíem, lemma: deure, person: "1", number: pl, tense: impf, mood: ind, subtype: modal}
+  - {form: devíeu, lemma: deure, person: "2", number: pl, tense: impf, mood: ind, subtype: modal}
+  - {form: devien, lemma: deure, person: "3", number: pl, tense: impf, mood: ind, subtype: modal}
+  - {form: deuré, lemma: deure, person: "1", number: sg, tense: fut, mood: ind, subtype: modal}
+  - {form: deuràs, lemma: deure, person: "2", number: sg, tense: fut, mood: ind, subtype: modal}
+  - {form: deurà, lemma: deure, person: "3", number: sg, tense: fut, mood: ind, subtype: modal}
+  - {form: deurem, lemma: deure, person: "1", number: pl, tense: fut, mood: ind, subtype: modal}
+  - {form: deureu, lemma: deure, person: "2", number: pl, tense: fut, mood: ind, subtype: modal}
+  - {form: deuran, lemma: deure, person: "3", number: pl, tense: fut, mood: ind, subtype: modal}
+  - {form: deuria, lemma: deure, persons: ["1", "3"], number: sg, tense: cond, mood: ind, subtype: modal}
+  - {form: deuries, lemma: deure, person: "2", number: sg, tense: cond, mood: ind, subtype: modal}
+  - {form: deuríem, lemma: deure, person: "1", number: pl, tense: cond, mood: ind, subtype: modal}
+  - {form: deuríeu, lemma: deure, person: "2", number: pl, tense: cond, mood: ind, subtype: modal}
+  - {form: deurien, lemma: deure, person: "3", number: pl, tense: cond, mood: ind, subtype: modal}
+  - {form: degui, lemma: deure, persons: ["1", "3"], number: sg, tense: pres, mood: subj, subtype: modal}
+  - {form: deguis, lemma: deure, person: "2", number: sg, tense: pres, mood: subj, subtype: modal}
+  - {form: deguem, lemma: deure, person: "1", number: pl, tense: pres, mood: subj, subtype: modal}
+  - {form: degueu, lemma: deure, person: "2", number: pl, tense: pres, mood: subj, subtype: modal}
+  - {form: deguin, lemma: deure, person: "3", number: pl, tense: pres, mood: subj, subtype: modal}
+  - {form: degués, lemma: deure, persons: ["1", "3"], number: sg, tense: impf, mood: subj, subtype: modal}
+  - {form: deguessis, lemma: deure, person: "2", number: sg, tense: impf, mood: subj, subtype: modal}
+  - {form: deguéssim, lemma: deure, person: "1", number: pl, tense: impf, mood: subj, subtype: modal}
+  - {form: deguéssiu, lemma: deure, person: "2", number: pl, tense: impf, mood: subj, subtype: modal}
+  - {form: deguessin, lemma: deure, person: "3", number: pl, tense: impf, mood: subj, subtype: modal}
+  - {form: deure, lemma: deure, mood: inf, subtype: modal}
+  - {form: devent, lemma: deure, mood: ger, subtype: modal}
+  - {form: degut, lemma: deure, gender: m, number: sg, mood: part, subtype: modal}
+  - {form: deguda, lemma: deure, gender: f, number: sg, mood: part, subtype: modal}
+  - {form: deguts, lemma: deure, gender: m, number: pl, mood: part, subtype: modal}
+  - {form: degudes, lemma: deure, gender: f, number: pl, mood: part, subtype: modal}
+  # --- voler: modal de voluntat (vol venir) ---
+  - {form: vull, lemma: voler, person: "1", number: sg, tense: pres, mood: ind, subtype: modal}
+  - {form: vols, lemma: voler, person: "2", number: sg, tense: pres, mood: ind, subtype: modal}
+  - {form: vol, lemma: voler, person: "3", number: sg, tense: pres, mood: ind, subtype: modal}
+  - {form: volem, lemma: voler, person: "1", number: pl, tense: pres, mood: ind, subtype: modal}
+  - {form: voleu, lemma: voler, person: "2", number: pl, tense: pres, mood: ind, subtype: modal}
+  - {form: volen, lemma: voler, person: "3", number: pl, tense: pres, mood: ind, subtype: modal}
+  - {form: volia, lemma: voler, persons: ["1", "3"], number: sg, tense: impf, mood: ind, subtype: modal}
+  - {form: volies, lemma: voler, person: "2", number: sg, tense: impf, mood: ind, subtype: modal}
+  - {form: volíem, lemma: voler, person: "1", number: pl, tense: impf, mood: ind, subtype: modal}
+  - {form: volíeu, lemma: voler, person: "2", number: pl, tense: impf, mood: ind, subtype: modal}
+  - {form: volien, lemma: voler, person: "3", number: pl, tense: impf, mood: ind, subtype: modal}
+  - {form: volguí, lemma: voler, person: "1", number: sg, tense: past, mood: ind, subtype: modal}
+  - {form: volgueres, lemma: voler, person: "2", number: sg, tense: past, mood: ind, subtype: modal}
+  - {form: volgué, lemma: voler, person: "3", number: sg, tense: past, mood: ind, subtype: modal}
+  - {form: volguérem, lemma: voler, person: "1", number: pl, tense: past, mood: ind, subtype: modal}
+  - {form: volguéreu, lemma: voler, person: "2", number: pl, tense: past, mood: ind, subtype: modal}
+  - {form: volgueren, lemma: voler, person: "3", number: pl, tense: past, mood: ind, subtype: modal}
+  - {form: voldré, lemma: voler, person: "1", number: sg, tense: fut, mood: ind, subtype: modal}
+  - {form: voldràs, lemma: voler, person: "2", number: sg, tense: fut, mood: ind, subtype: modal}
+  - {form: voldrà, lemma: voler, person: "3", number: sg, tense: fut, mood: ind, subtype: modal}
+  - {form: voldrem, lemma: voler, person: "1", number: pl, tense: fut, mood: ind, subtype: modal}
+  - {form: voldreu, lemma: voler, person: "2", number: pl, tense: fut, mood: ind, subtype: modal}
+  - {form: voldran, lemma: voler, person: "3", number: pl, tense: fut, mood: ind, subtype: modal}
+  - {form: voldria, lemma: voler, persons: ["1", "3"], number: sg, tense: cond, mood: ind, subtype: modal}
+  - {form: voldries, lemma: voler, person: "2", number: sg, tense: cond, mood: ind, subtype: modal}
+  - {form: voldríem, lemma: voler, person: "1", number: pl, tense: cond, mood: ind, subtype: modal}
+  - {form: voldríeu, lemma: voler, person: "2", number: pl, tense: cond, mood: ind, subtype: modal}
+  - {form: voldrien, lemma: voler, person: "3", number: pl, tense: cond, mood: ind, subtype: modal}
+  - {form: vulgui, lemma: voler, persons: ["1", "3"], number: sg, tense: pres, mood: subj, subtype: modal}
+  - {form: vulguis, lemma: voler, person: "2", number: sg, tense: pres, mood: subj, subtype: modal}
+  - {form: vulguem, lemma: voler, person: "1", number: pl, tense: pres, mood: subj, subtype: modal}
+  - {form: vulgueu, lemma: voler, person: "2", number: pl, tense: pres, mood: subj, subtype: modal}
+  - {form: vulguin, lemma: voler, person: "3", number: pl, tense: pres, mood: subj, subtype: modal}
+  - {form: volgués, lemma: voler, persons: ["1", "3"], number: sg, tense: impf, mood: subj, subtype: modal}
+  - {form: volguessis, lemma: voler, person: "2", number: sg, tense: impf, mood: subj, subtype: modal}
+  - {form: volguéssim, lemma: voler, person: "1", number: pl, tense: impf, mood: subj, subtype: modal}
+  - {form: volguéssiu, lemma: voler, person: "2", number: pl, tense: impf, mood: subj, subtype: modal}
+  - {form: volguessin, lemma: voler, person: "3", number: pl, tense: impf, mood: subj, subtype: modal}
+  - {form: voler, lemma: voler, mood: inf, subtype: modal}
+  - {form: volent, lemma: voler, mood: ger, subtype: modal}
+  - {form: volgut, lemma: voler, gender: m, number: sg, mood: part, subtype: modal}
+  - {form: volguda, lemma: voler, gender: f, number: sg, mood: part, subtype: modal}
+  - {form: volguts, lemma: voler, gender: m, number: pl, mood: part, subtype: modal}
+  - {form: volgudes, lemma: voler, gender: f, number: pl, mood: part, subtype: modal}
+  # --- caldre: modal de necessitat, només tercera persona (cal revisar) ---
+  - {form: cal, lemma: caldre, person: "3", number: sg, tense: pres, mood: ind, subtype: modal impersonal}
+  - {form: calen, lemma: caldre, person: "3", number: pl, tense: pres, mood: ind, subtype: modal impersonal}
+  - {form: calia, lemma: caldre, person: "3", number: sg, tense: impf, mood: ind, subtype: modal impersonal}
+  - {form: calien, lemma: caldre, person: "3", number: pl, tense: impf, mood: ind, subtype: modal impersonal}
+  - {form: calgué, lemma: caldre, person: "3", number: sg, tense: past, mood: ind, subtype: modal impersonal}
+  - {form: calgueren, lemma: caldre, person: "3", number: pl, tense: past, mood: ind, subtype: modal impersonal}
+  - {form: caldrà, lemma: caldre, person: "3", number: sg, tense: fut, mood: ind, subtype: modal impersonal}
+  - {form: caldran, lemma: caldre, person: "3", number: pl, tense: fut, mood: ind, subtype: modal impersonal}
+  - {form: caldria, lemma: caldre, person: "3", number: sg, tense: cond, mood: ind, subtype: modal impersonal}
+  - {form: caldrien, lemma: caldre, person: "3", number: pl, tense: cond, mood: ind, subtype: modal impersonal}
+  - {form: calgui, lemma: caldre, person: "3", number: sg, tense: pres, mood: subj, subtype: modal impersonal}
+  - {form: calguin, lemma: caldre, person: "3", number: pl, tense: pres, mood: subj, subtype: modal impersonal}
+  - {form: calgués, lemma: caldre, person: "3", number: sg, tense: impf, mood: subj, subtype: modal impersonal}
+  - {form: calguessin, lemma: caldre, person: "3", number: pl, tense: impf, mood: subj, subtype: modal impersonal}
+  - {form: caldre, lemma: caldre, mood: inf, subtype: modal impersonal}
+  - {form: calent, lemma: caldre, mood: ger, subtype: modal impersonal}
+  - {form: calgut, lemma: caldre, gender: m, number: sg, mood: part, subtype: modal impersonal}
+  # --- soler: modal d'habitualitat, defectiu (sol passar) ---
+  - {form: solc, lemma: soler, person: "1", number: sg, tense: pres, mood: ind, subtype: modal aspectual}
+  - {form: sols, lemma: soler, person: "2", number: sg, tense: pres, mood: ind, subtype: modal aspectual}
+  - {form: sol, lemma: soler, person: "3", number: sg, tense: pres, mood: ind, subtype: modal aspectual}
+  - {form: solem, lemma: soler, person: "1", number: pl, tense: pres, mood: ind, subtype: modal aspectual}
+  - {form: soleu, lemma: soler, person: "2", number: pl, tense: pres, mood: ind, subtype: modal aspectual}
+  - {form: solen, lemma: soler, person: "3", number: pl, tense: pres, mood: ind, subtype: modal aspectual}
+  - {form: solia, lemma: soler, persons: ["1", "3"], number: sg, tense: impf, mood: ind, subtype: modal aspectual}
+  - {form: solies, lemma: soler, person: "2", number: sg, tense: impf, mood: ind, subtype: modal aspectual}
+  - {form: solíem, lemma: soler, person: "1", number: pl, tense: impf, mood: ind, subtype: modal aspectual}
+  - {form: solíeu, lemma: soler, person: "2", number: pl, tense: impf, mood: ind, subtype: modal aspectual}
+  - {form: solien, lemma: soler, person: "3", number: pl, tense: impf, mood: ind, subtype: modal aspectual}
+  - {form: soler, lemma: soler, mood: inf, subtype: modal aspectual}
+  - {form: solent, lemma: soler, mood: ger, subtype: modal aspectual}

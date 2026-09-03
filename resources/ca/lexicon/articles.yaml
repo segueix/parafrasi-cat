@@ -1,0 +1,125 @@
+# Articles del català: definits, indefinits, personals i contraccions amb preposició.
+# Format: vegeu parafrasi_cat.analyzer.lexicon.entries_from_mapping.
+description: Articles definits, indefinits, personals i contraccions preposició + article.
+pos: det
+entries:
+  - form: el
+    lemma: el
+    gender: m
+    number: sg
+    subtype: definit
+  - form: la
+    lemma: el
+    gender: f
+    number: sg
+    subtype: definit
+  - form: "l'"
+    lemma: el
+    number: sg
+    subtype: definit elidit
+    note: masculí o femení davant de vocal o h; coincideix amb el pronom feble
+  - form: els
+    lemma: el
+    gender: m
+    number: pl
+    subtype: definit
+  - form: les
+    lemma: el
+    gender: f
+    number: pl
+    subtype: definit
+  - form: un
+    lemma: un
+    gender: m
+    number: sg
+    subtype: indefinit
+  - form: una
+    lemma: un
+    gender: f
+    number: sg
+    subtype: indefinit
+  - form: uns
+    lemma: un
+    gender: m
+    number: pl
+    subtype: indefinit
+  - form: unes
+    lemma: un
+    gender: f
+    number: pl
+    subtype: indefinit
+  - form: en
+    lemma: en
+    gender: m
+    number: sg
+    subtype: personal
+    note: article personal (en Joan); coincideix amb la preposició i amb el pronom feble
+  - form: na
+    lemma: en
+    gender: f
+    number: sg
+    subtype: personal
+  - form: "n'"
+    lemma: en
+    number: sg
+    subtype: personal elidit
+    note: n'Anna, n'Ermengol; coincideix amb el pronom feble elidit
+  - form: al
+    lemma: a+el
+    gender: m
+    number: sg
+    subtype: contracció
+    parts: [a, el]
+  - form: als
+    lemma: a+el
+    gender: m
+    number: pl
+    subtype: contracció
+    parts: [a, els]
+  - form: del
+    lemma: de+el
+    gender: m
+    number: sg
+    subtype: contracció
+    parts: [de, el]
+  - form: dels
+    lemma: de+el
+    gender: m
+    number: pl
+    subtype: contracció
+    parts: [de, els]
+  - form: pel
+    lemma: per+el
+    gender: m
+    number: sg
+    subtype: contracció
+    parts: [per, el]
+  - form: pels
+    lemma: per+el
+    gender: m
+    number: pl
+    subtype: contracció
+    parts: [per, els]
+  - form: cal
+    lemma: ca+el
+    subtype: contracció
+    parts: [ca, el]
+    note: casa de (cal Ferrer); coincideix amb la forma verbal «cal»
+  - form: can
+    lemma: ca+en
+    subtype: contracció
+    parts: [ca, en]
+    note: casa d'en (can Pau)
+  - form: lo
+    lemma: el
+    gender: m
+    number: sg
+    subtype: definit dialectal
+    register: dialectal
+    note: nord-occidental i valencià; també article neutre no normatiu
+  - form: los
+    lemma: el
+    gender: m
+    number: pl
+    subtype: definit dialectal
+    register: dialectal

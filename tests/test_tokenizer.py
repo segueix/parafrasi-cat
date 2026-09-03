@@ -19,7 +19,8 @@ def test_elided_articles_are_clitics() -> None:
 
 def test_enclitics() -> None:
     assert kinds("menja'n") == [("menja", TokenKind.WORD), ("'n", TokenKind.CLITIC)]
-    assert kinds("porta-ho") == [("porta-ho", TokenKind.WORD)]
+    # Els pronoms enclítics amb guionet se separen del verb (vegeu tests/test_pronoms_febles.py).
+    assert kinds("porta-ho") == [("porta", TokenKind.WORD), ("-ho", TokenKind.CLITIC)]
 
 
 def test_special_catalan_characters() -> None:

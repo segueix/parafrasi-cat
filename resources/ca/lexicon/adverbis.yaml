@@ -1,0 +1,147 @@
+# Adverbis freqüents i locucions adverbials, incloses les d'origen llatí.
+description: Adverbis freqüents i locucions adverbials (lloc, temps, manera, quantitat, afirmació, negació, dubte).
+pos: adv
+entries:
+  # lloc
+  - {form: aquí, subtype: lloc}
+  - {form: ací, subtype: lloc, register: dialectal}
+  - {form: allà, subtype: lloc}
+  - {form: allí, subtype: lloc}
+  - {form: arreu, subtype: lloc}
+  - {form: enlloc, subtype: lloc}
+  - {form: dins, subtype: lloc}
+  - {form: fora, subtype: lloc}
+  - {form: dalt, subtype: lloc}
+  - {form: baix, subtype: lloc}
+  - {form: amunt, subtype: lloc}
+  - {form: avall, subtype: lloc}
+  - {form: davant, subtype: lloc}
+  - {form: darrere, subtype: lloc}
+  - {form: endavant, subtype: lloc}
+  - {form: endarrere, subtype: lloc}
+  - {form: enrere, subtype: lloc}
+  - {form: lluny, subtype: lloc}
+  - {form: prop, subtype: lloc}
+  - {form: a prop, subtype: lloc}
+  - {form: pertot, subtype: lloc}
+  - {form: pertot arreu, subtype: lloc}
+  - {form: in situ, subtype: lloc, origin: llatí}
+  # temps
+  - {form: ara, subtype: temps}
+  - {form: avui, subtype: temps}
+  - {form: ahir, subtype: temps}
+  - {form: demà, subtype: temps}
+  - {form: abans, subtype: temps}
+  - {form: després, subtype: temps}
+  - {form: aviat, subtype: temps}
+  - {form: tard, subtype: temps}
+  - {form: sempre, subtype: temps}
+  - {form: mai, subtype: temps}
+  - {form: sovint, subtype: temps}
+  - {form: encara, subtype: temps}
+  - {form: ja, subtype: temps}
+  - {form: llavors, subtype: temps}
+  - {form: aleshores, subtype: temps}
+  - {form: mentrestant, subtype: temps}
+  - {form: alhora, subtype: temps}
+  - {form: aleshores, subtype: temps}
+  - {form: actualment, subtype: temps}
+  - {form: anteriorment, subtype: temps}
+  - {form: posteriorment, subtype: temps}
+  - {form: recentment, subtype: temps}
+  - {form: darrerament, subtype: temps}
+  - {form: finalment, subtype: temps}
+  - {form: primerament, subtype: temps}
+  - {form: tot seguit, subtype: temps}
+  - {form: de seguida, subtype: temps}
+  - {form: de sobte, subtype: temps}
+  - {form: de vegades, subtype: temps}
+  - {form: a vegades, subtype: temps}
+  - {form: de tant en tant, subtype: temps}
+  - {form: avui dia, subtype: temps}
+  - {form: en endavant, subtype: temps}
+  - {form: d'ara endavant, subtype: temps}
+  - {form: a la llarga, subtype: temps}
+  - {form: de moment, subtype: temps}
+  - {form: sine die, subtype: temps, origin: llatí}
+  - {form: in extremis, subtype: temps, origin: llatí}
+  # manera
+  - {form: bé, subtype: manera}
+  - {form: ben, subtype: manera}
+  - {form: malament, subtype: manera}
+  - {form: així, subtype: manera}
+  - {form: millor, subtype: manera}
+  - {form: pitjor, subtype: manera}
+  - {form: a poc a poc, subtype: manera}
+  - {form: de pressa, subtype: manera}
+  - {form: a corre-cuita, subtype: manera}
+  - {form: de cop, subtype: manera}
+  - {form: en general, subtype: manera}
+  - {form: en particular, subtype: manera}
+  - {form: en concret, subtype: manera}
+  - {form: per exemple, subtype: manera}
+  - {form: sobretot, subtype: manera}
+  - {form: especialment, subtype: manera}
+  - {form: només, subtype: manera}
+  - {form: solament, subtype: manera}
+  - {form: fins i tot, subtype: manera}
+  - {form: àdhuc, subtype: manera, register: formal}
+  - {form: gairebé, subtype: manera}
+  - {form: quasi, subtype: manera}
+  - {form: ad hoc, subtype: manera, origin: llatí}
+  - {form: per se, subtype: manera, origin: llatí}
+  - {form: de facto, subtype: manera, origin: llatí}
+  - {form: ipso facto, subtype: manera, origin: llatí}
+  - {form: grosso modo, subtype: manera, origin: llatí}
+  - {form: mutatis mutandis, subtype: manera, origin: llatí}
+  - {form: ex professo, subtype: manera, origin: llatí}
+  - {form: a priori, subtype: manera, origin: llatí}
+  - {form: a posteriori, subtype: manera, origin: llatí}
+  - {form: stricto sensu, subtype: manera, origin: llatí}
+  - {form: lato sensu, subtype: manera, origin: llatí}
+  - {form: verbi gratia, subtype: manera, origin: llatí}
+  - {form: sui generis, subtype: manera, origin: llatí}
+  - {form: motu proprio, subtype: manera, origin: llatí}
+  # quantitat
+  - {form: molt, subtype: quantitat}
+  - {form: poc, subtype: quantitat}
+  - {form: més, subtype: quantitat}
+  - {form: menys, subtype: quantitat}
+  - {form: massa, subtype: quantitat}
+  - {form: força, subtype: quantitat}
+  - {form: prou, subtype: quantitat}
+  - {form: gens, subtype: quantitat}
+  - {form: gaire, subtype: quantitat}
+  - {form: bastant, subtype: quantitat}
+  - {form: tan, subtype: quantitat}
+  - {form: tant, subtype: quantitat}
+  - {form: almenys, subtype: quantitat}
+  - {form: si més no, subtype: quantitat}
+  - {form: com a mínim, subtype: quantitat}
+  - {form: com a màxim, subtype: quantitat}
+  - {form: del tot, subtype: quantitat}
+  - {form: en absolut, subtype: quantitat}
+  - {form: aproximadament, subtype: quantitat}
+  - {form: completament, subtype: quantitat}
+  - {form: totalment, subtype: quantitat}
+  - {form: parcialment, subtype: quantitat}
+  # afirmació, negació i dubte
+  - {form: sí, subtype: afirmació}
+  - {form: també, subtype: afirmació}
+  - {form: certament, subtype: afirmació}
+  - {form: efectivament, subtype: afirmació}
+  - {form: evidentment, subtype: afirmació}
+  - {form: òbviament, subtype: afirmació}
+  - {form: "no", subtype: negació}
+  - {form: tampoc, subtype: negació}
+  - {form: pas, subtype: negació, note: reforç de la negació (no ... pas)}
+  - {form: potser, subtype: dubte}
+  - {form: probablement, subtype: dubte}
+  - {form: possiblement, subtype: dubte}
+  - {form: segurament, subtype: dubte}
+  - {form: tal vegada, subtype: dubte}
+  - {form: tal volta, subtype: dubte, register: dialectal}
+  # interrogatius i relatius adverbials
+  - {form: quan, subtype: interrogatiu/relatiu}
+  - {form: "on", subtype: interrogatiu/relatiu}
+  - {form: com, subtype: interrogatiu/relatiu}

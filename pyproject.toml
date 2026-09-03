@@ -43,6 +43,7 @@ include = [
   "resources",
   "rules",
   "dictionaries",
+  "style",
   "docs",
   "examples",
   "tests",
@@ -59,6 +60,7 @@ packages = ["src/parafrasi_cat"]
 "resources" = "parafrasi_cat/_data/resources"
 "rules" = "parafrasi_cat/_data/rules"
 "dictionaries" = "parafrasi_cat/_data/dictionaries"
+"style" = "parafrasi_cat/_data/style"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

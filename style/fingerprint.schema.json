@@ -1,0 +1,340 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/segueix/parafrasi-cat/style/fingerprint.schema.json",
+  "title": "Empremta estilística d'un autor (parafrasi-cat)",
+  "description": "Resultat de l'anàlisi estilomètrica d'un corpus. Cada característica numèrica és un objecte «stat» amb valor, nombre d'observacions, confiança, variabilitat i exemples curts. No conté el corpus.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "name", "description", "language", "generator", "corpus", "features", "validation"],
+  "properties": {
+    "schema_version": {"type": "string", "description": "Versió de l'esquema (major.minor)."},
+    "name": {"type": "string"},
+    "description": {"type": "string"},
+    "language": {"type": "string"},
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "version", "method", "deterministic", "uses_models", "corpus_hash"],
+      "properties": {
+        "tool": {"type": "string"},
+        "version": {"type": "string"},
+        "method": {"type": "string"},
+        "deterministic": {"type": "boolean"},
+        "uses_models": {"type": "boolean", "const": false},
+        "corpus_hash": {"type": "string", "description": "Prefix del SHA-256 dels resums de tots els documents."}
+      }
+    },
+    "corpus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "n_documents", "n_paragraphs", "n_sentences", "n_words", "documents", "excluded"],
+      "properties": {
+        "root": {"type": ["string", "null"]},
+        "n_documents": {"type": "integer", "minimum": 0},
+        "n_paragraphs": {"type": "integer", "minimum": 0},
+        "n_sentences": {"type": "integer", "minimum": 0},
+        "n_words": {"type": "integer", "minimum": 0},
+        "documents": {"type": "array", "items": {"$ref": "#/$defs/document"}},
+        "excluded": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "reason"],
+            "properties": {"name": {"type": "string"}, "reason": {"type": "string"}}
+          }
+        }
+      }
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sentence_length", "sentence_length_distribution", "paragraph_length_sentences",
+        "paragraph_length_words", "punctuation", "connectors", "recurrent_expressions",
+        "impersonal", "first_person", "passive", "lexical_repetition", "word_class_density",
+        "variant_preferences"
+      ],
+      "properties": {
+        "sentence_length": {"$ref": "#/$defs/stat"},
+        "sentence_length_distribution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["unit", "n_observations", "n_documents", "confidence", "mean", "median", "mad", "iqr", "p10", "p90", "min", "max", "counts", "shares"],
+          "properties": {
+            "unit": {"type": "string"},
+            "n_observations": {"type": "integer", "minimum": 0},
+            "n_documents": {"type": "integer", "minimum": 0},
+            "confidence": {"$ref": "#/$defs/unit_interval"},
+            "mean": {"type": "number"},
+            "median": {"type": "number"},
+            "mad": {"type": "number"},
+            "iqr": {"type": "number"},
+            "p10": {"type": "number"},
+            "p90": {"type": "number"},
+            "min": {"type": "number"},
+            "max": {"type": "number"},
+            "counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+            "shares": {"$ref": "#/$defs/shares"}
+          }
+        },
+        "paragraph_length_sentences": {"$ref": "#/$defs/stat"},
+        "paragraph_length_words": {"$ref": "#/$defs/stat"},
+        "punctuation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["comma", "semicolon", "colon", "parenthesis", "dash", "quote", "question", "exclamation", "ellipsis", "commas_per_sentence_shares", "sentence_endings_shares"],
+          "properties": {
+            "comma": {"$ref": "#/$defs/punctuation_mark"},
+            "semicolon": {"$ref": "#/$defs/punctuation_mark"},
+            "colon": {"$ref": "#/$defs/punctuation_mark"},
+            "parenthesis": {"$ref": "#/$defs/punctuation_mark"},
+            "dash": {"$ref": "#/$defs/punctuation_mark"},
+            "quote": {"$ref": "#/$defs/punctuation_mark"},
+            "question": {"$ref": "#/$defs/punctuation_mark"},
+            "exclamation": {"$ref": "#/$defs/punctuation_mark"},
+            "ellipsis": {"$ref": "#/$defs/punctuation_mark"},
+            "commas_per_sentence_shares": {"$ref": "#/$defs/shares"},
+            "sentence_endings_shares": {"$ref": "#/$defs/shares"}
+          }
+        },
+        "connectors": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["per_100_words", "per_sentence", "position_shares", "initial_with_comma_share", "by_function_shares", "by_register_shares", "top"],
+          "properties": {
+            "per_100_words": {"$ref": "#/$defs/stat"},
+            "per_sentence": {"$ref": "#/$defs/stat"},
+            "position_shares": {"$ref": "#/$defs/shares"},
+            "initial_with_comma_share": {"anyOf": [{"$ref": "#/$defs/unit_interval"}, {"type": "null"}]},
+            "by_function_shares": {"$ref": "#/$defs/shares"},
+            "by_register_shares": {"$ref": "#/$defs/shares"},
+            "top": {"type": "array", "items": {"$ref": "#/$defs/connector"}}
+          }
+        },
+        "recurrent_expressions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["unit", "min_count", "min_documents", "n_observations", "n_documents", "confidence", "items"],
+          "properties": {
+            "unit": {"type": "string"},
+            "min_count": {"type": "integer", "minimum": 1},
+            "min_documents": {"type": "integer", "minimum": 0},
+            "n_observations": {"type": "integer", "minimum": 0},
+            "n_documents": {"type": "integer", "minimum": 0},
+            "confidence": {"$ref": "#/$defs/unit_interval"},
+            "items": {"type": "array", "items": {"$ref": "#/$defs/expression"}}
+          }
+        },
+        "impersonal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["per_100_sentences", "by_type"],
+          "properties": {
+            "per_100_sentences": {"$ref": "#/$defs/stat"},
+            "by_type": {"type": "object", "additionalProperties": {"$ref": "#/$defs/impersonal_type"}}
+          }
+        },
+        "first_person": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["singular", "plural"],
+          "properties": {
+            "singular": {"$ref": "#/$defs/first_person_number"},
+            "plural": {"$ref": "#/$defs/first_person_number"}
+          }
+        },
+        "passive": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["per_100_sentences", "with_agent_count", "ambiguous_present_count", "ambiguous_examples"],
+          "properties": {
+            "per_100_sentences": {"$ref": "#/$defs/stat"},
+            "with_agent_count": {"type": "integer", "minimum": 0},
+            "ambiguous_present_count": {"type": "integer", "minimum": 0},
+            "ambiguous_examples": {"$ref": "#/$defs/examples"}
+          }
+        },
+        "lexical_repetition": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type_token_ratio", "msttr", "hapax_share", "near_repetition", "top_words"],
+          "properties": {
+            "type_token_ratio": {"$ref": "#/$defs/stat"},
+            "msttr": {"$ref": "#/$defs/stat"},
+            "hapax_share": {"$ref": "#/$defs/stat"},
+            "near_repetition": {"$ref": "#/$defs/stat"},
+            "top_words": {"type": "array", "items": {"$ref": "#/$defs/top_word"}}
+          }
+        },
+        "word_class_density": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verbs_per_100_words", "nouns_per_100_words", "function_words_per_100_words"],
+          "properties": {
+            "verbs_per_100_words": {"$ref": "#/$defs/stat"},
+            "nouns_per_100_words": {"$ref": "#/$defs/stat"},
+            "function_words_per_100_words": {"$ref": "#/$defs/stat"}
+          }
+        },
+        "variant_preferences": {"type": "object", "additionalProperties": {"$ref": "#/$defs/variant_group"}}
+      }
+    },
+    "validation": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["n_documents", "n_sentences", "n_words", "documents", "distance", "divergence_threshold", "divergent_features", "feature_distances"],
+          "properties": {
+            "n_documents": {"type": "integer", "minimum": 0},
+            "n_sentences": {"type": "integer", "minimum": 0},
+            "n_words": {"type": "integer", "minimum": 0},
+            "documents": {"type": "array", "items": {"$ref": "#/$defs/document"}},
+            "distance": {"$ref": "#/$defs/unit_interval"},
+            "divergence_threshold": {"$ref": "#/$defs/unit_interval"},
+            "divergent_features": {"type": "array", "items": {"type": "string"}},
+            "feature_distances": {"type": "object", "additionalProperties": {"$ref": "#/$defs/unit_interval"}}
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "unit_interval": {"type": "number", "minimum": 0, "maximum": 1},
+    "examples": {"type": "array", "items": {"type": "string"}, "description": "Fragments curts del corpus (mai grans fragments)."},
+    "shares": {"type": "object", "additionalProperties": {"$ref": "#/$defs/unit_interval"}},
+    "stat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "unit", "n_observations", "n_documents", "confidence", "variability", "pooled", "per_document", "examples", "note"],
+      "properties": {
+        "value": {"type": ["number", "null"], "description": "Estimació robusta (mediana ponderada entre documents)."},
+        "unit": {"type": "string"},
+        "n_observations": {"type": "integer", "minimum": 0},
+        "n_documents": {"type": "integer", "minimum": 0},
+        "confidence": {"$ref": "#/$defs/unit_interval", "description": "n/(n+10) × (1 − 0,5/documents), reduïda per a les mesures aproximades."},
+        "variability": {"type": ["number", "null"], "description": "Desviació absoluta mediana entre documents."},
+        "pooled": {"type": ["number", "null"], "description": "Valor global sense correcció."},
+        "per_document": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["min", "median", "max"],
+              "properties": {"min": {"type": "number"}, "median": {"type": "number"}, "max": {"type": "number"}}
+            }
+          ]
+        },
+        "examples": {"$ref": "#/$defs/examples"},
+        "note": {"type": "string"}
+      }
+    },
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "role", "sha256", "paragraphs", "sentences", "words"],
+      "properties": {
+        "name": {"type": "string"},
+        "role": {"type": "string", "enum": ["main", "validation"]},
+        "sha256": {"type": "string"},
+        "paragraphs": {"type": "integer", "minimum": 0},
+        "sentences": {"type": "integer", "minimum": 0},
+        "words": {"type": "integer", "minimum": 0}
+      }
+    },
+    "punctuation_mark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["per_100_words", "per_sentence"],
+      "properties": {"per_100_words": {"$ref": "#/$defs/stat"}, "per_sentence": {"$ref": "#/$defs/stat"}}
+    },
+    "connector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["form", "function", "register", "count", "share", "share_in_function", "per_100_words", "documents", "positions", "examples"],
+      "properties": {
+        "form": {"type": "string"},
+        "function": {"type": "string"},
+        "register": {"type": "string"},
+        "count": {"type": "integer", "minimum": 1},
+        "share": {"$ref": "#/$defs/unit_interval"},
+        "share_in_function": {"$ref": "#/$defs/unit_interval"},
+        "per_100_words": {"type": "number", "minimum": 0},
+        "documents": {"type": "integer", "minimum": 1},
+        "positions": {"$ref": "#/$defs/shares"},
+        "examples": {"$ref": "#/$defs/examples"}
+      }
+    },
+    "expression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "count", "documents", "per_100_words", "example"],
+      "properties": {
+        "text": {"type": "string"},
+        "count": {"type": "integer", "minimum": 1},
+        "documents": {"type": "integer", "minimum": 1},
+        "per_100_words": {"type": "number", "minimum": 0},
+        "example": {"type": "string"}
+      }
+    },
+    "impersonal_type": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "share", "per_100_sentences", "examples"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 1},
+        "share": {"$ref": "#/$defs/unit_interval"},
+        "per_100_sentences": {"type": "number", "minimum": 0},
+        "examples": {"$ref": "#/$defs/examples"}
+      }
+    },
+    "first_person_number": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["per_100_sentences", "n_sure", "n_approximate"],
+      "properties": {
+        "per_100_sentences": {"$ref": "#/$defs/stat"},
+        "n_sure": {"type": "integer", "minimum": 0},
+        "n_approximate": {"type": "integer", "minimum": 0}
+      }
+    },
+    "top_word": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["form", "count", "per_100_content_words", "documents"],
+      "properties": {
+        "form": {"type": "string"},
+        "count": {"type": "integer", "minimum": 1},
+        "per_100_content_words": {"type": "number", "minimum": 0},
+        "documents": {"type": "integer", "minimum": 1}
+      }
+    },
+    "variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "share", "documents", "examples"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "share": {"$ref": "#/$defs/unit_interval"},
+        "documents": {"type": "integer", "minimum": 0},
+        "examples": {"$ref": "#/$defs/examples"}
+      }
+    },
+    "variant_group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "n_observations", "n_documents", "confidence", "preferred", "variants"],
+      "properties": {
+        "description": {"type": "string"},
+        "n_observations": {"type": "integer", "minimum": 0},
+        "n_documents": {"type": "integer", "minimum": 0},
+        "confidence": {"$ref": "#/$defs/unit_interval"},
+        "preferred": {"type": ["string", "null"], "description": "Variant amb ≥ 60 % dels usos i ≥ 5 observacions; null si no hi ha preferència clara."},
+        "variants": {"type": "object", "additionalProperties": {"$ref": "#/$defs/variant"}}
+      }
+    }
+  }
+}

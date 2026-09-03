@@ -1,0 +1,78 @@
+# Família 6: «fet per X» ↔ «realitzat per X» ↔ «obra de X».
+description: Complement agent d'un participi (fet per, realitzat per, obra de).
+language: ca
+rules:
+  - rule_id: agent.fet_per_a_realitzat_per
+    engine: pattern
+    category: agent
+    level: 1
+    transformation_type: lexical
+    semantic_risk: low
+    confidence: 0.8
+    description: "«fet per X» → «realitzat per X» (amb concordança del participi)"
+    pattern:
+      - {text: [fet, feta, fets, fetes], group: p}
+      - {text: per}
+      - {np: true, group: ag}
+    conditions:
+      context:
+        not_preceded_by: [ha, han, he, has, hem, heu, havia, havien, hauria, haurien, hagi, hagin, hagués, ho, "l'", el, la, els, les, es, "s'", em, et, ens, us, que]
+    transformation: "{p|map(fet=realitzat,feta=realitzada,fets=realitzats,fetes=realitzades)} per {ag}"
+    examples:
+      positive:
+        - input: "En aquest sarcòfag fet per l'escultor Benedetto da Rovezzano hi ha dos cranis."
+          output: "En aquest sarcòfag realitzat per l'escultor Benedetto da Rovezzano hi ha dos cranis."
+        - input: "Les escultures fetes per Gaudí són a Barcelona."
+          output: "Les escultures realitzades per Gaudí són a Barcelona."
+      negative:
+        - "Ho ha fet per diners."
+        - "El sarcòfag fet per a la capella."
+
+  - rule_id: agent.realitzat_per_a_fet_per
+    engine: pattern
+    category: agent
+    level: 1
+    transformation_type: lexical
+    semantic_risk: low
+    confidence: 0.8
+    description: "«realitzat per X» → «fet per X»"
+    pattern:
+      - {text: [realitzat, realitzada, realitzats, realitzades], group: p}
+      - {text: per}
+      - {np: true, group: ag}
+    transformation: "{p|map(realitzat=fet,realitzada=feta,realitzats=fets,realitzades=fetes)} per {ag}"
+    examples:
+      positive:
+        - input: "El sarcòfag realitzat per l'escultor és de marbre."
+          output: "El sarcòfag fet per l'escultor és de marbre."
+      negative:
+        - "La tasca realitzada per a l'ocasió."
+
+  - rule_id: agent.fet_per_a_obra_de
+    engine: pattern
+    category: agent
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.7
+    description: "«N fet per X» → «N obra de X» (participi postnominal amb agent)"
+    pattern:
+      - {text: [fet, feta, fets, fetes], group: p}
+      - {text: per}
+      - {np: true, group: ag}
+    conditions:
+      groups:
+        ag: {starts_with: ["@determiner", "@capitalized"]}
+      context:
+        preceded_by: ["@word"]
+        not_preceded_by: [ha, han, he, has, hem, heu, havia, havien, hauria, haurien, hagi, hagin, hagués, ho, "l'", el, la, els, les, es, "s'", em, et, ens, us, que, ser, estat, sigut, va, van, és, són, era, eren, fou, foren, està, estan, estava, estaven]
+    transformation: "obra {ag|de}"
+    examples:
+      positive:
+        - input: "En aquest sarcòfag fet per l'escultor Benedetto da Rovezzano hi ha dos cranis."
+          output: "En aquest sarcòfag obra de l'escultor Benedetto da Rovezzano hi ha dos cranis."
+        - input: "El retaule fet per Lluís Borrassà es conserva a Vic."
+          output: "El retaule obra de Lluís Borrassà es conserva a Vic."
+      negative:
+        - "El retaule va ser fet per Lluís Borrassà."
+        - "Ho ha fet per diners."

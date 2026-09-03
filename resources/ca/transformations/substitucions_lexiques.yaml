@@ -4,8 +4,23 @@
 # Cada entrada substitueix «source» per «target» quan «source» apareix com a paraula
 # o locució sencera i no toca cap fragment protegit. Les majúscules es conserven.
 # Camps opcionals per entrada: semantic_risk, confidence, transformation_type, note.
-description: Substitucions lèxiques d'exemple (equivalents de registre neutre/formal).
+description: Substitucions lèxiques controlades (equivalents de registre neutre/formal).
+rule_id: lexical.substitution
+engine: lexical
+language: ca
+category: lexic
+level: 1
+semantic_risk: low
+confidence: 0.8
 transformation_type: lexical
+examples:
+  positive:
+    - input: "Gairebé tothom ho sap."
+      output: "Quasi tothom ho sap."
+    - input: "Sovint plou a la tardor."
+      output: "Freqüentment plou a la tardor."
+  negative:
+    - "El capital circulant puja."
 default_semantic_risk: low
 default_confidence: 0.8
 entries:

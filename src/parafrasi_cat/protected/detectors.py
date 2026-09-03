@@ -14,8 +14,11 @@ from collections.abc import Iterable, Sequence
 from typing import Protocol, runtime_checkable
 
 from parafrasi_cat.analyzer.analysis import Analyzer, RuleBasedAnalyzer
+from parafrasi_cat.analyzer.clitics import DEFAULT_AUXILIARY_FORMS
+from parafrasi_cat.analyzer.lexicon import ClosedClassLexicon, WordClass
+from parafrasi_cat.analyzer.numerals import ROMAN_CORE, context_allows_single_letter
 from parafrasi_cat.analyzer.sentences import Sentence
-from parafrasi_cat.analyzer.tokens import Token
+from parafrasi_cat.analyzer.tokens import Token, TokenKind, TokenSubkind
 from parafrasi_cat.core.spans import Span
 from parafrasi_cat.core.text import LETTER, phrase_pattern
 from parafrasi_cat.protected.spans import ProtectedSpan, ProtectionKind
@@ -90,10 +93,11 @@ class RegexDetector:
 
 
 _MONTHS = "gener|febrer|març|abril|maig|juny|juliol|agost|setembre|octubre|novembre|desembre"
+_ERA = r"(?:aC|dC|a\.\s?C\.|d\.\s?C\.|abans de Crist|després de Crist)"
 
 
 class DateDetector(RegexDetector):
-    """Dates numèriques (12/03/2021, 2021-03-12) i textuals (12 de març de 2021)."""
+    """Dates numèriques (12/03/2021, 2021-03-12), textuals (12 de març de 2021) i eres (218 aC)."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -101,131 +105,52 @@ class DateDetector(RegexDetector):
             ProtectionKind.DATE,
             [
                 r"\b\d{4}-\d{2}-\d{2}\b",
+                r"\b\d{4}/\d{1,2}/\d{1,2}\b",
                 r"\b\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}\b",
                 rf"\b\d{{1,2}}\s+(?:de\s+|d['’])(?:{_MONTHS})(?:\s+(?:de|del)\s+\d{{4}})?\b",
                 rf"\b(?:{_MONTHS})\s+(?:de|del)\s+\d{{4}}\b",
+                rf"\b\d{{1,4}}\s?{_ERA}(?!{LETTER})",
+                rf"\bsegle\s+[IVXLCDM]+\s?{_ERA}(?!{LETTER})",
             ],
             flags=re.IGNORECASE,
         )
 
 
 class NumberDetector(RegexDetector):
-    """Xifres (enters, decimals, percentatges, imports, ordinals numèrics)."""
+    """Xifres: enters, decimals, hores (10:30), percentatges, imports i ordinals (3r, 5è)."""
 
     def __init__(self) -> None:
         super().__init__(
             "number.regex",
             ProtectionKind.NUMBER,
-            [r"(?<![\w.,])[+\-−]?\d+(?:[.,]\d+)*(?:[a-zè]{1,2})?(?:\s?[%€$])?(?!\w)"],
+            [r"(?<![\w.,])[+\-−]?\d+(?:[.,]\d+)*(?::\d{2})?(?:[a-zè]{1,3})?(?:\s?[%€$])?(?!\w)"],
         )
 
 
-_ROMAN_CORE = r"M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})"
-
-#: Paraules que, immediatament abans d'una sola lletra romana (I, V, X...),
-#: confirmen que es tracta d'un numeral: «segle X», «Jaume I», «capítol V».
-_ROMAN_CONTEXT_WORDS: frozenset[str] = frozenset(
-    {
-        "segle",
-        "segles",
-        "s",
-        "ss",
-        "capítol",
-        "capítols",
-        "cap",
-        "volum",
-        "volums",
-        "vol",
-        "tom",
-        "toms",
-        "part",
-        "parts",
-        "llibre",
-        "llibres",
-        "acte",
-        "actes",
-        "escena",
-        "escenes",
-        "títol",
-        "títols",
-        "annex",
-        "annexos",
-        "article",
-        "articles",
-        "art",
-        "secció",
-        "seccions",
-        "apartat",
-        "apartats",
-        "papa",
-        "rei",
-        "reina",
-        "emperador",
-        "emperadriu",
-        "comte",
-        "comtessa",
-        "duc",
-        "duquessa",
-        "fase",
-        "fases",
-        "nivell",
-        "nivells",
-        "grau",
-        "graus",
-        "classe",
-        "tipus",
-        "categoria",
-        "fitxa",
-        "lliçó",
-        "lliçons",
-        "unitat",
-        "unitats",
-        "quadre",
-        "quadres",
-        "taula",
-        "taules",
-        "figura",
-        "figures",
-        "mapa",
-        "mapes",
-        "làmina",
-        "làmines",
-        "cant",
-        "cants",
-    }
-)
-
-_WORD_BEFORE_RE = re.compile(rf"({LETTER}+(?:[·\-']{LETTER}+)*)\.?\s*$")
-
-
 class RomanNumeralDetector(RegexDetector):
-    """Números romans en majúscules (XX, XIV, MCMXCII).
+    """Números romans en majúscules (XX, XIV, MCMXCII, XXIè).
 
     Una sola lletra (I, V, X, L, C, D, M) només es considera numeral si va
     precedida d'una paraula de context («segle X») o d'un nom propi
-    («Jaume I»), per evitar confondre-la amb la conjunció «I» o amb sigles.
+    («Jaume I»); vegeu :mod:`parafrasi_cat.analyzer.numerals`.
     """
 
     def __init__(self) -> None:
         super().__init__(
             "roman_numeral.regex",
             ProtectionKind.ROMAN_NUMERAL,
-            [rf"(?<!{LETTER})(?=[MDCLXVI])(?:{_ROMAN_CORE})(?!{LETTER})"],
+            [rf"(?<!{LETTER})(?=[MDCLXVI])(?:{ROMAN_CORE})(?:è)?(?!{LETTER})"],
         )
 
     def accept(self, text: str, match: re.Match[str]) -> bool:
-        numeral = match.group(0)
+        numeral = match.group(0).rstrip("è")
         if len(numeral) > 1:
             return True
-        before = _WORD_BEFORE_RE.search(text, 0, match.start())
-        if before is None:
-            return False
-        word = before.group(1)
-        return word.lower() in _ROMAN_CONTEXT_WORDS or word[0].isupper()
+        return context_allows_single_letter(text[: match.start()])
 
 
 class QuotedTextDetector(RegexDetector):
-    """Text entre cometes baixes «», altes “” i rectes dobles ""."""
+    """Text entre cometes baixes «», altes “”, rectes dobles "" i simples ‘’."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -236,7 +161,7 @@ class QuotedTextDetector(RegexDetector):
 
 
 class CitationDetector(RegexDetector):
-    """Referències bibliogràfiques: (Autor, 2001), [12], p. 34, ibid., op. cit."""
+    """Referències bibliogràfiques: (Autor, 2001), [12], p. 34, ibid., op. cit., et al."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -245,8 +170,9 @@ class CitationDetector(RegexDetector):
             [
                 r"\([^()\n]*?\b(?:1[0-9]{3}|20[0-9]{2})[a-z]?\b[^()\n]*\)",
                 r"\[\d+(?:\s?[,;–\-]\s?\d+)*\]",
-                rf"(?<!{LETTER})(?:pp?|pàgs?)\.\s?\d+(?:\s?[–\-]\s?\d+)?",
-                rf"(?<!{LETTER})(?:ibid|ibíd|íd|op\.\s?cit|loc\.\s?cit)\.",
+                rf"(?<!{LETTER})(?:pp?|pàgs?|fols?|ff)\.\s?\d+(?:\s?[–\-]\s?\d+)?",
+                rf"(?<!{LETTER})(?:ibid|ibíd|íd|op\.\s?cit|loc\.\s?cit|et\s+al)\.",
+                rf"(?<!{LETTER})(?:vol|núm|n|cap|llibre|tom)\.\s?(?:[IVXLCDM]+|\d+)(?!{LETTER})",
             ],
             flags=re.IGNORECASE,
         )
@@ -304,8 +230,14 @@ _NAME_CONNECTORS: frozenset[str] = frozenset(
 #: («Universitat de Barcelona és...», «Consell d'Europa...»).
 _DE_CONNECTORS: frozenset[str] = frozenset({"de", "del", "dels", "d'", "d’"})
 
+#: Articles admesos després de la primera paraula d'una frase només quan
+#: aquesta no sembla un verb («Guifré el Pilós», «Martí l'Humà», però no
+#: «Visitem el Museu»).
+_ARTICLE_CONNECTORS: frozenset[str] = frozenset({"el", "la", "l'", "l’"})
+
 #: Mots gramaticals que, en majúscula al començament de frase, no formen part
 #: d'un nom propi («La Universitat de Barcelona» → «Universitat de Barcelona»).
+#: El lexicó de classes tancades amplia aquesta llista.
 _SENTENCE_START_FUNCTION_WORDS: frozenset[str] = frozenset(
     {
         "el",
@@ -386,6 +318,8 @@ _SENTENCE_START_FUNCTION_WORDS: frozenset[str] = frozenset(
     }
 )
 
+_VERB_LIKE_ENDING_RE = re.compile(r"(?:em|eu|im|iu)$")
+
 
 class ProperNounDetector:
     """Noms propis detectats per heurística de majúscules.
@@ -393,10 +327,12 @@ class ProperNounDetector:
     - Una paraula amb majúscula inicial enmig d'una frase es considera nom propi.
     - Al començament de frase, només si forma part d'una seqüència de dues o més
       paraules amb majúscula («Joan Maragall va...») o si és una sigla. Els mots
-      gramaticals inicials («La», «El», «Segons»...) no compten.
+      gramaticals inicials («La», «El», «Segons», «Se»...) no compten.
     - Les seqüències es poden encadenar amb mots de lligam («Generalitat de
-      Catalunya», «Fabra i Poch»). Una enumeració com «Madrid i València» queda
-      protegida com un sol fragment, cosa que és segura tot i ser imprecisa.
+      Catalunya», «Fabra i Poch», «Ramon Berenguer IV», «Guifré el Pilós»). Una
+      enumeració com «Madrid i València» queda protegida com un sol fragment,
+      cosa que és segura tot i ser imprecisa.
+    - Un número romà no pot començar un nom, però sí continuar-lo («Borrell II»).
 
     És una heurística: els noms coneguts es poden afegir al diccionari
     ``dictionaries/noms_propis.txt`` per garantir-ne la protecció.
@@ -405,9 +341,22 @@ class ProperNounDetector:
     detector_id = "proper_noun.heuristic"
     kind = ProtectionKind.PROPER_NOUN
 
-    def __init__(self, analyzer: Analyzer | None = None, *, max_connectors: int = 2) -> None:
+    def __init__(
+        self,
+        analyzer: Analyzer | None = None,
+        *,
+        max_connectors: int = 2,
+        lexicon: ClosedClassLexicon | None = None,
+    ) -> None:
         self._analyzer = analyzer or RuleBasedAnalyzer()
         self._max_connectors = max_connectors
+        skip = set(_SENTENCE_START_FUNCTION_WORDS)
+        auxiliaries: frozenset[str] = DEFAULT_AUXILIARY_FORMS
+        if lexicon is not None:
+            skip |= lexicon.single_word_forms
+            auxiliaries = lexicon.forms_of(WordClass.AUXILIARY) or auxiliaries
+        self._skip_initial = frozenset(skip)
+        self._auxiliaries = auxiliaries
 
     def detect(self, text: str) -> Iterable[ProtectedSpan]:
         for sentence in self._analyzer.analyze(text).sentences:
@@ -417,13 +366,10 @@ class ProperNounDetector:
         words = [t for t in sentence.tokens if t.is_word]
         i = 0
         while i < len(words):
-            if not _is_capitalized(words[i].text):
-                i += 1
-                continue
-            if i == 0 and words[0].text.lower() in _SENTENCE_START_FUNCTION_WORDS:
-                i += 1
-                continue
             at_sentence_start = i == 0
+            if not self._can_start(words[i], at_sentence_start):
+                i += 1
+                continue
             run_end = self._extend_run(sentence.text, words, i, strict_first=at_sentence_start)
             n_words = run_end - i + 1
             first = words[i]
@@ -437,15 +383,34 @@ class ProperNounDetector:
                 )
             i = run_end + 1
 
+    def _can_start(self, token: Token, at_sentence_start: bool) -> bool:
+        if not _is_capitalized(token.text) or token.kind is TokenKind.CLITIC:
+            return False
+        if token.subkind is TokenSubkind.ROMAN_NUMERAL:
+            return False
+        return not (at_sentence_start and token.lower.replace("’", "'") in self._skip_initial)
+
+    def _verb_like(self, word: str) -> bool:
+        lowered = word.lower()
+        if lowered in self._auxiliaries:
+            return True
+        return len(lowered) >= 4 and _VERB_LIKE_ENDING_RE.search(lowered) is not None
+
     def _extend_run(
         self, text: str, words: list[Token], start: int, *, strict_first: bool = False
     ) -> int:
         """Retorna l'índex de l'última paraula de la seqüència que comença a ``start``.
 
         Amb ``strict_first`` (començament de frase), el primer enllaç només pot
-        ser una paraula amb majúscula o un connector de tipus «de»: així
-        «Visitem l'Institut» no arrossega el verb inicial dins del nom.
+        ser una paraula amb majúscula, un connector de tipus «de» o, si el mot
+        inicial no sembla un verb, un article: així «Visitem l'Institut» no
+        arrossega el verb dins del nom, però «Guifré el Pilós» queda sencer.
         """
+        first_allowed = _NAME_CONNECTORS
+        if strict_first:
+            first_allowed = _DE_CONNECTORS
+            if not self._verb_like(words[start].text):
+                first_allowed = _DE_CONNECTORS | _ARTICLE_CONNECTORS
         run_end = start
         j = start + 1
         while j < len(words):
@@ -453,12 +418,12 @@ class ProperNounDetector:
                 run_end = j
                 j += 1
                 continue
-            allowed = _DE_CONNECTORS if strict_first and j == start + 1 else _NAME_CONNECTORS
+            allowed = first_allowed if j == start + 1 else _NAME_CONNECTORS
             k = j
             while (
                 k < len(words)
                 and k - j < self._max_connectors
-                and words[k].text.lower() in (allowed if k == j else _NAME_CONNECTORS)
+                and words[k].lower in (allowed if k == j else _NAME_CONNECTORS)
                 and _only_space_between(text, words[k - 1], words[k])
             ):
                 k += 1
@@ -466,6 +431,7 @@ class ProperNounDetector:
                 k > j
                 and k < len(words)
                 and _is_capitalized(words[k].text)
+                and words[k].kind is not TokenKind.CLITIC
                 and _only_space_between(text, words[k - 1], words[k])
             ):
                 run_end = k

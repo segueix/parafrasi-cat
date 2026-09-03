@@ -1,0 +1,116 @@
+# Família 7: «hi ha la presència de X» ↔ «hi ha X» / «apareix(en) X» / «N presenta X».
+description: Construccions d'existència i presència.
+language: ca
+rules:
+  - rule_id: presencia.hi_ha_la_presencia_de_a_hi_ha
+    engine: pattern
+    category: presencia
+    level: 2
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.85
+    description: "«hi ha la presència de X» → «hi ha X»"
+    pattern:
+      - {text: hi}
+      - {text: ha}
+      - {text: la}
+      - {text: presència}
+      - {text: [de, "d'"]}
+      - {np: true, group: np, bare: true}
+    transformation: "hi ha {np}"
+    examples:
+      positive:
+        - input: "En aquest sarcòfag hi ha la presència de dos cranis acompanyats de dos ossos creuats, així com dues serps també creuades."
+          output: "En aquest sarcòfag hi ha dos cranis acompanyats de dos ossos creuats, així com dues serps també creuades."
+      negative:
+        - "Hi ha la presència notable de vegetació."
+
+  - rule_id: presencia.hi_ha_la_presencia_de_a_apareix
+    engine: pattern
+    category: presencia
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.75
+    description: "«hi ha la presència de X» → «apareix X» / «apareixen X» (segons el nombre de X)"
+    pattern:
+      - {text: hi}
+      - {text: ha}
+      - {text: la}
+      - {text: presència}
+      - {text: [de, "d'"]}
+      - {np: true, group: np, bare: true}
+    conditions:
+      groups:
+        np: {number: known}
+    transformation: "{np|agree(apareix,apareixen)} {np}"
+    examples:
+      positive:
+        - input: "En aquest sarcòfag hi ha la presència de dos cranis acompanyats de dos ossos creuats."
+          output: "En aquest sarcòfag apareixen dos cranis acompanyats de dos ossos creuats."
+        - input: "A la façana hi ha la presència d'un escut."
+          output: "A la façana apareix un escut."
+      negative:
+        - "Hi ha la presència de vegetació."
+
+  - rule_id: presencia.en_loc_hi_ha_la_presencia_a_presenta
+    engine: pattern
+    category: presencia
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.7
+    description: "«En L hi ha la presència de X» → «L presenta X» (locatiu inicial com a subjecte)"
+    pattern:
+      - {start: true}
+      - {text: [en, a]}
+      - {seq: true, group: loc, max_tokens: 14, no_comma: true}
+      - {text: hi}
+      - {text: ha}
+      - {text: la}
+      - {text: presència}
+      - {text: [de, "d'"]}
+      - {seq: true, group: obj, greedy: true}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        loc: {starts_with: ["@determiner"], no_finite_verb: true, number: known}
+        obj: {min_tokens: 1}
+    transformation: "{loc|cap} {loc|agree(presenta,presenten)} {obj}"
+    examples:
+      positive:
+        - input: "En aquest sarcòfag fet per l'escultor Benedetto da Rovezzano hi ha la presència de dos cranis acompanyats de dos ossos creuats, així com dues serps també creuades."
+          output: "Aquest sarcòfag fet per l'escultor Benedetto da Rovezzano presenta dos cranis acompanyats de dos ossos creuats, així com dues serps també creuades."
+      negative:
+        - "Hi ha la presència de dos cranis."
+        - "En aquest sarcòfag, que és de marbre, hi ha la presència de dos cranis."
+
+  - rule_id: presencia.en_loc_hi_ha_a_presenta
+    engine: pattern
+    category: presencia
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: medium
+    confidence: 0.6
+    description: "«En L hi ha X» → «L presenta X» (descripcions d'objectes)"
+    pattern:
+      - {start: true}
+      - {text: [en, a]}
+      - {seq: true, group: loc, max_tokens: 14, no_comma: true}
+      - {text: hi}
+      - {text: ha}
+      - {np: true, group: obj, bare: true}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        loc: {starts_with: ["@determiner"], no_finite_verb: true, number: known}
+        obj: {starts_with: ["@determiner", "@number"]}
+    exceptions: ["hi ha la presència"]
+    transformation: "{loc|cap} {loc|agree(presenta,presenten)} {obj}"
+    examples:
+      positive:
+        - input: "En aquest sarcòfag hi ha dos cranis."
+          output: "Aquest sarcòfag presenta dos cranis."
+      negative:
+        - "En aquest sarcòfag hi ha la presència de dos cranis."
+        - "Hi ha dos cranis."
