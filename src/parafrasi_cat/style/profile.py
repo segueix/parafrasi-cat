@@ -170,11 +170,20 @@ def load_style_profile(path: str | Path, *, paths: ProjectPaths | None = None) -
     directori del perfil).
     """
     file = Path(path)
-    profile = StyleProfile.from_mapping(load_mapping(file))
+    data = load_mapping(file)
+    if _is_fingerprint(data):
+        fingerprint = StyleFingerprint.from_dict(data)
+        return StyleProfile.from_fingerprint(fingerprint, fingerprint_path=str(file))
+    profile = StyleProfile.from_mapping(data)
     if not profile.fingerprint:
         return profile
     fingerprint_file = _resolve_fingerprint(profile.fingerprint, file, paths)
     return profile.with_preferences(StylePreferences(StyleFingerprint.load(fingerprint_file)))
+
+
+def _is_fingerprint(data: Mapping[str, object]) -> bool:
+    """Cert si el fitxer carregat és una empremta (``style/<autor>.json``) i no un perfil."""
+    return "schema_version" in data and "features" in data
 
 
 def _resolve_fingerprint(reference: str, profile_file: Path, paths: ProjectPaths | None) -> Path:

@@ -8,6 +8,7 @@ Exemples::
     parafrasi-cat --rules exemple-lexic --json "Gairebé sempre plou."
     parafrasi-cat style build corpus/author/
     parafrasi-cat style compare style/author.json style/altre.json
+    parafrasi-cat rewrite input.txt --style style/author.json --level 3 --candidates 10
 """
 
 from __future__ import annotations
@@ -37,8 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         epilog=(
             "Sense un conjunt de regles actiu, el text es retorna sense modificar. "
-            "Subordre «style»: «parafrasi-cat style build|compare|show» (vegeu "
-            "«parafrasi-cat style --help»)."
+            "Subordres: «parafrasi-cat rewrite FITXER» (reescriptura amb informe de candidats) "
+            "i «parafrasi-cat style build|compare|show» (empremtes d'estil)."
         ),
     )
     parser.add_argument(
@@ -151,6 +152,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         from parafrasi_cat.style.cli import style_main
 
         return style_main(arguments[1:])
+    if arguments and arguments[0] == "rewrite":
+        from parafrasi_cat.rewrite import rewrite_main
+
+        return rewrite_main(arguments[1:])
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

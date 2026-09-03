@@ -13,9 +13,16 @@ from collections.abc import Iterable
 
 from parafrasi_cat.candidates.candidate import Candidate
 from parafrasi_cat.core.errors import ConfigError
+from parafrasi_cat.core.transformation import Transformation
+from parafrasi_cat.protected.spans import ProtectionKind
 from parafrasi_cat.validation.base import ValidationContext
 from parafrasi_cat.validation.markers import MarkerSet
-from parafrasi_cat.validation.result import ValidationResult
+from parafrasi_cat.validation.result import (
+    ValidationDimension,
+    ValidationIssue,
+    ValidationResult,
+    ValidationSeverity,
+)
 
 _NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)*")
 _ROMAN_RE = re.compile(
@@ -29,18 +36,32 @@ class ProtectedSpanValidator:
     validator_id = "protected_spans"
 
     def validate(self, candidate: Candidate, ctx: ValidationContext) -> ValidationResult:
-        missing: list[str] = []
-        for text in dict.fromkeys(p.text for p in ctx.protected_spans):
-            if not text.strip():
+        missing: dict[str, ProtectionKind] = {}
+        for protected in ctx.protected_spans:
+            text = protected.text
+            if not text.strip() or text in missing:
                 continue
             if candidate.text.count(text) < ctx.source_text.count(text):
-                missing.append(text)
-        if missing:
-            listed = ", ".join(f"«{m}»" for m in missing)
-            return ValidationResult.error(
-                self.validator_id, f"El candidat ha alterat fragments protegits: {listed}"
+                missing[text] = protected.kind
+        if not missing:
+            return ValidationResult.passed()
+        issues: list[ValidationIssue] = []
+        for dimension in (ValidationDimension.FACTUAL, ValidationDimension.TERMINOLOGY):
+            listed = ", ".join(
+                f"«{text}» ({kind.label})"
+                for text, kind in missing.items()
+                if _dimension_of(kind) is dimension
             )
-        return ValidationResult.passed()
+            if listed:
+                issues.append(
+                    ValidationIssue(
+                        self.validator_id,
+                        ValidationSeverity.ERROR,
+                        f"El candidat ha alterat fragments protegits: {listed}",
+                        dimension,
+                    )
+                )
+        return ValidationResult(tuple(issues))
 
 
 class NumericInvariantValidator:
@@ -53,13 +74,17 @@ class NumericInvariantValidator:
         after = Counter(_NUMBER_RE.findall(candidate.text))
         if before != after:
             return ValidationResult.error(
-                self.validator_id, f"Les xifres han canviat: {_diff(before, after)}"
+                self.validator_id,
+                f"Les xifres han canviat: {_diff(before, after)}",
+                ValidationDimension.FACTUAL,
             )
         before = Counter(_ROMAN_RE.findall(ctx.source_text))
         after = Counter(_ROMAN_RE.findall(candidate.text))
         if before != after:
             return ValidationResult.error(
-                self.validator_id, f"Els números romans han canviat: {_diff(before, after)}"
+                self.validator_id,
+                f"Els números romans han canviat: {_diff(before, after)}",
+                ValidationDimension.FACTUAL,
             )
         return ValidationResult.passed()
 
@@ -85,7 +110,9 @@ class NegationValidator:
         after = self._markers.counts(candidate.text)
         if before != after:
             return ValidationResult.error(
-                self.validator_id, f"La negació ha canviat: {_diff(before, after)}"
+                self.validator_id,
+                f"La negació ha canviat: {_diff(before, after)}",
+                ValidationDimension.FACTUAL,
             )
         return ValidationResult.passed()
 
@@ -100,11 +127,23 @@ class HedgeValidator:
 
     validator_id = "modality"
 
-    def __init__(self, hedge_markers: Iterable[str], certainty_markers: Iterable[str]) -> None:
+    def __init__(
+        self,
+        hedge_markers: Iterable[str],
+        certainty_markers: Iterable[str],
+        authorized_rules: Iterable[str] = (),
+    ) -> None:
         self._hedges = MarkerSet(hedge_markers)
         self._certainty = MarkerSet(certainty_markers)
+        self._authorized = frozenset(authorized_rules)
 
     def validate(self, candidate: Candidate, ctx: ValidationContext) -> ValidationResult:
+        if candidate.transformations and all(
+            rule in self._authorized
+            for t in candidate.transformations
+            for rule in (t.rule_id, *_chained(t))
+        ):
+            return ValidationResult.passed()  # totes les regles poden canviar la modalitat
         hedges_before = self._hedges.count(ctx.source_text)
         hedges_after = self._hedges.count(candidate.text)
         if hedges_after < hedges_before:
@@ -112,6 +151,7 @@ class HedgeValidator:
                 self.validator_id,
                 f"S'han perdut marcadors d'atenuació ({hedges_before} → {hedges_after}): "
                 "una hipòtesi podria haver-se convertit en afirmació",
+                ValidationDimension.EPISTEMIC,
             )
         certainty_before = self._certainty.count(ctx.source_text)
         certainty_after = self._certainty.count(candidate.text)
@@ -119,6 +159,7 @@ class HedgeValidator:
             return ValidationResult.error(
                 self.validator_id,
                 f"S'han afegit marcadors de certesa ({certainty_before} → {certainty_after})",
+                ValidationDimension.EPISTEMIC,
             )
         return ValidationResult.passed()
 
@@ -148,8 +189,19 @@ class LengthRatioValidator:
                 self.validator_id,
                 f"La longitud del candidat ({ratio:.2f}× l'original) surt del marge "
                 f"[{self._min}, {self._max}]",
+                ValidationDimension.LENGTH,
             )
         return ValidationResult.passed()
+
+
+def _chained(transformation: Transformation) -> tuple[str, ...]:
+    return tuple(r for r in transformation.metadata.get("chained_rules", "").split(",") if r)
+
+
+def _dimension_of(kind: ProtectionKind) -> ValidationDimension:
+    if kind is ProtectionKind.USER_TERM:
+        return ValidationDimension.TERMINOLOGY
+    return ValidationDimension.FACTUAL
 
 
 def _diff(before: Counter[str], after: Counter[str]) -> str:

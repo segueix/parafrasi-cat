@@ -49,6 +49,7 @@ _KNOWN_KEYS = frozenset(
         "rule_id", "id", "engine", "language", "category", "level", "description",
         "transformation_type", "semantic_risk", "confidence", "pattern", "transformation",
         "transformations", "conditions", "exceptions", "examples", "enabled",
+        "allows_epistemic_change",
     }
 )  # fmt: skip
 
@@ -86,6 +87,8 @@ class RuleDefinition:
     params: Mapping[str, object] = field(default_factory=dict)
     enabled: bool = True
     source: str = ""
+    allows_epistemic_change: bool = False
+    """Cert si la regla està autoritzada a canviar la força o la funció epistemològica."""
 
     def __post_init__(self) -> None:
         if not self.rule_id:
@@ -157,6 +160,7 @@ class RuleDefinition:
             params=params,
             enabled=as_bool(data, "enabled", True),
             source=source,
+            allows_epistemic_change=as_bool(data, "allows_epistemic_change", False),
         )
 
 

@@ -41,6 +41,7 @@ class PipelineConfig:
         max_transformations_per_sentence: Límit de transformacions combinades per frase.
         max_candidates_per_sentence: Límit de candidats avaluats per frase.
         candidate_depth: Nivells de reaplicació de regles sobre els candidats (1 = cap).
+        level: Nivell màxim de les regles actives (1 lèxic … 5 paràgraf); ``None`` = totes.
         length_ratio: Marge de longitud (mínim, màxim) acceptat respecte de l'original.
         use_style: Si és fals, no es calcula la distància d'estil.
     """
@@ -58,10 +59,13 @@ class PipelineConfig:
     max_transformations_per_sentence: int = 3
     max_candidates_per_sentence: int = 20
     candidate_depth: int = 2
+    level: int | None = None
     length_ratio: tuple[float, float] = (0.6, 1.6)
     use_style: bool = True
 
     def __post_init__(self) -> None:
+        if self.level is not None and not 1 <= self.level <= 5:
+            raise ConfigError("level ha d'estar entre 1 i 5")
         if self.min_confidence is not None and not 0.0 <= self.min_confidence <= 1.0:
             raise ConfigError("min_confidence ha d'estar entre 0 i 1")
         if self.candidate_depth < 1:
@@ -123,6 +127,7 @@ class PipelineConfig:
                 data, "max_candidates_per_sentence", defaults.max_candidates_per_sentence
             ),
             candidate_depth=as_int(data, "candidate_depth", defaults.candidate_depth),
+            level=as_int(data, "level") if data.get("level") is not None else None,
             length_ratio=(
                 as_float(ratio, "min", defaults.length_ratio[0]),
                 as_float(ratio, "max", defaults.length_ratio[1]),
@@ -152,6 +157,7 @@ class PipelineConfig:
             "max_transformations_per_sentence": self.max_transformations_per_sentence,
             "max_candidates_per_sentence": self.max_candidates_per_sentence,
             "candidate_depth": self.candidate_depth,
+            "level": self.level,
             "length_ratio": {"min": self.length_ratio[0], "max": self.length_ratio[1]},
             "use_style": self.use_style,
         }

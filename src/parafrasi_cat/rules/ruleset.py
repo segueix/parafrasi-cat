@@ -119,6 +119,22 @@ class RuleSet:
                 return rule
         raise KeyError(rule_id)
 
+    @property
+    def epistemic_rule_ids(self) -> tuple[str, ...]:
+        """Regles autoritzades explícitament a canviar la força epistemològica."""
+        return tuple(d.rule_id for d in self.definitions if d.allows_epistemic_change)
+
+    def up_to_level(self, level: int | None) -> RuleSet:
+        """Conjunt restringit a les regles de nivell ≤ ``level`` (``None`` = totes)."""
+        if level is None:
+            return self
+        if level < 1:
+            raise ConfigError("El nivell ha de ser almenys 1")
+        rules = tuple(rule for rule in self.rules if rule.level <= level)
+        kept = {rule.rule_id for rule in rules}
+        definitions = tuple(d for d in self.definitions if d.rule_id in kept)
+        return RuleSet(self.config, rules, definitions)
+
 
 def build_rule_set(
     config: RuleSetConfig,

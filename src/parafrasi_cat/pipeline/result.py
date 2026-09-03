@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from parafrasi_cat.candidates.candidate import Candidate
@@ -15,7 +16,7 @@ from parafrasi_cat.validation.result import ValidationResult
 
 @dataclass(frozen=True, slots=True)
 class EvaluatedCandidate:
-    """Un candidat amb el resultat de validació i, si l'ha superada, la puntuació."""
+    """Un candidat amb el resultat de validació i la puntuació."""
 
     candidate: Candidate
     validation: ValidationResult
@@ -24,7 +25,22 @@ class EvaluatedCandidate:
 
     @property
     def accepted(self) -> bool:
-        return self.validation.ok and self.score is not None
+        """Cert si ha superat la validació i cap dimensió de preservació l'invalida."""
+        return self.validation.ok and self.score is not None and self.score.valid
+
+    @property
+    def rejection_reason(self) -> str:
+        """Motiu del descart (buit si el candidat és acceptable)."""
+        if not self.validation.ok:
+            return self.validation.summary
+        if self.score is not None and not self.score.valid:
+            return "; ".join(self.score.invalidating)
+        return ""
+
+    @property
+    def importance(self) -> float:
+        """Importància d'un candidat descartat: confiança acumulada de les transformacions."""
+        return sum(t.confidence for t in self.candidate.transformations)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -32,6 +48,8 @@ class EvaluatedCandidate:
             "validation": self.validation.to_dict(),
             "score": None if self.score is None else self.score.to_dict(),
             "selected": self.selected,
+            "accepted": self.accepted,
+            "rejection_reason": self.rejection_reason,
         }
 
 
@@ -47,16 +65,31 @@ class RejectedProposal:
 
 
 @dataclass(frozen=True, slots=True)
-class SentenceResult:
-    """Resultat del processament d'una frase."""
+class DiscardedCandidate:
+    """Un candidat no escollit i el motiu."""
 
-    index: int
-    source_text: str
-    span: Span
-    output_text: str
+    evaluated: EvaluatedCandidate
+    reason: str
+
+    @property
+    def text(self) -> str:
+        return self.evaluated.candidate.text
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "text": self.text,
+            "rule_ids": list(self.evaluated.candidate.rule_ids),
+            "accepted": self.evaluated.accepted,
+            "score": None if self.evaluated.score is None else self.evaluated.score.total,
+            "reason": self.reason,
+        }
+
+
+class _UnitResult:
+    """Comportament comú dels resultats de frase i de paràgraf."""
+
     candidates: tuple[EvaluatedCandidate, ...]
     rejected_proposals: tuple[RejectedProposal, ...]
-    protected_spans: tuple[ProtectedSpan, ...]
 
     @property
     def selected(self) -> EvaluatedCandidate:
@@ -70,15 +103,78 @@ class SentenceResult:
         return self.selected.candidate.transformations
 
     @property
-    def changed(self) -> bool:
-        return self.output_text != self.source_text
-
-    @property
     def alternatives(self) -> tuple[str, ...]:
         """Textos de tots els candidats acceptats (validats), sense l'identitat."""
         return tuple(
             e.candidate.text for e in self.candidates if e.accepted and not e.candidate.is_identity
         )
+
+    @property
+    def applied_rule_ids(self) -> tuple[str, ...]:
+        return self.selected.candidate.rule_ids
+
+    def discarded(self, limit: int = 5) -> tuple[DiscardedCandidate, ...]:
+        """Candidats no escollits més importants, amb el motiu del descart.
+
+        Primer els acceptats però no seleccionats (per puntuació), després els
+        rebutjats per la validació o la puntuació (per importància).
+        """
+        best_total = self.selected.score.total if self.selected.score is not None else 0.0
+        accepted: list[DiscardedCandidate] = []
+        rejected: list[DiscardedCandidate] = []
+        for evaluated in self.candidates:
+            if evaluated.selected or evaluated.candidate.is_identity:
+                continue
+            if evaluated.accepted:
+                total = evaluated.score.total if evaluated.score is not None else 0.0
+                accepted.append(
+                    DiscardedCandidate(
+                        evaluated,
+                        f"no seleccionat: puntuació {total:.3f} inferior a la del millor "
+                        f"({best_total:.3f})",
+                    )
+                )
+            else:
+                rejected.append(
+                    DiscardedCandidate(evaluated, "rebutjat: " + evaluated.rejection_reason)
+                )
+        accepted.sort(key=lambda d: -(d.evaluated.score.total if d.evaluated.score else 0.0))
+        rejected.sort(key=lambda d: -d.evaluated.importance)
+        return tuple((*accepted, *rejected)[:limit])
+
+    def summary(self, max_discarded: int = 5) -> dict[str, object]:
+        """Resum estructurat: millor candidat, puntuacions, regles i descartats."""
+        selected = self.selected
+        return {
+            "best": selected.candidate.text,
+            "changed": not selected.candidate.is_identity,
+            "applied_rules": [
+                {"rule_id": t.rule_id, "before": t.text_before, "after": t.text_after}
+                for t in selected.candidate.transformations
+            ],
+            "score": None if selected.score is None else selected.score.to_dict(),
+            "n_candidates": len(self.candidates),
+            "n_rejected": sum(1 for c in self.candidates if not c.accepted),
+            "n_rejected_proposals": len(self.rejected_proposals),
+            "discarded": [d.to_dict() for d in self.discarded(max_discarded)],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class SentenceResult(_UnitResult):
+    """Resultat del processament d'una frase."""
+
+    index: int
+    source_text: str
+    span: Span
+    output_text: str
+    candidates: tuple[EvaluatedCandidate, ...]
+    rejected_proposals: tuple[RejectedProposal, ...]
+    protected_spans: tuple[ProtectedSpan, ...]
+
+    @property
+    def changed(self) -> bool:
+        return self.output_text != self.source_text
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -89,6 +185,7 @@ class SentenceResult:
             "changed": self.changed,
             "transformations": [t.to_dict() for t in self.transformations],
             "alternatives": list(self.alternatives),
+            "summary": self.summary(),
             "candidates": [c.to_dict() for c in self.candidates],
             "rejected_proposals": [r.to_dict() for r in self.rejected_proposals],
             "protected_spans": [p.to_dict() for p in self.protected_spans],
@@ -96,7 +193,7 @@ class SentenceResult:
 
 
 @dataclass(frozen=True, slots=True)
-class ParagraphResult:
+class ParagraphResult(_UnitResult):
     """Resultat de les regles de paràgraf (fusió de frases) sobre un paràgraf.
 
     ``intermediate_text`` és el paràgraf després de les transformacions de
@@ -113,25 +210,8 @@ class ParagraphResult:
     protected_spans: tuple[ProtectedSpan, ...]
 
     @property
-    def selected(self) -> EvaluatedCandidate:
-        for evaluated in self.candidates:
-            if evaluated.selected:
-                return evaluated
-        raise LookupError("Cap candidat seleccionat")  # pragma: no cover
-
-    @property
-    def transformations(self) -> tuple[Transformation, ...]:
-        return self.selected.candidate.transformations
-
-    @property
     def changed(self) -> bool:
         return self.output_text != self.intermediate_text
-
-    @property
-    def alternatives(self) -> tuple[str, ...]:
-        return tuple(
-            e.candidate.text for e in self.candidates if e.accepted and not e.candidate.is_identity
-        )
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -143,6 +223,7 @@ class ParagraphResult:
             "changed": self.changed,
             "transformations": [t.to_dict() for t in self.transformations],
             "alternatives": list(self.alternatives),
+            "summary": self.summary(),
             "candidates": [c.to_dict() for c in self.candidates],
             "rejected_proposals": [r.to_dict() for r in self.rejected_proposals],
         }
@@ -226,6 +307,32 @@ class ParaphraseResult:
                 lines.append(f"  ✘ Proposta descartada {described} — {rejected.reason}")
         return "\n".join(lines)
 
+    def report(self, max_discarded: int = 5) -> str:
+        """Informe de reescriptura: millor candidat, puntuacions, regles i descartats."""
+        lines = ["=== Reescriptura ==="]
+        lines.append(f"Conjunt de regles: {self.rule_set_name or '(cap)'}")
+        if self.style_profile_name:
+            lines.append(f"Estil de referència: {self.style_profile_name}")
+        lines.append(
+            f"Frases: {len(self.sentences)} · canviades: "
+            f"{sum(1 for s in self.sentences if s.changed)} · candidats avaluats: "
+            f"{self.n_candidates} · descartats: {self.n_rejected_candidates}"
+        )
+        for sentence in self.sentences:
+            lines.append("")
+            lines.append(f"Frase {sentence.index + 1}: «{sentence.source_text}»")
+            _report_unit(lines, sentence, max_discarded)
+        for paragraph in self.paragraphs:
+            if not paragraph.changed and len(paragraph.candidates) <= 1:
+                continue
+            lines.append("")
+            lines.append(f"Paràgraf {paragraph.index + 1} (regles entre frases):")
+            _report_unit(lines, paragraph, max_discarded)
+        lines.append("")
+        lines.append("Text resultant:")
+        lines.append(self.output_text)
+        return "\n".join(lines)
+
     def to_dict(self) -> dict[str, object]:
         return {
             "source_text": self.source_text,
@@ -248,7 +355,7 @@ def _explain_unit(
     lines: list[str],
     source_text: str,
     output_text: str,
-    candidates: tuple[EvaluatedCandidate, ...],
+    candidates: Sequence[EvaluatedCandidate],
 ) -> None:
     selected = next((c for c in candidates if c.selected), None)
     if output_text != source_text and selected is not None:
@@ -259,12 +366,36 @@ def _explain_unit(
     for evaluated in candidates:
         if evaluated.selected or evaluated.candidate.is_identity:
             continue
-        if evaluated.score is None:
-            reasons = "; ".join(i.describe() for i in evaluated.validation.errors)
-            lines.append(f"  ✘ Candidat rebutjat «{evaluated.candidate.text}»: {reasons}")
-        else:
+        if not evaluated.accepted:
+            lines.append(
+                f"  ✘ Candidat rebutjat «{evaluated.candidate.text}»: {evaluated.rejection_reason}"
+            )
+        elif evaluated.score is not None:
             rules = ", ".join(evaluated.candidate.rule_ids)
             lines.append(
                 f"  · Candidat no seleccionat «{evaluated.candidate.text}» "
                 f"[{rules}] (puntuació {evaluated.score.total:+.3f}: {evaluated.score.explanation})"
             )
+
+
+def _report_unit(lines: list[str], unit: _UnitResult, max_discarded: int) -> None:
+    selected = unit.selected
+    if selected.candidate.is_identity:
+        lines.append("  → sense canvis (cap candidat segur millora l'original)")
+    else:
+        lines.append(f"  → «{selected.candidate.text}»")
+        lines.append("  Regles aplicades:")
+        for t in selected.candidate.transformations:
+            lines.append(f"    · {t.rule_id}: «{t.text_before}» → «{t.text_after}»")
+    if selected.score is not None:
+        lines.append(
+            f"  Puntuacions: global {selected.score.total:+.3f} · "
+            f"{selected.score.describe_dimensions()}"
+        )
+    discarded = unit.discarded(max_discarded)
+    if discarded:
+        lines.append("  Candidats descartats destacats:")
+        for item in discarded:
+            rules = ", ".join(item.evaluated.candidate.rule_ids) or "—"
+            marker = "·" if item.evaluated.accepted else "✘"
+            lines.append(f"    {marker} «{item.text}» [{rules}] — {item.reason}")

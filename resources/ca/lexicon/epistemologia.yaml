@@ -1,0 +1,97 @@
+# Classificació explícita de la força i la funció epistemològica de les
+# expressions. El validador epistemològic bloqueja qualsevol transformació que
+# canviï el recompte d'expressions d'una classe (augmenta o redueix el grau de
+# certesa, o canvia la funció) si cap regla no ho autoritza explícitament
+# (clau «allows_epistemic_change: true» a la definició de la regla).
+#
+# strength: 0 impossibilitat · 1 possibilitat / dubte / plantejament ·
+#           2 probabilitat / aparença / creença / indici / suggeriment ·
+#           3 afirmació (forma no marcada) · 4 certesa / demostració / confirmació
+# Dues classes amb la mateixa força NO són equivalents: «indica» no és
+# «suggereix», «demostra» no és «confirma», «potser» no és «podria».
+description: Força i funció epistemològica de les expressions (marcadors per classe).
+language: ca
+classes:
+  - id: impossibility
+    label: impossibilitat de demostrar
+    strength: 0
+    markers: [no es pot demostrar, no es pot afirmar, no es pot confirmar, no es pot saber,
+              no es pot determinar, no és possible demostrar, no és demostrable, no hi ha proves,
+              no ha estat demostrat, no s'ha pogut demostrar, no s'ha demostrat, resta sense demostrar]
+  - id: doubt
+    label: dubte
+    strength: 1
+    markers: [potser, tal vegada, qui sap si, hipotèticament, per ventura]
+  - id: modal_possibility
+    label: possibilitat modal
+    strength: 1
+    markers: [podria, podrien, podria ser, pot ser que, podria haver]
+  - id: possibility
+    label: possibilitat
+    strength: 1
+    markers: [és possible, possiblement, cabria la possibilitat, hi ha la possibilitat,
+              no es descarta]
+  - id: proposal
+    label: plantejament d'hipòtesi
+    strength: 1
+    markers: [permet plantejar, permet suposar, permet pensar, permet imaginar, permet hipotetitzar,
+              es pot plantejar, es podria plantejar, fa pensar, convida a pensar, hipòtesi]
+  - id: probability
+    label: probabilitat
+    strength: 2
+    markers: [probablement, versemblantment, presumiblement, presumptament, suposadament,
+              segurament, amb tota probabilitat]
+  - id: probable_assessment
+    label: valoració de probabilitat
+    strength: 2
+    markers: [és probable, és versemblant, resulta probable, sembla probable]
+  - id: appearance
+    label: aparença
+    strength: 2
+    markers: [sembla, semblen, sembla que, semblaria, semblava, aparentment, a primera vista,
+              es diria, fa l'efecte, té l'aparença]
+  - id: belief
+    label: creença o consideració
+    strength: 2
+    markers: [es creu, es considera, es pensa, es suposa, hom creu, hom considera, es té per]
+  - id: indication
+    label: indici
+    strength: 2
+    markers: [indica, indiquen, indicaria, indicarien, apunta a, apunten a, apunta que, apunten que,
+              assenyala que, assenyalen que]
+  - id: suggestion
+    label: suggeriment
+    strength: 2
+    markers: [suggereix, suggereixen, suggeriria, insinua, insinuen, deixa entreveure]
+  - id: assertion
+    label: afirmació
+    strength: 3
+    # Forma no marcada: no es compta (afegir o treure una còpula no canvia la
+    # certesa), però sí que identifica una hipòtesi convertida en afirmació.
+    counted: false
+    markers: [és, són, era, eren, fou, foren, serà, seran, va ser, van ser, ha estat, han estat,
+              constitueix, constitueixen, correspon, corresponen, esdevé, esdevenen,
+              representa, representen]
+  - id: certainty
+    label: certesa
+    strength: 4
+    markers: [certament, sens dubte, sense cap dubte, sense cap mena de dubte, indubtablement,
+              inqüestionablement, innegablement, evidentment, òbviament, clarament, és evident,
+              és clar, és cert, és obvi, és indubtable, definitivament, necessàriament,
+              amb tota seguretat]
+  - id: demonstration
+    label: demostració
+    strength: 4
+    markers: [demostra, demostren, demostrà, demostraren, ha demostrat, han demostrat,
+              queda demostrat, prova que, proven que, evidencia, evidencien, posa de manifest,
+              posen de manifest, estableix que, estableixen que]
+  - id: confirmation
+    label: confirmació
+    strength: 4
+    markers: [confirma, confirmen, confirmà, confirmaren, ha confirmat, han confirmat, corrobora,
+              corroboren, ratifica, ratifiquen, verifica, verifiquen, constata, constaten]
+  - id: necessity
+    label: necessitat (deòntica, fora de l'escala de certesa)
+    strength: null
+    markers: [cal, calia, caldrà, caldria, calgui, és necessari, és necessària, és imprescindible,
+              és obligatori, és indispensable]

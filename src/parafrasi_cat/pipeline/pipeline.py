@@ -25,7 +25,7 @@ from parafrasi_cat.protected.protector import Protector
 from parafrasi_cat.protected.spans import ProtectedSpan
 from parafrasi_cat.rules.base import ParagraphContext, RuleContext
 from parafrasi_cat.rules.ruleset import RuleSet, RuleSetConfig
-from parafrasi_cat.scoring.scorer import ScoreBreakdown, Scorer
+from parafrasi_cat.scoring.scorer import ScoreBreakdown, Scorer, ScoringContext
 from parafrasi_cat.scoring.selection import select_best
 from parafrasi_cat.style.profile import StyleProfile
 from parafrasi_cat.validation.base import ValidationContext, Validator
@@ -44,8 +44,11 @@ class Pipeline:
        un fragment protegit, superen el risc màxim o no arriben a la confiança mínima.
     3. Es generen candidats (identitat, transformacions soltes, combinacions i,
        si escau, reaplicació de regles sobre els millors candidats).
-    4. Cada candidat passa tots els validadors; els que fallen queden rebutjats.
-    5. Els candidats vàlids es puntuen i se'n tria el millor de manera determinista.
+    4. Cada candidat passa tots els validadors (preservació factual, terminologia,
+       epistemologia, gramaticalitat, longitud); els que fallen queden rebutjats.
+    5. Tots els candidats es puntuen per dimensions; només els vàlids competeixen
+       i se'n tria el millor de manera determinista. Si cap candidat amb canvis
+       és segur, es conserva l'original.
 
     Fase de paràgraf (només si hi ha regles de paràgraf): sobre el text de cada
     paràgraf resultant, les regles entre frases (fusió) proposen transformacions
@@ -69,10 +72,12 @@ class Pipeline:
         style_profile: StyleProfile | None = None,
         morphology: MorphologyProvider | None = None,
         lexicon: ClosedClassLexicon | None = None,
+        max_level: int | None = None,
     ) -> None:
         self._analyzer = analyzer
         self._protector = protector
-        self._rule_set = rule_set or RuleSet(RuleSetConfig.empty(), ())
+        self._rule_set = (rule_set or RuleSet(RuleSetConfig.empty(), ())).up_to_level(max_level)
+        self._max_level = max_level
         self._generator = generator or CandidateGenerator()
         self._validators = tuple(validators)
         self._scorer = scorer
@@ -117,6 +122,10 @@ class Pipeline:
     @property
     def lexicon(self) -> ClosedClassLexicon | None:
         return self._lexicon
+
+    @property
+    def max_level(self) -> int | None:
+        return self._max_level
 
     # --- execució ------------------------------------------------------------------------
 
@@ -267,7 +276,9 @@ class Pipeline:
             validation = ValidationResult.merge(
                 validator.validate(candidate, validation_ctx) for validator in self._validators
             )
-            score = self._scorer.score(candidate) if validation.ok else None
+            score = self._scorer.score(
+                candidate, ScoringContext(validation, validation_ctx.source_text)
+            )
             evaluated.append(EvaluatedCandidate(candidate, validation, score))
         accepted = [e for e in evaluated if e.accepted]
         best = select_best(accepted, lambda e: e.candidate, _score_of)
