@@ -1,0 +1,35 @@
+# Terminologia d'escacs. S'activa amb «--dictionary escacs».
+description: Terminologia d'escacs (peces, jugades i fases de la partida).
+language: ca
+entries:
+  - term: tauler
+    preferred: [tauler, tauler d'escacs]
+    avoid: [taulell]
+    pos: nom
+    notes: "«taulell» és el mostrador d'una botiga; el dels escacs és el «tauler»."
+  - term: alfil
+    preferred: [alfil]
+    avoid: [bisbe]
+    pos: nom
+    notes: "«bisbe» és un calc de l'anglès «bishop»."
+  - term: dama
+    preferred: [dama]
+    accepted: [reina]
+    pos: nom
+  - term: peó
+    preferred: [peó]
+    avoid: [peon]
+    pos: nom
+  - term: enroc
+    preferred: [enroc]
+    avoid: [enroque]
+    pos: nom
+  - term: escac i mat
+    preferred: [escac i mat]
+    avoid: [jaque mate, xec mat]
+    protected: true
+    pos: locució nominal
+  - term: obertura
+    preferred: [obertura]
+    accepted: [inici de partida]
+    pos: nom

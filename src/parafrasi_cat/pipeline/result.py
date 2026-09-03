@@ -241,6 +241,8 @@ class ParaphraseResult:
     rule_ids: tuple[str, ...] = ()
     style_profile_name: str = ""
     paragraphs: tuple[ParagraphResult, ...] = ()
+    dictionary_names: tuple[str, ...] = ()
+    preferences_name: str = ""
 
     @property
     def transformations(self) -> tuple[Transformation, ...]:
@@ -276,6 +278,7 @@ class ParaphraseResult:
         lines.append("Regles actives: " + (", ".join(self.rule_ids) if self.rule_ids else "cap"))
         if self.style_profile_name:
             lines.append(f"Perfil d'estil: {self.style_profile_name}")
+        self._sources(lines)
         lines.append(
             f"Frases: {len(self.sentences)} · Transformacions aplicades: "
             f"{len(self.transformations)} · Candidats avaluats: {self.n_candidates} · "
@@ -313,6 +316,7 @@ class ParaphraseResult:
         lines.append(f"Conjunt de regles: {self.rule_set_name or '(cap)'}")
         if self.style_profile_name:
             lines.append(f"Estil de referència: {self.style_profile_name}")
+        self._sources(lines)
         lines.append(
             f"Frases: {len(self.sentences)} · canviades: "
             f"{sum(1 for s in self.sentences if s.changed)} · candidats avaluats: "
@@ -333,6 +337,12 @@ class ParaphraseResult:
         lines.append(self.output_text)
         return "\n".join(lines)
 
+    def _sources(self, lines: list[str]) -> None:
+        if self.dictionary_names:
+            lines.append("Diccionaris actius: " + ", ".join(self.dictionary_names))
+        if self.preferences_name:
+            lines.append(f"Preferències de l'autor: {self.preferences_name}")
+
     def to_dict(self) -> dict[str, object]:
         return {
             "source_text": self.source_text,
@@ -341,6 +351,8 @@ class ParaphraseResult:
             "rule_set": self.rule_set_name,
             "rule_ids": list(self.rule_ids),
             "style_profile": self.style_profile_name,
+            "dictionaries": list(self.dictionary_names),
+            "preferences": self.preferences_name,
             "transformations": [t.to_dict() for t in self.transformations],
             "protected_spans": [p.to_dict() for p in self.protected_spans],
             "sentences": [s.to_dict() for s in self.sentences],
@@ -363,6 +375,8 @@ def _explain_unit(
         lines.extend(f"  ✔ {t.describe()}" for t in selected.candidate.transformations)
     else:
         lines.append("  → sense canvis")
+    if selected is not None:
+        _explain_preferences(lines, selected)
     for evaluated in candidates:
         if evaluated.selected or evaluated.candidate.is_identity:
             continue
@@ -376,6 +390,15 @@ def _explain_unit(
                 f"  · Candidat no seleccionat «{evaluated.candidate.text}» "
                 f"[{rules}] (puntuació {evaluated.score.total:+.3f}: {evaluated.score.explanation})"
             )
+
+
+def _explain_preferences(lines: list[str], selected: EvaluatedCandidate) -> None:
+    """Per què les preferències explícites afavoreixen (o penalitzen) el candidat triat."""
+    score = selected.score
+    if score is None or not score.preference_explanation:
+        return
+    bonus = score.components.get("preferencies", 0.0)
+    lines.append(f"  Preferències de l'autor ({bonus:+.3f}): {score.preference_explanation}")
 
 
 def _report_unit(lines: list[str], unit: _UnitResult, max_discarded: int) -> None:
@@ -392,6 +415,7 @@ def _report_unit(lines: list[str], unit: _UnitResult, max_discarded: int) -> Non
             f"  Puntuacions: global {selected.score.total:+.3f} · "
             f"{selected.score.describe_dimensions()}"
         )
+    _explain_preferences(lines, selected)
     discarded = unit.discarded(max_discarded)
     if discarded:
         lines.append("  Candidats descartats destacats:")

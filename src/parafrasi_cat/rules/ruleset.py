@@ -10,7 +10,7 @@ Un conjunt de regles pot:
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -134,6 +134,14 @@ class RuleSet:
         kept = {rule.rule_id for rule in rules}
         definitions = tuple(d for d in self.definitions if d.rule_id in kept)
         return RuleSet(self.config, rules, definitions)
+
+    def with_extra_rules(self, rules: Iterable[AnyRule]) -> RuleSet:
+        """Conjunt ampliat amb regles construïdes en codi (p. ex. la dels diccionaris)."""
+        extra = tuple(rules)
+        ids = [*self.rule_ids, *(rule.rule_id for rule in extra)]
+        if len(ids) != len(set(ids)):
+            raise ConfigError("Hi ha identificadors de regla repetits en ampliar el conjunt")
+        return RuleSet(self.config, (*self.rules, *extra), self.definitions)
 
 
 def build_rule_set(

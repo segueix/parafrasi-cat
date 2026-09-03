@@ -1,0 +1,40 @@
+# Diccionari general del projecte: formes preferides i formes a evitar en
+# registre formal, independents del tema. S'activa amb «--dictionary general».
+#
+# Format de cada entrada (vegeu README.md):
+#   term       terme canònic (obligatori)
+#   preferred  formes que el motor ha de fer servir (per defecte, el terme)
+#   accepted   formes tolerades: ni es proposen ni es penalitzen
+#   avoid      formes que cal evitar: es proposa substituir-les per la preferida
+#   protected  cap regla pot modificar el terme ni les formes conservades
+#   pos        categoria gramatical (informativa)
+#   notes      explicació que s'afegeix a les justificacions
+description: Diccionari general del projecte (registre formal, sense tema concret).
+language: ca
+confidence: 0.85
+entries:
+  - term: a causa de
+    preferred: [a causa de]
+    accepted: [per causa de, arran de]
+    avoid: [degut a]
+    pos: locució prepositiva
+    notes: "«degut a» com a locució causal no és recomanable en registre formal."
+  - term: pel que fa a
+    preferred: [pel que fa a, quant a]
+    accepted: [respecte a, respecte de]
+    pos: locució prepositiva
+    notes: "«a nivell de» té un sentit literal legítim: es penalitza des de les preferències, no se substitueix."
+  - term: a partir de
+    preferred: [a partir de]
+    accepted: [sobre la base de, d'acord amb]
+    avoid: [en base a]
+    pos: locució prepositiva
+  - term: tanmateix
+    preferred: [tanmateix, no obstant això]
+    accepted: [però, ara bé]
+    pos: connector
+    notes: "Connector de contrast en registre formal."
+  - term: per tant
+    preferred: [per tant, així doncs]
+    accepted: [en conseqüència, doncs]
+    pos: connector

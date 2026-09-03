@@ -1,0 +1,22 @@
+# Noms propis del projecte en format de diccionari: totes les entrades són
+# protegides (cap regla les pot modificar) i poden dur formes acceptades.
+# El fitxer noms_propis.txt (una línia per nom, coincidència exacta) continua
+# carregant-se sempre; aquest s'activa amb «--dictionary noms_propis».
+description: Noms propis del projecte (protegits; formes acceptades documentades).
+language: ca
+entries:
+  - term: Oddo Altoviti
+    protected: true
+    pos: nom propi
+  - term: Benedetto da Rovezzano
+    protected: true
+    pos: nom propi
+    notes: "Escultor florentí."
+  - term: Jaume I
+    accepted: [Jaume el Conqueridor]
+    protected: true
+    pos: nom propi
+  - term: Institut d'Estudis Catalans
+    accepted: [IEC]
+    protected: true
+    pos: nom propi

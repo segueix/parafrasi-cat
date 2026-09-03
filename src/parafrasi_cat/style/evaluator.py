@@ -4,6 +4,10 @@ Amb un perfil senzill, la distància només depèn de la longitud de frase, dels
 mots evitats i dels connectors preferits. Si el perfil porta les preferències
 d'un autor (empremta), s'hi afegeixen components que mesuren si el text fa
 servir les variants, els connectors i la densitat de comes de l'autor.
+
+Les formes amb una preferència explícita (``explicit_forms``: diccionaris del
+projecte, fitxer de preferències, feedback) queden fora d'aquests components:
+la preferència explícita mana sobre l'estadística de l'empremta.
 """
 
 from __future__ import annotations
@@ -12,6 +16,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from parafrasi_cat.analyzer.analysis import Analyzer
+from parafrasi_cat.analyzer.lexicon import normalize_form
 from parafrasi_cat.core.text import phrase_pattern
 from parafrasi_cat.style.metrics import StyleMetrics, compute_style_metrics
 from parafrasi_cat.style.observations import DocumentObserver, StyleResources
@@ -49,6 +54,7 @@ class StyleEvaluator:
         *,
         resources: StyleResources | None = None,
         preferences: StylePreferences | None = None,
+        explicit_forms: Iterable[str] = (),
     ) -> None:
         self._profile = profile
         self._analyzer = analyzer
@@ -57,10 +63,16 @@ class StyleEvaluator:
         self._preferred = [phrase_pattern(c) for c in profile.preferred_connectors if c.strip()]
         self._preferences = preferences if preferences is not None else profile.preferences
         self._observer = DocumentObserver(resources) if resources is not None else None
+        self._explicit = frozenset(normalize_form(form) for form in explicit_forms)
 
     @property
     def profile(self) -> StyleProfile:
         return self._profile
+
+    @property
+    def explicit_forms(self) -> frozenset[str]:
+        """Formes normalitzades que l'empremta no valora: ja tenen una preferència explícita."""
+        return self._explicit
 
     @property
     def preferences(self) -> StylePreferences | None:
@@ -110,6 +122,8 @@ class StyleEvaluator:
             if not preferences.is_reliable(f"variant_preferences.{group_id}"):
                 continue
             for variant_id, examples in variants.items():
+                if normalize_form(variant_id) in self._explicit:
+                    continue  # la preferència explícita de l'autor mana sobre l'empremta
                 share = preferences.variant_share(group_id, variant_id)
                 if share is not None:
                     variant_penalties.extend([1.0 - share] * len(examples))
@@ -117,6 +131,8 @@ class StyleEvaluator:
             components["variants_autor"] = _clip(sum(variant_penalties) / len(variant_penalties))
         connector_penalties: list[float] = []
         for hit in observations.connectors:
+            if normalize_form(hit.form) in self._explicit:
+                continue
             share = preferences.connector_share(hit.form)
             if share is not None:
                 connector_penalties.append(1.0 - share)

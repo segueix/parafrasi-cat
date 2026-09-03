@@ -1,0 +1,31 @@
+# Preferències explícites de l'autor. Són editables i tenen prioritat sobre
+# l'empremta estadística (style/<autor>.json); només els fragments protegits i
+# els diccionaris del projecte passen per davant.
+#
+#   prefer                    formes o locucions que l'autor prefereix (pes 1)
+#   avoid                     formes o locucions que l'autor evita (pes 0)
+#   preferred_connectors      connectors habituals de l'autor (pes 1)
+#   preferred_sentence_length longitud de frase preferida (paraules)
+#   max_sentence_length       longitud màxima acceptable (paraules)
+#   preferred_variants        pes (0-1) de cada variant equivalent
+#   feedback                  fitxer amb el feedback manual (ruta relativa a aquest fitxer)
+#
+# Ús: parafrasi-cat rewrite text.txt --preferences preferences/author.yml
+name: autor
+description: Preferències explícites d'exemple; adapteu-les al vostre projecte.
+prefer:
+  - "així com"
+  - "per tant"
+avoid:
+  - "a nivell de"
+  - "en base a"
+preferred_connectors:
+  - "tanmateix"
+  - "així doncs"
+preferred_sentence_length: 22
+max_sentence_length: 45
+preferred_variants:
+  "obra de": 1.0
+  "fet per": 0.4
+  "realitzat per": 0.7
+feedback: feedback.yml

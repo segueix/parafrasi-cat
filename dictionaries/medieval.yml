@@ -1,0 +1,34 @@
+# Terminologia d'història medieval. S'activa amb «--dictionary medieval».
+description: Terminologia d'història medieval (institucions, feudalisme, documentació).
+language: ca
+entries:
+  - term: feu
+    preferred: [feu]
+    avoid: [feudo]
+    pos: nom
+    notes: "«feudo» és un castellanisme."
+  - term: batlle
+    preferred: [batlle]
+    accepted: [batlle reial]
+    avoid: [alcalde]
+    pos: nom
+    notes: "En context medieval català l'oficial és el batlle."
+  - term: pergamí
+    preferred: [pergamí]
+    avoid: [pergamino]
+    pos: nom
+  - term: carta de poblament
+    preferred: [carta de poblament]
+    accepted: [carta de població]
+    protected: true
+    pos: nom
+    notes: "Terme jurídic fixat; no s'ha de parafrasejar."
+  - term: senyoriu
+    preferred: [senyoriu]
+    accepted: [senyoria, domini senyorial]
+    pos: nom
+  - term: cavaller
+    preferred: [cavaller]
+    accepted: [miles]
+    pos: nom
+    notes: "«miles» és la forma llatina de les fonts."

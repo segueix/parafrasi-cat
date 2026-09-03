@@ -218,7 +218,12 @@ def test_registry_engines_and_rule_set_includes(paths: ProjectPaths, tmp_path: P
         encoding="utf-8",
     )
     rule_set = build_rule_set(RuleSetConfig.load(config_file), registry, paths)
-    assert rule_set.rule_ids == ("copula.es_a_constitueix", "copula.constitueix_a_es")
+    assert rule_set.rule_ids == (
+        "copula.es_a_constitueix",
+        "copula.es_a_constitueix_invertit",
+        "copula.es_a_constitueix_invertit_amb_aposicio",
+        "copula.constitueix_a_es",
+    )
     assert rule_set.config.max_semantic_risk is SemanticRisk.MEDIUM
     with pytest.raises(KeyError):
         rule_set.rule("copula.es_a_correspon_a")

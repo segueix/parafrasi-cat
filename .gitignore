@@ -24,6 +24,9 @@ corpus/excluded/*
 !corpus/excluded/README.md
 !corpus/excluded/.gitkeep
 
+# Registre local opcional de la interfície (mai no s'ha de publicar)
+history/
+
 # Editors
 .idea/
 .vscode/

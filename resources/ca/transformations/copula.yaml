@@ -1,7 +1,17 @@
 # Família 5: «és X» ↔ «constitueix X» (i «correspon a X»).
 # Només s'aplica quan el predicat és un sintagma nominal amb determinant, de
 # manera que «és clar», «és a dir», «és de fusta» o «és molt antic» queden fora.
-description: Còpula identificativa «NP és NP» → «constitueix», «correspon a», i el retorn.
+#
+# «constituir» té direcció: «X constitueix Y» vol dir que X és allò que forma o
+# representa Y. Per això la substitució directa «X és Y» → «X constitueix Y»
+# només és correcta quan el subjecte és l'entitat i el predicat la categoria
+# («Aquests textos són la font principal»). Quan la frase és especificativa
+# (el subjecte és la descripció i el predicat, l'entitat que la satisfà: «La
+# primera referència itàlica és el monument funerari…»), cal invertir els
+# sintagmes: «El monument funerari… constitueix la primera referència itàlica».
+# El subjecte especificatiu es reconeix per un ordinal, un superlatiu o un
+# marcador d'unicitat («primera», «darrer», «únic», «principal», «millor», «més»).
+description: Còpula identificativa «NP és NP» → «constitueix» (directa o invertida), «correspon a», i el retorn.
 language: ca
 rules:
   - rule_id: copula.es_a_constitueix
@@ -11,7 +21,7 @@ rules:
     transformation_type: syntactic
     semantic_risk: low
     confidence: 0.75
-    description: "«X és Y» → «X constitueix Y» quan Y és un sintagma nominal amb determinant"
+    description: "«X és Y» → «X constitueix Y» quan Y és un sintagma nominal amb determinant i X no és un sintagma especificatiu (ordinal, superlatiu, «únic», «principal»)"
     pattern:
       - {start: true}
       - {np: true, group: subj}
@@ -19,23 +29,102 @@ rules:
       - {np: true, group: pred}
     conditions:
       groups:
-        subj: {no_finite_verb: true}
+        subj:
+          no_finite_verb: true
+          not_contains: &especificatius
+            [primer, primera, primers, primeres, segon, segona, segones, tercer, tercera,
+             tercers, terceres, quart, quarta, quarts, quartes, cinquè, cinquena, cinquens,
+             cinquenes, sisè, sisena, setè, setena, vuitè, vuitena, novè, novena, desè, desena,
+             darrer, darrera, darrers, darreres, últim, última, últims, últimes, únic, única,
+             únics, úniques, principal, principals, millor, millors, pitjor, pitjors, major,
+             majors, menor, menors, màxim, màxima, mínim, mínima, més, menys]
         pred: {starts_with: ["@determiner"]}
       context:
         not_followed_by: [que, qui, "on"]
-    exceptions: ["és a dir", "és clar", "és possible", "és necessari", "és probable", "és evident", "és cert"]
+    exceptions: &excepcions_copula
+      ["és a dir", "és clar", "és possible", "és necessari", "és probable", "és evident",
+       "és cert", "és el més", "és la més", "és el menys", "és la menys", "són els més",
+       "són les més", "són els menys", "són les menys"]
     transformation: "{subj} {cop|map(és=constitueix,són=constitueixen)} {pred}"
     examples:
       positive:
-        - input: "La primera referència itàlica és el monument funerari d'Oddo Altoviti, encarregat el 1507 i finalitzat el 1516."
-          output: "La primera referència itàlica constitueix el monument funerari d'Oddo Altoviti, encarregat el 1507 i finalitzat el 1516."
         - input: "Aquests textos són la font principal."
           output: "Aquests textos constitueixen la font principal."
+        - input: "El pont és el testimoni més antic de la comarca."
+          output: "El pont constitueix el testimoni més antic de la comarca."
       negative:
+        - "La primera referència itàlica és el monument funerari d'Oddo Altoviti."
         - "El monument és molt antic."
         - "És a dir, no ho sabem."
         - "La casa és de fusta."
         - "Els textos són els que ho expliquen."
+        - "Aquesta part és la més llarga."
+
+  - rule_id: copula.es_a_constitueix_invertit
+    engine: pattern
+    category: copula
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.7
+    description: "«X és Y» → «Y constitueix X» quan X és un sintagma especificatiu (ordinal, superlatiu, «únic», «principal») i Y un sintagma nominal definit"
+    pattern:
+      - {start: true}
+      - {np: true, group: subj}
+      - {text: [és, són], group: cop}
+      - {np: true, group: pred}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        subj: {definite: true, no_finite_verb: true, contains_any: *especificatius}
+        pred: {definite: true}
+    exceptions: *excepcions_copula
+    transformation: "{pred|cap} {pred|agree(constitueix,constitueixen)} {subj|lower}"
+    examples:
+      positive:
+        - input: "La primera referència itàlica és el monument funerari d'Oddo Altoviti."
+          output: "El monument funerari d'Oddo Altoviti constitueix la primera referència itàlica."
+        - input: "La causa principal és la sequera."
+          output: "La sequera constitueix la causa principal."
+        - input: "Els primers habitants coneguts són els ibers."
+          output: "Els ibers constitueixen els primers habitants coneguts."
+      negative:
+        - "Aquests textos són la font principal."
+        - "La primera referència és el monument, i la segona és el retaule."
+        - "La segona part és la més llarga."
+        - "El primer que cal dir és que no ho sabem."
+
+  - rule_id: copula.es_a_constitueix_invertit_amb_aposicio
+    engine: pattern
+    category: copula
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.65
+    description: "«X és Y, PART...» → «Y, PART..., constitueix X» quan X és especificatiu (l'aposició participial segueix el nom que modifica)"
+    pattern:
+      - {start: true}
+      - {np: true, group: subj}
+      - {text: [és, són], group: cop}
+      - {np: true, group: pred}
+      - {text: ","}
+      - {participle: true, group: part}
+      - {seq: true, group: tail, greedy: true, no_comma: true}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        subj: {definite: true, no_finite_verb: true, contains_any: *especificatius}
+        pred: {definite: true}
+        tail: {no_finite_verb: true}
+    exceptions: *excepcions_copula
+    transformation: "{pred|cap}, {part} {tail}, {pred|agree(constitueix,constitueixen)} {subj|lower}"
+    examples:
+      positive:
+        - input: "La primera referència itàlica és el monument funerari d'Oddo Altoviti, encarregat el 1507 i finalitzat el 1516."
+          output: "El monument funerari d'Oddo Altoviti, encarregat el 1507 i finalitzat el 1516, constitueix la primera referència itàlica."
+      negative:
+        - "La primera referència itàlica és el monument funerari, que fou encarregat el 1507."
+        - "Aquest sarcòfag és el monument funerari d'Oddo Altoviti, encarregat el 1507."
 
   - rule_id: copula.constitueix_a_es
     engine: pattern

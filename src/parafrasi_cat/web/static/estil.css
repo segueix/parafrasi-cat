@@ -1,0 +1,171 @@
+:root {
+  color-scheme: light dark;
+  --fons: #f7f7f5;
+  --plafo: #ffffff;
+  --vora: #d9d7d1;
+  --text: #1c1b19;
+  --suau: #5d5a54;
+  --accent: #1f5f8b;
+  --afegit: #1a6b3c;
+  --afegit-fons: #dcf1e4;
+  --suprimit: #8b2c2c;
+  --suprimit-fons: #f6dede;
+  --avis: #8a5a00;
+  --rebuig: #8b2c2c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fons: #16181c;
+    --plafo: #1e2126;
+    --vora: #343941;
+    --text: #e9e8e4;
+    --suau: #a9a69f;
+    --accent: #7fb6dc;
+    --afegit: #86d6a6;
+    --afegit-fons: #1d3a2a;
+    --suprimit: #e79a9a;
+    --suprimit-fons: #3d2222;
+    --avis: #e0b567;
+    --rebuig: #e79a9a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 1rem 3rem;
+  background: var(--fons);
+  color: var(--text);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.capçalera { max-width: 1180px; margin: 0 auto; padding: 1.5rem 0 1rem; }
+.capçalera h1 { margin: 0; font-size: 1.5rem; letter-spacing: -0.01em; }
+.nota { margin: 0.35rem 0 0; color: var(--suau); max-width: 62ch; }
+
+.disposicio {
+  max-width: 1180px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(320px, 400px) 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .disposicio { grid-template-columns: 1fr; }
+}
+
+.plafó {
+  background: var(--plafo);
+  border: 1px solid var(--vora);
+  border-radius: 8px;
+  padding: 1.1rem;
+}
+
+.controls { position: sticky; top: 1rem; }
+
+h2 { margin: 0 0 0.9rem; font-size: 1.05rem; }
+h3 { margin: 1.4rem 0 0.5rem; font-size: 0.95rem; }
+h4 { margin: 0 0 0.4rem; font-size: 0.9rem; }
+h5 { margin: 0.9rem 0 0.3rem; font-size: 0.82rem; color: var(--suau); }
+
+label { display: block; margin: 0.85rem 0 0.25rem; font-weight: 600; font-size: 0.85rem; }
+label.en-linia { display: inline; margin: 0; font-weight: 400; }
+
+textarea, select, input[type="text"] {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--vora);
+  border-radius: 5px;
+  background: var(--fons);
+  color: var(--text);
+  font: inherit;
+}
+
+textarea { resize: vertical; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.88rem; }
+
+fieldset { margin: 0.85rem 0 0; padding: 0.6rem 0.7rem; border: 1px solid var(--vora); border-radius: 5px; }
+legend { padding: 0 0.35rem; font-weight: 600; font-size: 0.85rem; }
+
+.opcions { display: flex; flex-direction: column; gap: 0.3rem; }
+.opcions label { margin: 0; font-weight: 400; font-size: 0.88rem; }
+.linia { margin-top: 0.9rem; display: flex; gap: 0.4rem; align-items: baseline; }
+
+.ajuda { margin: 0.35rem 0 0; color: var(--suau); font-size: 0.82rem; }
+.estat { margin: 0.6rem 0 0; font-size: 0.85rem; min-height: 1.2em; }
+.estat.error { color: var(--suprimit); }
+
+.botons { margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+button {
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+button.secundari { background: transparent; color: var(--accent); }
+button:disabled { opacity: 0.55; cursor: progress; }
+button:hover:not(:disabled) { filter: brightness(1.08); }
+
+.resum { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem; margin: 0 0 0.5rem; }
+.resum div { border: 1px solid var(--vora); border-radius: 5px; padding: 0.4rem 0.55rem; }
+.resum dt { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--suau); }
+.resum dd { margin: 0.15rem 0 0; font-size: 0.88rem; }
+
+.text-bloc {
+  margin: 0;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--vora);
+  border-radius: 5px;
+  background: var(--fons);
+  white-space: pre-wrap;
+}
+
+.text-bloc.destacat { border-color: var(--accent); }
+
+.etiquetes { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.etiquetes li {
+  border: 1px solid var(--vora);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.8rem;
+  background: var(--fons);
+}
+
+.unitat { margin: 0.8rem 0; padding: 0.8rem; border: 1px solid var(--vora); border-radius: 6px; }
+.llista-candidats { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+
+.candidat { border: 1px solid var(--vora); border-radius: 5px; padding: 0.6rem 0.7rem; }
+.candidat.seleccionat { border-color: var(--accent); border-width: 2px; }
+.candidat.rebutjat { opacity: 0.82; border-style: dashed; }
+
+.capçalera-candidat { display: flex; gap: 0.55rem; align-items: baseline; }
+.text-candidat { margin: 0; flex: 1; white-space: pre-wrap; }
+.marca { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--suau); white-space: nowrap; }
+.candidat.seleccionat .marca { color: var(--accent); font-weight: 700; }
+.candidat.rebutjat .marca { color: var(--rebuig); }
+.motiu-rebuig { margin: 0.4rem 0 0; color: var(--rebuig); font-size: 0.84rem; }
+
+.accions { margin-top: 0.5rem; display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+.accions button { padding: 0.25rem 0.6rem; font-size: 0.82rem; }
+.feedback { display: inline-flex; gap: 0.3rem; }
+.vot { background: transparent; color: var(--accent); }
+.resposta-feedback { color: var(--afegit); }
+
+.detall { margin-top: 0.55rem; }
+summary { cursor: pointer; font-size: 0.84rem; color: var(--suau); }
+.detall-cos ul { margin: 0; padding-left: 1.1rem; font-size: 0.85rem; }
+.detall-cos li { margin: 0.2rem 0; }
+.detall-cos li.avis { color: var(--avis); }
+
+ins { background: var(--afegit-fons); color: var(--afegit); text-decoration: none; }
+del { background: var(--suprimit-fons); color: var(--suprimit); }
+
+code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.85em; }

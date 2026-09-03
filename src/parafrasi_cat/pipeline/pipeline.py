@@ -73,6 +73,8 @@ class Pipeline:
         morphology: MorphologyProvider | None = None,
         lexicon: ClosedClassLexicon | None = None,
         max_level: int | None = None,
+        dictionary_names: Sequence[str] = (),
+        preferences_name: str = "",
     ) -> None:
         self._analyzer = analyzer
         self._protector = protector
@@ -90,6 +92,8 @@ class Pipeline:
         if lexicon is None and isinstance(analyzer, RuleBasedAnalyzer):
             lexicon = analyzer.lexicon
         self._lexicon = lexicon
+        self._dictionary_names = tuple(dictionary_names)
+        self._preferences_name = preferences_name
 
     @property
     def analyzer(self) -> Analyzer:
@@ -127,6 +131,14 @@ class Pipeline:
     def max_level(self) -> int | None:
         return self._max_level
 
+    @property
+    def dictionary_names(self) -> tuple[str, ...]:
+        return self._dictionary_names
+
+    @property
+    def preferences_name(self) -> str:
+        return self._preferences_name
+
     # --- execució ------------------------------------------------------------------------
 
     def run(self, text: str) -> ParaphraseResult:
@@ -153,6 +165,8 @@ class Pipeline:
             rule_ids=self._rule_set.rule_ids,
             style_profile_name=self._style_profile.name if self._style_profile else "",
             paragraphs=paragraph_results,
+            dictionary_names=self._dictionary_names,
+            preferences_name=self._preferences_name,
         )
 
     def propose(self, text: str) -> tuple[Transformation, ...]:
