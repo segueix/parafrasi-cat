@@ -1,0 +1,27 @@
+# Configuració d'exemple de la canonada.
+# Ús: parafrasi-cat --config examples/config_exemple.yaml "Text a processar."
+# Les rutes relatives es resolen respecte del directori d'aquest fitxer.
+
+# home: ../                      # arrel del projecte (per defecte es detecta sola)
+language: ca
+rule_set: exemple-lexic          # nom dins de rules/ o ruta a un fitxer
+style_profile: formal            # nom dins de resources/style/ o ruta a un fitxer
+
+protected_terms:                 # termes que cap regla pot tocar
+  - capital circulant
+  - Pla d'Acció
+protected_terms_files: []        # fitxers amb un terme per línia
+
+max_semantic_risk: low           # none | low | medium | high (per defecte, el del conjunt de regles)
+min_confidence: 0.6              # per defecte, la del conjunt de regles
+
+scoring:
+  transformation_gain: 1.0
+  semantic_risk: 1.0
+  style_distance: 0.5
+  max_transformations: 3
+
+max_transformations_per_sentence: 3
+max_candidates_per_sentence: 20
+length_ratio: {min: 0.6, max: 1.6}
+use_style: true

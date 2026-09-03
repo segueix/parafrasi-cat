@@ -1,0 +1,11 @@
+# Perfil d'estil per defecte: neutre, sense preferències lèxiques.
+# Amb aquest perfil la distància d'estil només depèn de la longitud de frase.
+name: default
+description: Perfil neutre. Penalitza només les frases molt allunyades de la longitud mitjana.
+sentence_length:
+  target_mean: 20      # paraules per frase
+  tolerance: 12        # desviació (en paraules) a partir de la qual la distància és màxima
+formality: 0.5         # 0 = col·loquial, 1 = molt formal
+preferred_connectors: []
+avoided_words: []
+max_change_ratio: 0.35 # proporció màxima de canvi acceptable respecte de l'original

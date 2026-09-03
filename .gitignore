@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Dades empaquetades en construir la roda (es generen a partir de resources/ i rules/)
+src/parafrasi_cat/_data/
+
+# Corpus privats de l'autor: no s'han de publicar mai
+corpus/author/*
+!corpus/author/README.md
+!corpus/author/.gitkeep
+corpus/excluded/*
+!corpus/excluded/README.md
+!corpus/excluded/.gitkeep
+
+# Editors
+.idea/
+.vscode/
+*.swp
+.DS_Store

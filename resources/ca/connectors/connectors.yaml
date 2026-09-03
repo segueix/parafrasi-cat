@@ -1,0 +1,88 @@
+# Inventari de connectors discursius del català agrupats per funció.
+# Ús actual: mesura de la densitat de connectors (mètriques d'estil).
+# Ús previst: regles de substitució de connectors dins de la mateixa funció.
+# «register»: col·loquial | neutre | formal
+description: Connectors discursius agrupats per funció i registre.
+groups:
+  - function: addició
+    connectors:
+      - {form: a més, register: neutre}
+      - {form: a més a més, register: neutre}
+      - {form: així mateix, register: formal}
+      - {form: també, register: neutre}
+      - {form: d'altra banda, register: neutre}
+      - {form: endemés, register: formal}
+  - function: contrast
+    connectors:
+      - {form: però, register: neutre}
+      - {form: tanmateix, register: formal}
+      - {form: no obstant això, register: formal}
+      - {form: en canvi, register: neutre}
+      - {form: ara bé, register: neutre}
+      - {form: així i tot, register: neutre}
+      - {form: amb tot, register: formal}
+      - {form: malgrat tot, register: neutre}
+  - function: concessió
+    connectors:
+      - {form: encara que, register: neutre}
+      - {form: tot i que, register: neutre}
+      - {form: malgrat que, register: neutre}
+      - {form: per bé que, register: formal}
+      - {form: si bé, register: formal}
+  - function: causa
+    connectors:
+      - {form: perquè, register: neutre}
+      - {form: ja que, register: neutre}
+      - {form: atès que, register: formal}
+      - {form: com que, register: neutre}
+      - {form: puix que, register: formal}
+  - function: conseqüència
+    connectors:
+      - {form: per tant, register: neutre}
+      - {form: així doncs, register: neutre}
+      - {form: en conseqüència, register: formal}
+      - {form: consegüentment, register: formal}
+      - {form: doncs, register: neutre}
+      - {form: per consegüent, register: formal}
+  - function: finalitat
+    connectors:
+      - {form: per tal que, register: neutre}
+      - {form: a fi que, register: formal}
+      - {form: perquè, register: neutre}
+      - {form: a fi de, register: formal}
+      - {form: per tal de, register: neutre}
+  - function: ordre
+    connectors:
+      - {form: en primer lloc, register: neutre}
+      - {form: primerament, register: formal}
+      - {form: en segon lloc, register: neutre}
+      - {form: d'una banda, register: neutre}
+      - {form: finalment, register: neutre}
+      - {form: per acabar, register: neutre}
+      - {form: per últim, register: neutre}
+  - function: exemplificació
+    connectors:
+      - {form: per exemple, register: neutre}
+      - {form: com ara, register: neutre}
+      - {form: a tall d'exemple, register: formal}
+  - function: reformulació
+    connectors:
+      - {form: és a dir, register: neutre}
+      - {form: o sigui, register: col·loquial}
+      - {form: en altres paraules, register: neutre}
+      - {form: dit d'una altra manera, register: neutre}
+  - function: conclusió
+    connectors:
+      - {form: en conclusió, register: formal}
+      - {form: en resum, register: neutre}
+      - {form: en definitiva, register: neutre}
+      - {form: al capdavall, register: neutre}
+      - {form: comptat i debatut, register: col·loquial}
+  - function: temps
+    connectors:
+      - {form: després, register: neutre}
+      - {form: aleshores, register: neutre}
+      - {form: llavors, register: neutre}
+      - {form: mentrestant, register: neutre}
+      - {form: tot seguit, register: neutre}
+      - {form: a continuació, register: neutre}

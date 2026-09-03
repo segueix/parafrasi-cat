@@ -1,0 +1,5 @@
+# Termes que cap regla pot modificar. Un per línia; «#» inicia un comentari.
+# Les locucions de més d'una paraula també s'admeten.
+# Exemples (descomenteu-los o afegiu-hi els vostres):
+# Reial Acadèmia
+# capital circulant

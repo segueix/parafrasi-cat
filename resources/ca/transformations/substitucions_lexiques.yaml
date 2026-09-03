@@ -1,0 +1,42 @@
+# Diccionari d'exemple de substitucions lèxiques.
+# El fa servir el conjunt de regles rules/exemple-lexic.yaml (NO el conjunt per defecte).
+#
+# Cada entrada substitueix «source» per «target» quan «source» apareix com a paraula
+# o locució sencera i no toca cap fragment protegit. Les majúscules es conserven.
+# Camps opcionals per entrada: semantic_risk, confidence, transformation_type, note.
+description: Substitucions lèxiques d'exemple (equivalents de registre neutre/formal).
+transformation_type: lexical
+default_semantic_risk: low
+default_confidence: 0.8
+entries:
+  - source: gairebé
+    target: quasi
+    confidence: 0.9
+    note: sinònims plens
+  - source: sovint
+    target: freqüentment
+    note: equivalent més formal
+  - source: no obstant això
+    target: tanmateix
+    transformation_type: connector
+    note: connector de contrast de la mateixa funció
+  - source: tot i que
+    target: encara que
+    transformation_type: connector
+    note: connector concessiu equivalent
+  - source: per tant
+    target: així doncs
+    transformation_type: connector
+    note: connector consecutiu equivalent
+  - source: en primer lloc
+    target: primerament
+    transformation_type: connector
+  - source: actualment
+    target: avui dia
+    confidence: 0.7
+    note: «avui dia» és lleugerament menys formal
+  - source: començar
+    target: iniciar
+    semantic_risk: medium
+    confidence: 0.6
+    note: exemple d'entrada amb risc mitjà (rebutjada amb el risc màxim «low»)

@@ -1,0 +1,21 @@
+# Diccionari de sinònims: FORMAT PREVIST per a fases posteriors.
+# En la fase 1 cap regla no llegeix aquest fitxer; les substitucions actives
+# es defineixen a resources/ca/transformations/.
+#
+# Cada entrada agrupa formes intercanviables en el mateix registre i context.
+# «risk» indica el risc semàntic d'intercanviar-les (none, low, medium, high).
+description: Grups de sinònims (esborrany de format).
+groups:
+  - lemma: gairebé
+    pos: adv
+    synonyms: [quasi]
+    risk: low
+  - lemma: sovint
+    pos: adv
+    synonyms: [freqüentment, amb freqüència]
+    risk: low
+  - lemma: començar
+    pos: verb
+    synonyms: [iniciar, encetar]
+    risk: medium
+    note: «encetar» té un matís més col·loquial; «iniciar» és més formal.

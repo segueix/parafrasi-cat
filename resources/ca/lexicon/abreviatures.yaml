@@ -1,0 +1,53 @@
+# Abreviatures després de les quals un punt NO marca final de frase.
+# S'escriuen sense el punt final i en minúscules. Aquesta llista s'afegeix a la
+# llista mínima incorporada al codi (parafrasi_cat.analyzer.DEFAULT_ABBREVIATIONS).
+description: Abreviatures habituals en català que no tanquen frase.
+abbreviations:
+  - sr
+  - sra
+  - srs
+  - sres
+  - dr
+  - dra
+  - prof
+  - p
+  - pp
+  - pàg
+  - pàgs
+  - núm
+  - art
+  - cap
+  - vol
+  - ed
+  - fig
+  - aprox
+  - av
+  - pl
+  - ctra
+  - tel
+  - ex
+  - cf
+  - vid
+  - op
+  - cit
+  - ibid
+  - íd
+  - s
+  - ss
+  - st
+  - sta
+  - trad
+  - col
+  - coord
+  - dir
+  - et
+  - al
+  - hble
+  - excm
+  - excma
+  - il·lm
+  - il·lma
+  - mn
+  - dept
+  - esc
+  - apt
