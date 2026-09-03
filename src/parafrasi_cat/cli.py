@@ -11,6 +11,7 @@ Exemples::
     parafrasi-cat rewrite input.txt --style style/author.json --level 3 --candidates 10
     parafrasi-cat rewrite input.txt --dictionary historia --preferences preferences/author.yml
     parafrasi-cat feedback preferred "obra de"
+    parafrasi-cat web
 """
 
 from __future__ import annotations
@@ -42,7 +43,8 @@ def build_parser() -> argparse.ArgumentParser:
             "Sense un conjunt de regles actiu, el text es retorna sense modificar. "
             "Subordres: «parafrasi-cat rewrite FITXER» (reescriptura amb informe de candidats), "
             "«parafrasi-cat style build|compare|show» (empremtes d'estil) i "
-            "«parafrasi-cat feedback preferred|acceptable|rejected|show» (feedback manual)."
+            "«parafrasi-cat feedback preferred|acceptable|rejected|show» (feedback manual) i "
+            "«parafrasi-cat web» (interfície local)."
         ),
     )
     parser.add_argument(
@@ -182,6 +184,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         from parafrasi_cat.preferences.cli import feedback_main
 
         return feedback_main(arguments[1:])
+    if arguments and arguments[0] == "web":
+        from parafrasi_cat.web.cli import web_main
+
+        return web_main(arguments[1:])
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

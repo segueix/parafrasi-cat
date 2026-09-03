@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>parafrasi-cat</title>
+<link rel="stylesheet" href="/static/estil.css">
+</head>
+<body>
+<header class="capçalera">
+  <h1>parafrasi-cat</h1>
+  <p class="nota">
+    Reredacció en català amb regles explícites. Tot s'executa en aquest ordinador:
+    sense LLM, sense serveis externs i sense enviar el text enlloc.
+  </p>
+</header>
+
+<main class="disposicio">
+  <form id="formulari" class="plafó controls">
+    <h2>Text i configuració</h2>
+
+    <label for="text">Text a reredactar</label>
+    <textarea id="text" name="text" rows="9" spellcheck="false"
+      placeholder="Enganxeu o escriviu el text aquí."></textarea>
+
+    <fieldset>
+      <legend>Mode</legend>
+      <div id="modes" class="opcions"></div>
+      <p id="descripcio-mode" class="ajuda"></p>
+    </fieldset>
+
+    <label for="nivell">Nivell de transformació</label>
+    <select id="nivell" name="nivell"></select>
+    <p id="avis-nivell" class="ajuda" hidden></p>
+
+    <label for="estil">Empremta o perfil d'estil</label>
+    <select id="estil" name="estil"></select>
+
+    <fieldset>
+      <legend>Diccionaris</legend>
+      <div id="diccionaris" class="opcions"></div>
+    </fieldset>
+
+    <label for="preferencies">Preferències de l'autor</label>
+    <select id="preferencies" name="preferencies"></select>
+
+    <div class="linia">
+      <input type="checkbox" id="historial-actiu">
+      <label for="historial-actiu" class="en-linia">Desa un registre local d'aquesta sessió</label>
+    </div>
+    <p id="estat-historial" class="ajuda"></p>
+
+    <div class="botons">
+      <button type="submit" id="genera">Genera candidats</button>
+      <button type="button" id="exporta-historial" class="secundari">Exporta l'historial</button>
+    </div>
+    <p id="estat" class="estat" role="status"></p>
+  </form>
+
+  <section class="plafó resultats">
+    <h2>Resultat</h2>
+    <p id="sense-resultat" class="ajuda">Encara no s'ha generat cap candidat.</p>
+
+    <div id="resum" hidden>
+      <dl class="resum">
+        <div><dt>Mode</dt><dd id="resum-mode"></dd></div>
+        <div><dt>Nivell</dt><dd id="resum-nivell"></dd></div>
+        <div><dt>Estil</dt><dd id="resum-estil"></dd></div>
+        <div><dt>Diccionaris</dt><dd id="resum-diccionaris"></dd></div>
+        <div><dt>Preferències</dt><dd id="resum-preferencies"></dd></div>
+        <div><dt>Candidats</dt><dd id="resum-candidats"></dd></div>
+      </dl>
+
+      <h3>Text original</h3>
+      <p id="text-original" class="text-bloc"></p>
+
+      <h3>Millor candidat</h3>
+      <p id="millor-candidat" class="text-bloc destacat"></p>
+
+      <h3>Fragments protegits</h3>
+      <p class="ajuda">Cap regla no els pot modificar, en cap dels dos modes.</p>
+      <ul id="protegits" class="etiquetes"></ul>
+
+      <h3>Candidats per unitat</h3>
+      <div id="unitats"></div>
+
+      <h3>Resultat final</h3>
+      <p class="ajuda">Podeu editar el text abans de copiar-lo o exportar-lo.</p>
+      <textarea id="final" rows="7" spellcheck="false"></textarea>
+      <div class="botons">
+        <button type="button" id="copia">Copia</button>
+        <button type="button" id="exporta" class="secundari">Exporta en text</button>
+        <button type="button" id="desa" class="secundari">Desa al registre</button>
+      </div>
+      <p id="estat-final" class="estat" role="status"></p>
+    </div>
+  </section>
+</main>
+
+<template id="plantilla-unitat">
+  <article class="unitat">
+    <h4 class="titol-unitat"></h4>
+    <p class="original-unitat text-bloc"></p>
+    <ul class="llista-candidats"></ul>
+  </article>
+</template>
+
+<template id="plantilla-candidat">
+  <li class="candidat">
+    <div class="capçalera-candidat">
+      <span class="marca"></span>
+      <p class="text-candidat"></p>
+    </div>
+    <p class="motiu-rebuig" hidden></p>
+    <div class="accions">
+      <button type="button" class="usa">Fes servir aquest text</button>
+      <span class="feedback">
+        <button type="button" class="vot" data-verdicte="preferred">Preferit</button>
+        <button type="button" class="vot" data-verdicte="acceptable">Acceptable</button>
+        <button type="button" class="vot" data-verdicte="rejected">Rebutjat</button>
+      </span>
+    </div>
+    <p class="resposta-feedback ajuda" hidden></p>
+    <details class="detall">
+      <summary>Diferències, regles, puntuacions i advertiments</summary>
+      <div class="detall-cos">
+        <h5>Diferències respecte de l'original</h5>
+        <p class="diferencies text-bloc"></p>
+        <h5>Regles aplicades</h5>
+        <ul class="regles"></ul>
+        <h5>Puntuacions</h5>
+        <ul class="puntuacions"></ul>
+        <h5>Advertiments semàntics</h5>
+        <ul class="advertiments"></ul>
+      </div>
+    </details>
+  </li>
+</template>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

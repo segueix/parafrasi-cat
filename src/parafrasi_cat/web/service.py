@@ -1,0 +1,556 @@
+"""Servei que connecta la interfície local amb la canonada existent.
+
+Aquest mòdul no afegeix cap capacitat lingüística: només recull les opcions
+disponibles (empremtes, perfils, diccionaris, preferències, modes), executa
+la canonada i tradueix el resultat a estructures que la pàgina pot mostrar
+(millor candidat, altres candidats, diferències, regles, puntuacions,
+advertiments i fragments protegits). El feedback i el registre local passen
+pels components de la fase 6 i de ``web.history``.
+"""
+
+from __future__ import annotations
+
+import re
+from collections import Counter
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from difflib import SequenceMatcher
+from pathlib import Path
+from typing import Any
+
+from parafrasi_cat import __version__
+from parafrasi_cat.analyzer.analysis import RuleBasedAnalyzer
+from parafrasi_cat.core.errors import ConfigError, ParafrasiError
+from parafrasi_cat.dictionaries.dictionary import TermDictionary
+from parafrasi_cat.pipeline.builder import build_pipeline
+from parafrasi_cat.pipeline.config import PipelineConfig
+from parafrasi_cat.pipeline.modes import (
+    LEVEL_LABELS,
+    MODES,
+    RewriteMode,
+    level_label,
+    mode_settings,
+)
+from parafrasi_cat.pipeline.pipeline import Pipeline
+from parafrasi_cat.pipeline.result import EvaluatedCandidate, ParaphraseResult, _UnitResult
+from parafrasi_cat.preferences.author import AuthorPreferences
+from parafrasi_cat.preferences.feedback import DEFAULT_FEEDBACK_FILE, VERDICTS, FeedbackStore
+from parafrasi_cat.protected.spans import ProtectedSpan
+from parafrasi_cat.resources import ProjectPaths, load_mapping
+from parafrasi_cat.style.fingerprint import StyleFingerprint
+from parafrasi_cat.style.observations import DocumentObserver, StyleResources
+from parafrasi_cat.web.history import DEFAULT_HISTORY_FILE, HistoryLog
+
+DEFAULT_RULE_SET = "parafrasi"
+DEFAULT_STYLE_PROFILE = "default"
+MAX_TEXT_CHARS = 20000
+
+JsonDict = dict[str, Any]
+"""Càrrega JSON que la interfície rep tal qual: les claus són dinàmiques."""
+
+_TOKEN_RE = re.compile(r"\s+|\S+")
+
+
+# --- diferències ------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class DiffPart:
+    """Un tros del text amb la seva operació respecte de l'original."""
+
+    op: str
+    """``equal``, ``insert`` o ``delete``."""
+
+    text: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"op": self.op, "text": self.text}
+
+
+def word_diff(source: str, target: str) -> tuple[DiffPart, ...]:
+    """Diferències per paraules entre dos textos, conservant els espais."""
+    before = _TOKEN_RE.findall(source)
+    after = _TOKEN_RE.findall(target)
+    parts: list[DiffPart] = []
+
+    def add(op: str, tokens: Sequence[str]) -> None:
+        text = "".join(tokens)
+        if not text:
+            return
+        if parts and parts[-1].op == op:
+            parts[-1] = DiffPart(op, parts[-1].text + text)
+        else:
+            parts.append(DiffPart(op, text))
+
+    for tag, i1, i2, j1, j2 in SequenceMatcher(a=before, b=after, autojunk=False).get_opcodes():
+        if tag == "equal":
+            add("equal", before[i1:i2])
+        else:
+            if tag in ("delete", "replace"):
+                add("delete", before[i1:i2])
+            if tag in ("insert", "replace"):
+                add("insert", after[j1:j2])
+    return tuple(parts)
+
+
+# --- peticions ---------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class RewriteRequest:
+    """Petició de reescriptura tal com arriba de la interfície."""
+
+    text: str
+    mode: RewriteMode = RewriteMode.DEEP
+    level: int | None = None
+    style_profile: str = DEFAULT_STYLE_PROFILE
+    dictionaries: tuple[str, ...] = ()
+    preferences: str = ""
+    rule_set: str = DEFAULT_RULE_SET
+
+    def __post_init__(self) -> None:
+        if not self.text.strip():
+            raise ConfigError("Cal un text per reescriure")
+        if len(self.text) > MAX_TEXT_CHARS:
+            raise ConfigError(f"El text supera els {MAX_TEXT_CHARS} caràcters")
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, object]) -> RewriteRequest:
+        level = data.get("level")
+        if isinstance(level, str):
+            stripped = level.strip()
+            if not stripped:
+                level = None  # el selector encara no s'ha triat
+            elif stripped.isdigit():
+                level = int(stripped)
+            else:
+                raise ConfigError("«level» ha de ser un enter entre 1 i 5")
+        if isinstance(level, bool) or not isinstance(level, int | None):
+            raise ConfigError("«level» ha de ser un enter entre 1 i 5")
+        return cls(
+            text=str(data.get("text", "")),
+            mode=RewriteMode.parse(str(data.get("mode", RewriteMode.DEEP.value))),
+            level=level,
+            style_profile=str(data.get("style_profile") or DEFAULT_STYLE_PROFILE),
+            dictionaries=_as_names(data.get("dictionaries")),
+            preferences=str(data.get("preferences") or ""),
+            rule_set=str(data.get("rule_set") or DEFAULT_RULE_SET),
+        )
+
+    def to_config(self, home: Path | None = None) -> PipelineConfig:
+        """Configuració de la canonada amb l'envoltant del mode aplicat."""
+        base = PipelineConfig(
+            home=home,
+            rule_set=self.rule_set,
+            style_profile=self.style_profile,
+            dictionaries=self.dictionaries,
+            preferences=self.preferences or None,
+        )
+        return mode_settings(self.mode).apply(base, self.level)
+
+
+@dataclass(frozen=True, slots=True)
+class FeedbackRequest:
+    """Marca d'un candidat com a preferit, acceptable o rebutjat."""
+
+    verdict: str
+    variants: tuple[str, ...] = ()
+    text: str = ""
+    source_text: str = ""
+    preferences: str = ""
+
+    def __post_init__(self) -> None:
+        if self.verdict not in VERDICTS:
+            raise ConfigError(
+                f"Veredicte desconegut: «{self.verdict}» (vàlids: {', '.join(VERDICTS)})"
+            )
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, object]) -> FeedbackRequest:
+        return cls(
+            verdict=str(data.get("verdict", "")),
+            variants=_as_names(data.get("variants")),
+            text=str(data.get("text") or ""),
+            source_text=str(data.get("source_text") or ""),
+            preferences=str(data.get("preferences") or ""),
+        )
+
+
+def _as_names(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return (value,) if value.strip() else ()
+    if isinstance(value, Sequence):
+        return tuple(str(item) for item in value if str(item).strip())
+    raise ConfigError("S'esperava una llista de noms")
+
+
+# --- servei ------------------------------------------------------------------------------------
+
+
+class RewriteService:
+    """Punt d'entrada únic de la interfície local.
+
+    Manté una cau de canonades per configuració, perquè la interfície no hagi
+    de tornar a carregar el lexicó i les regles a cada petició. La cau es
+    buida quan es registra feedback, ja que els pesos canvien.
+    """
+
+    def __init__(
+        self,
+        paths: ProjectPaths | None = None,
+        *,
+        history: HistoryLog | None = None,
+        rule_set: str = DEFAULT_RULE_SET,
+    ) -> None:
+        self._paths = paths or ProjectPaths.discover()
+        self._rule_set = rule_set
+        self._history = history or HistoryLog(self._paths.root / DEFAULT_HISTORY_FILE)
+        self._pipelines: dict[PipelineConfig, Pipeline] = {}
+        self._observer: DocumentObserver | None = None
+        self._analyzer: RuleBasedAnalyzer | None = None
+
+    @property
+    def paths(self) -> ProjectPaths:
+        return self._paths
+
+    @property
+    def history(self) -> HistoryLog:
+        return self._history
+
+    # -- opcions ---------------------------------------------------------------------------
+
+    def options(self) -> JsonDict:
+        """Tot el que la interfície necessita per omplir els seus selectors."""
+        return {
+            "version": __version__,
+            "root": str(self._paths.root),
+            "rule_set": self._rule_set,
+            "levels": [{"level": n, "label": level_label(n)} for n in sorted(LEVEL_LABELS)],
+            "modes": [settings.to_dict() for settings in MODES.values()],
+            "style_profiles": self.style_profiles(),
+            "dictionaries": self.dictionaries(),
+            "preferences": self.preferences(),
+            "history": self._history.status(),
+        }
+
+    def style_profiles(self) -> list[JsonDict]:
+        """Perfils d'estil (``resources/style/*.yaml``) i empremtes (``style/*.json``)."""
+        found: list[dict[str, object]] = []
+        for file in sorted(self._paths.style.glob("*.yaml")):
+            entry: dict[str, object] = {
+                "id": file.stem,
+                "label": f"{file.stem} (perfil)",
+                "kind": "profile",
+            }
+            try:
+                entry["description"] = str(load_mapping(file).get("description", ""))
+            except ParafrasiError as exc:
+                entry["error"] = str(exc)
+            found.append(entry)
+        for file in sorted(self._paths.fingerprints.glob("*.json")):
+            if file.name == "fingerprint.schema.json":
+                continue
+            entry = {
+                "id": f"style/{file.name}",
+                "label": f"{file.stem} (empremta)",
+                "kind": "fingerprint",
+            }
+            try:
+                fingerprint = StyleFingerprint.load(file)
+                entry["description"] = (
+                    f"{fingerprint.n_documents} documents · {fingerprint.n_words} paraules"
+                )
+            except ParafrasiError as exc:
+                entry["error"] = str(exc)
+            found.append(entry)
+        return found
+
+    def dictionaries(self) -> list[JsonDict]:
+        """Diccionaris terminològics disponibles a ``dictionaries/``."""
+        found: list[dict[str, object]] = []
+        for file in sorted(self._paths.dictionaries.glob("*.yml")):
+            entry: dict[str, object] = {"id": file.stem, "label": file.stem}
+            try:
+                dictionary = TermDictionary.load(file)
+                entry["description"] = dictionary.description
+                entry["n_entries"] = len(dictionary.entries)
+                entry["n_protected"] = len(dictionary.protected_terms)
+            except ParafrasiError as exc:
+                entry["error"] = str(exc)
+            found.append(entry)
+        return found
+
+    def preferences(self) -> list[JsonDict]:
+        """Fitxers de preferències de ``preferences/`` (el de feedback no hi surt)."""
+        found: list[dict[str, object]] = []
+        directory = self._paths.preferences
+        if not directory.is_dir():
+            return found
+        for file in sorted(directory.glob("*.yml")):
+            try:
+                data = load_mapping(file)
+            except ParafrasiError as exc:
+                found.append({"id": file.stem, "label": file.stem, "error": str(exc)})
+                continue
+            if "variants" in data:
+                continue  # és un fitxer de feedback, no de preferències
+            entry: dict[str, object] = {"id": file.stem, "label": file.stem}
+            try:
+                author = AuthorPreferences.load(file)
+                entry["label"] = author.name
+                entry["description"] = author.description
+            except ParafrasiError as exc:
+                entry["error"] = str(exc)
+            found.append(entry)
+        return found
+
+    # -- reescriptura ----------------------------------------------------------------------
+
+    def pipeline_for(self, config: PipelineConfig) -> Pipeline:
+        pipeline = self._pipelines.get(config)
+        if pipeline is None:
+            pipeline = build_pipeline(config)
+            self._pipelines[config] = pipeline
+        return pipeline
+
+    def rewrite(self, request: RewriteRequest) -> JsonDict:
+        """Executa la canonada i retorna tot el que la interfície ha de mostrar."""
+        settings = mode_settings(request.mode)
+        config = request.to_config(self._paths.root)
+        result = self.pipeline_for(config).run(request.text)
+        effective = settings.level_for(request.level)
+        requested = settings.max_level if request.level is None else request.level
+        return {
+            "source_text": result.source_text,
+            "output_text": result.output_text,
+            "changed": result.changed,
+            "rule_set": result.rule_set_name,
+            "rule_ids": list(result.rule_ids),
+            "style_profile": result.style_profile_name,
+            "style_profile_id": request.style_profile,
+            "dictionaries": list(result.dictionary_names),
+            "preferences": result.preferences_name,
+            "preferences_id": request.preferences,
+            "mode": settings.to_dict(),
+            "level": effective,
+            "requested_level": requested,
+            "level_capped": effective < requested,
+            "level_label": level_label(effective),
+            "n_candidates": result.n_candidates,
+            "n_rejected_candidates": result.n_rejected_candidates,
+            "protected_spans": [_protected(span) for span in result.protected_spans],
+            "units": self._units(result),
+        }
+
+    def _units(self, result: ParaphraseResult) -> list[JsonDict]:
+        units: list[dict[str, object]] = []
+        for sentence in result.sentences:
+            units.append(
+                self._unit(sentence, "sentence", sentence.index, f"Frase {sentence.index + 1}")
+            )
+        for paragraph in result.paragraphs:
+            if len(paragraph.candidates) <= 1 and not paragraph.rejected_proposals:
+                continue  # cap regla entre frases hi ha proposat res
+            units.append(
+                self._unit(
+                    paragraph,
+                    "paragraph",
+                    paragraph.index,
+                    f"Paràgraf {paragraph.index + 1} (regles entre frases)",
+                )
+            )
+        return units
+
+    def _unit(self, unit: _UnitResult, kind: str, index: int, label: str) -> JsonDict:
+        prefix = "s" if kind == "sentence" else "p"
+        unit_id = f"{prefix}{index}"
+        # Per a un paràgraf, l'origen dels candidats és el text ja passat per les regles de frase.
+        source = unit.selected.candidate.source_text
+        return {
+            "unit_id": unit_id,
+            "kind": kind,
+            "index": index,
+            "label": label,
+            "source_text": source,
+            "output_text": unit.selected.candidate.text,
+            "changed": unit.selected.candidate.text != source,
+            "candidates": [
+                self._candidate(f"{unit_id}-{n}", evaluated, source)
+                for n, evaluated in enumerate(unit.candidates)
+            ],
+            "rejected_proposals": [
+                {
+                    "rule_id": rejected.transformation.rule_id,
+                    "text_before": rejected.transformation.text_before,
+                    "text_after": rejected.transformation.text_after,
+                    "reason": rejected.reason,
+                }
+                for rejected in unit.rejected_proposals
+            ],
+        }
+
+    def _candidate(self, candidate_id: str, evaluated: EvaluatedCandidate, source: str) -> JsonDict:
+        candidate = evaluated.candidate
+        score = evaluated.score
+        return {
+            "candidate_id": candidate_id,
+            "text": candidate.text,
+            "selected": evaluated.selected,
+            "accepted": evaluated.accepted,
+            "is_identity": candidate.is_identity,
+            "rejection_reason": evaluated.rejection_reason,
+            "change_ratio": round(candidate.change_ratio(), 4),
+            "score": None if score is None else score.to_dict(),
+            "rules": [
+                {
+                    "rule_id": t.rule_id,
+                    "text_before": t.text_before,
+                    "text_after": t.text_after,
+                    "explanation": t.explanation,
+                    "semantic_risk": t.semantic_risk.value,
+                    "confidence": t.confidence,
+                    "category": t.metadata.get("category", ""),
+                }
+                for t in candidate.transformations
+            ],
+            "warnings": [issue.to_dict() for issue in evaluated.validation.warnings],
+            "errors": [issue.to_dict() for issue in evaluated.validation.errors],
+            "diff": [part.to_dict() for part in word_diff(source, candidate.text)],
+            "variants": list(self.introduced_variants(source, candidate.text)),
+        }
+
+    # -- variants conegudes (pont amb el feedback) ------------------------------------------
+
+    def _document_observer(self) -> DocumentObserver:
+        if self._observer is None:
+            self._observer = DocumentObserver(StyleResources.load(self._paths))  # variants.yaml
+        return self._observer
+
+    def _text_analyzer(self) -> RuleBasedAnalyzer:
+        if self._analyzer is None:
+            self._analyzer = RuleBasedAnalyzer()
+        return self._analyzer
+
+    def _variant_counts(self, text: str) -> Counter[str]:
+        analysis = self._text_analyzer().analyze(text)
+        observations = self._document_observer().observe(analysis)
+        counts: Counter[str] = Counter()
+        for group in observations.variants.values():
+            for variant_id, examples in group.items():
+                counts[variant_id] += len(examples)
+        return counts
+
+    def introduced_variants(self, source: str, text: str) -> tuple[str, ...]:
+        """Variants equivalents conegudes que el candidat introdueix respecte de l'original.
+
+        Són les claus amb què es registra el feedback («obra de», «fet per»),
+        i surten dels grups de ``resources/ca/style/variants.yaml``.
+        """
+        if text == source:
+            return ()
+        before = self._variant_counts(source)
+        after = self._variant_counts(text)
+        return tuple(sorted(form for form, n in after.items() if n > before.get(form, 0)))
+
+    # -- feedback ----------------------------------------------------------------------------
+
+    def feedback_path(self, preferences: str = "") -> Path:
+        """Fitxer de feedback: el que indiqui el fitxer de preferències, o el del projecte."""
+        if preferences:
+            try:
+                author = AuthorPreferences.load(self._paths.resolve_preferences(preferences))
+            except ParafrasiError:
+                author = None
+            if author is not None and author.feedback_file is not None:
+                return author.feedback_file
+        return self._paths.preferences / DEFAULT_FEEDBACK_FILE
+
+    def record_feedback(self, request: FeedbackRequest) -> JsonDict:
+        """Registra el veredicte de l'usuari sobre les variants d'un candidat."""
+        variants = request.variants
+        if not variants and request.text and request.source_text:
+            variants = self.introduced_variants(request.source_text, request.text)
+        path = self.feedback_path(request.preferences)
+        if not variants:
+            return {
+                "verdict": request.verdict,
+                "path": str(path),
+                "recorded": [],
+                "message": (
+                    "El candidat no introdueix cap variant equivalent coneguda: "
+                    "no s'ha registrat res."
+                ),
+            }
+        store = FeedbackStore.load(path)
+        recorded: list[JsonDict] = []
+        for variant in variants:
+            counts = store.record(variant, request.verdict)
+            recorded.append(
+                {
+                    "variant": variant,
+                    **counts.to_dict(),
+                    "weight": round(counts.weight(store.prior), 4),
+                    "description": counts.describe(),
+                }
+            )
+        store.save(path)
+        self._pipelines.clear()  # els pesos han canviat: cal reconstruir les canonades
+        return {
+            "verdict": request.verdict,
+            "path": str(path),
+            "recorded": recorded,
+            "message": f"Registrat a {path}",
+        }
+
+    def feedback_summary(self, preferences: str = "") -> JsonDict:
+        path = self.feedback_path(preferences)
+        store = FeedbackStore.load(path)
+        return {
+            "path": str(path),
+            "prior": store.prior,
+            "variants": [
+                {
+                    "variant": form,
+                    **counts.to_dict(),
+                    "weight": round(counts.weight(store.prior), 4),
+                }
+                for form, counts in ((f, store.counts_of(f)) for f in store.forms)
+                if counts is not None
+            ],
+        }
+
+    # -- historial ---------------------------------------------------------------------------
+
+    def set_history_enabled(self, enabled: bool) -> JsonDict:
+        self._history.enable(enabled)
+        return self._history.status()
+
+    def save_history(self, data: Mapping[str, object]) -> JsonDict:
+        """Desa una entrada del registre (si està activat) i retorna l'estat."""
+        entry = self._history.append(data)
+        status = self._history.status()
+        status["saved"] = entry is not None
+        status["entry_id"] = entry.entry_id if entry is not None else ""
+        return status
+
+    def history_entries(self) -> JsonDict:
+        status = self._history.status()
+        status["entries"] = [entry.summary() for entry in self._history.entries()]
+        return status
+
+    def history_export(self) -> str:
+        return self._history.export_json()
+
+
+def _protected(span: ProtectedSpan) -> JsonDict:
+    return {
+        "text": span.text,
+        "kind": span.kind.value,
+        "label": span.kind.label,
+        "start": span.start,
+        "end": span.end,
+        "detector_id": span.detector_id,
+        "note": span.note,
+    }

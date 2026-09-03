@@ -1,6 +1,6 @@
 # Full de ruta
 
-## Fase 1 (actual): esquelet i garanties
+## Fase 1: esquelet i garanties
 
 - [x] Arquitectura modular amb tipatge estricte.
 - [x] `Transformation` i `ProtectedSpan` amb tots els camps previstos.
@@ -41,6 +41,23 @@
 - Puntuació que apropi el resultat a l'estil de l'autor sense allunyar-se del
   contingut.
 - Informe comparatiu abans/després amb totes les mètriques.
+
+## Fase 5: validació, puntuació i selecció
+
+- Validació factual, terminològica i epistemològica de cada candidat.
+- Puntuació multidimensional i selecció determinista.
+
+## Fase 6: diccionaris, preferències i feedback
+
+- Diccionaris terminològics editables per projecte, amb termes protegits.
+- Preferències explícites de l'autor i jerarquia de prioritats.
+- Feedback manual com a recomptes explícits, sense cap model entrenat.
+
+## Fase 7 (actual): interfície local i versió funcional
+
+- Interfície web local sobre la canonada existent.
+- Modes conservador i de reredacció profunda.
+- Registre de traçabilitat local i opcional.
 
 ## Sempre
 
