@@ -1,0 +1,85 @@
+# Paràmetres i llistes de formes que fa servir l'anàlisi estilomètrica
+# (parafrasi_cat.style). Tot és editable; cap valor no prové d'un model.
+description: Formes i paràmetres per a les mètriques estilomètriques.
+language: ca
+
+# Intervals (en paraules) de la distribució de longitud de frase. L'últim
+# interval és obert (41 o més).
+sentence_length_bins: [[1, 5], [6, 10], [11, 15], [16, 20], [21, 25], [26, 30], [31, 40], [41, null]]
+
+# Longitud màxima (en caràcters) dels exemples desats a l'empremta i nombre
+# màxim d'exemples per característica.
+example_max_chars: 110
+examples_per_feature: 3
+
+# Expressions recurrents: nombre mínim d'aparicions i de documents.
+recurrent_expressions:
+  min_count: 3
+  min_documents: 2
+  max_items: 20
+  ngram_sizes: [2, 3, 4]
+
+# Repetició lèxica: mida del segment per a la TTR estandarditzada i finestra
+# de repetició propera (en paraules de contingut).
+lexical_repetition:
+  segment_size: 100
+  near_window: 25
+  top_words: 15
+  min_word_length: 3
+
+# Estructures impersonals.
+impersonal:
+  cal_forms: [cal, calia, caldrà, caldria, calgui, calgué, calen, calien, caldran, caldrien, calguin]
+  hi_ha_forms: [ha, havia, haurà, hauria, hagi, hagué, hagués, haguera]
+  copula_forms: [és, era, serà, seria, fou, sigui, fos]
+  copula_adjectives: [necessari, necessària, possible, probable, evident, important, cert, certa, clar,
+                      convenient, difícil, fàcil, imprescindible, obvi, òbvia, habitual, freqüent,
+                      lògic, lògica, normal, sabut, conegut, coneguda, essencial, fonamental, preferible]
+  sembla_forms: [sembla, semblava, semblaria]
+
+# Primera persona.
+first_person:
+  singular:
+    pronouns: [jo, mi]
+    possessives: [meu, meva, meus, meves]
+    weak_pronoun: em
+    # Mots acabats en -o que no són verbs en primera persona.
+    verb_o_stoplist: [foto, moto, vídeo, ràdio, euro, logo, tango, quilo, kilo, zero, cinco, disco,
+                      metro, retro, piano, saldo, esquimo, bingo, judo, casino, torneo, veto, bravo,
+                      solo, tempo, allegro, crono, macro, micro, auto, memo, demo, promo, ego, expreso,
+                      ferro, carro, gerro, morro, burro, lloro, toro, moro, cuiro, tipo, duro, coco,
+                      cargo, cromo, rumbo, ritmo, dado, cuento, tango, mango, bingo, judo, taco]
+  plural:
+    pronouns: [nosaltres]
+    possessives: [nostre, nostra, nostres]
+    weak_pronoun: ens
+    # Mots acabats en -em / -im que no són verbs en primera persona del plural.
+    verb_em_stoplist: [règim, extrem, suprem, harem, ídem, ítem, tòtem, rèquiem, tàndem, mòdem,
+                       mínim, màxim, òptim, íntim, últim, legítim, ínfim, pèssim, pròxim, proxim,
+                       anònim, sinònim, homònim, unànim, magnànim, ínterim, interim]
+    # Terminacions que mai no es consideren verbals (superlatius com «altíssim»).
+    verb_em_suffix_stoplist: [íssim]
+
+# Passiva perifràstica.
+passive:
+  # Formes de «ser» que introdueixen la passiva. Les de present són ambigües
+  # (poden ser estatives) i només compten si hi ha complement agent.
+  present_forms: [és, són]
+  other_forms: [era, eren, fou, foren, serà, seran, seria, serien, sigui, siguin, fos, fossin, ser, ésser,
+                sent, essent]
+  participle_after_haver: [estat, sigut]
+  haver_forms: [ha, han, havia, havien, haurà, hauran, hauria, haurien, hagi, hagin, hagués, haguessin,
+                haver, havent, he, hem, heu]
+  agent_prepositions: [per, pel, pels]
+  # Participis que normalment són adjectius i no passives.
+  adjective_stoplist: [adequat, adequada, adequats, adequades, elevat, elevada, elevats, elevades,
+                       complicat, complicada, delicat, delicada, moderat, moderada, privat, privada,
+                       quadrat, quadrada, immediat, immediata, interessat, interessada, avançat,
+                       avançada, limitat, limitada, variat, variada, aïllat, aïllada, sagrat, sagrada]
+  # Adverbis que poden aparèixer entre l'auxiliar i el participi.
+  skippable_adverbs: [també, ja, encara, sempre, posteriorment, després, finalment, molt, més, ben,
+                      probablement, possiblement, parcialment, totalment, completament, així]
+
+# Categories aproximades de mots (densitat de noms i verbs).
+word_classes:
+  noun_introducers: [de, d', del, dels, al, als, pel, pels]

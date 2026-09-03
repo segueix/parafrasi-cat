@@ -24,6 +24,7 @@ from parafrasi_cat.rules.registry import RuleRegistry, default_registry
 from parafrasi_cat.rules.ruleset import RuleSetConfig, build_rule_set
 from parafrasi_cat.scoring.scorer import CompositeScorer
 from parafrasi_cat.style.evaluator import StyleEvaluator
+from parafrasi_cat.style.observations import StyleResources
 from parafrasi_cat.style.profile import load_style_profile
 from parafrasi_cat.validation.base import Validator
 from parafrasi_cat.validation.invariants import (
@@ -76,10 +77,21 @@ def build_pipeline(
         LengthRatioValidator(*config.length_ratio),
     ]
 
-    style_profile = load_style_profile(paths.resolve_style_profile(config.style_profile))
+    style_profile = load_style_profile(
+        paths.resolve_style_profile(config.style_profile), paths=paths
+    )
     style_evaluator = None
     if config.use_style:
-        style_evaluator = StyleEvaluator(style_profile, analyzer, _load_connectors(lang))
+        # Si el perfil referencia una empremta de l'autor, l'avaluador també mesura
+        # la distància respecte de les seves preferències (variants, connectors, comes).
+        style_resources = (
+            StyleResources.load(paths, config.language, lexicon=lexicon)
+            if style_profile.preferences is not None
+            else None
+        )
+        style_evaluator = StyleEvaluator(
+            style_profile, analyzer, _load_connectors(lang), resources=style_resources
+        )
     scorer = CompositeScorer(config.scoring, style_evaluator)
 
     return Pipeline(

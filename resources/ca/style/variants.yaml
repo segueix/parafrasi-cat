@@ -1,0 +1,118 @@
+# Grups de variants equivalents conegudes. L'anàlisi estilomètrica compta quina
+# variant fa servir l'autor dins de cada grup i en dedueix una preferència.
+#
+# Cada variant té:
+#   id            nom llegible de la variant (clau dins de l'empremta)
+#   forms         formes o locucions que la identifiquen (paraula o locució sencera)
+#   regex         (opcional) expressió regular sobre una sola paraula, en minúscules
+#   followed_by   (opcional) condició sobre el token següent: determiner | infinitive | que
+#   not_followed_by (opcional) locucions que no poden seguir immediatament la forma
+description: Variants equivalents entre les quals l'autor pot tenir preferència.
+language: ca
+groups:
+  - id: copula
+    description: "«és X» / «constitueix X» / «correspon a X» (còpula identificativa amb sintagma nominal)"
+    variants:
+      - id: és
+        forms: [és, són]
+        followed_by: determiner
+      - id: constitueix
+        forms: [constitueix, constitueixen]
+      - id: correspon a
+        forms: [correspon a, correspon al, correspon als, corresponen a, corresponen al, corresponen als]
+  - id: agent
+    description: "«fet per X» / «obra de X» / «realitzat per X»"
+    variants:
+      - id: fet per
+        forms: [fet per, feta per, fets per, fetes per]
+        not_followed_by: [a]
+      - id: obra de
+        forms: [obra de, obra d', obra del, obra dels]
+      - id: realitzat per
+        forms: [realitzat per, realitzada per, realitzats per, realitzades per]
+  - id: finalitzar_acabar
+    description: "«finalitzat» / «acabat» (i les altres formes dels verbs)"
+    variants:
+      - id: finalitzar
+        forms: [finalitzat, finalitzada, finalitzats, finalitzades, finalitzar, finalitza, finalitzen,
+                finalitzà, finalitzaren, va finalitzar, van finalitzar]
+      - id: acabar
+        forms: [acabat, acabada, acabats, acabades, acabar, acaba, acaben, acabà, acabaren,
+                va acabar, van acabar]
+      - id: enllestir
+        forms: [enllestit, enllestida, enllestits, enllestides, enllestir, enllesteix, enllesteixen,
+                enllestí, enllestiren, va enllestir, van enllestir]
+  - id: presencia
+    description: "«presenta X» / «hi ha la presència de X» / «apareix X» / «hi ha X»"
+    variants:
+      - id: presenta
+        forms: [presenta, presenten]
+      - id: hi ha la presència de
+        forms: [hi ha la presència de, hi ha la presència d']
+      - id: apareix
+        forms: [apareix, apareixen]
+      - id: hi ha
+        forms: [hi ha, hi havia]
+        not_followed_by: [la presència]
+  - id: passat
+    description: "passat perifràstic («va fer») / passat simple («féu», «encarregà»)"
+    variants:
+      - id: perifràstic
+        forms: [va, van]
+        followed_by: infinitive
+      - id: simple
+        # Només les formes de tercera persona del plural: les de singular en «-à»
+        # es confonen amb noms i adjectius (germà, català) i no es compten.
+        regex: "^[^\\W\\d_]{3,}(?:aren|iren|eren)$"
+        forms: [fou, foren, féu, feren, digué, digueren, tingué, tingueren, hagué, hagueren,
+                pogué, pogueren, volgué, volgueren, estigué, estigueren, vingué, vingueren,
+                veié, veieren, rebé, reberen, prengué, prengueren, morí, moriren, visqué,
+                visqueren, nasqué, nasqueren, escrigué, escrigueren, conegué, conegueren]
+  - id: contrast
+    description: "connectors de contrast"
+    variants:
+      - id: però
+        forms: [però]
+      - id: tanmateix
+        forms: [tanmateix]
+      - id: no obstant això
+        forms: [no obstant això, no obstant]
+      - id: en canvi
+        forms: [en canvi]
+      - id: ara bé
+        forms: [ara bé]
+      - id: així i tot
+        forms: [així i tot, amb tot, malgrat tot]
+  - id: consequencia
+    description: "connectors de conseqüència"
+    variants:
+      - id: per tant
+        forms: [per tant]
+      - id: així doncs
+        forms: [així doncs]
+      - id: en conseqüència
+        forms: [en conseqüència, per consegüent, consegüentment]
+      - id: doncs
+        forms: [doncs]
+  - id: addicio
+    description: "connectors d'addició"
+    variants:
+      - id: a més
+        forms: [a més, a més a més]
+      - id: així mateix
+        forms: [així mateix, endemés]
+      - id: també
+        forms: [també]
+      - id: d'altra banda
+        forms: [d'altra banda, per altra banda]
+  - id: causa
+    description: "connectors causals"
+    variants:
+      - id: perquè
+        forms: [perquè]
+      - id: ja que
+        forms: [ja que]
+      - id: atès que
+        forms: [atès que, puix que]
+      - id: com que
+        forms: [com que]
