@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>parafrasi-cat — Accés local</title>
+<link rel="stylesheet" href="/static/estil.css">
+</head>
+<body>
+<header class="capçalera">
+  <h1>Parafrasi-cat — Accés local</h1>
+  <p class="nota">
+    Aquesta interfície s'executa en un altre ordinador de la mateixa xarxa local.
+    Introduïu el codi d'accés que hi surt escrit per entrar-hi.
+  </p>
+</header>
+
+<main class="disposicio">
+  <form id="formulari-entrada" class="plafó controls">
+    <h2>Codi d'accés</h2>
+    <label for="codi">Codi de sis xifres</label>
+    <input type="text" id="codi" name="codi" inputmode="numeric" autocomplete="off"
+      autofocus maxlength="12" placeholder="000000">
+    <div class="botons">
+      <button type="submit" id="entra">Entrar</button>
+    </div>
+    <p id="estat-entrada" class="estat" role="status"></p>
+    <p id="privacitat-entrada" class="ajuda"></p>
+    <p id="avis-entrada" class="ajuda avis"></p>
+  </form>
+</main>
+
+<script src="/static/entrada.js"></script>
+</body>
+</html>

@@ -15,6 +15,7 @@ Llicència: spaCy MIT; model ``ca_core_news_sm`` GPL-3.0. Vegeu
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -54,6 +55,10 @@ class SpacySyntax:
         self._nlp: Any = None
         self._loaded = False
         self._failure = ""
+        # Amb el mode de xarxa local hi pot haver dues peticions alhora: sense
+        # pany, la segona veuria el model «carregat» mentre encara s'està
+        # carregant i es pensaria que el parser no hi és.
+        self._load_lock = threading.Lock()
         if eager:
             self._load()
 
@@ -62,18 +67,23 @@ class SpacySyntax:
     def _load(self) -> Any:
         if self._loaded:
             return self._nlp
-        self._loaded = True
+        with self._load_lock:
+            if not self._loaded:
+                self._nlp = self._load_model()
+                self._loaded = True
+            return self._nlp
+
+    def _load_model(self) -> Any:
         try:
             import spacy  # noqa: PLC0415 - import mandrós: spaCy és opcional
         except ImportError as exc:
             self._failure = f"spaCy no està instal·lat ({exc})"
             return None
         try:
-            self._nlp = spacy.load(self._model_name, disable=list(DISABLED_COMPONENTS))
+            return spacy.load(self._model_name, disable=list(DISABLED_COMPONENTS))
         except (OSError, ValueError) as exc:
             self._failure = f"El model «{self._model_name}» no està instal·lat ({exc})"
-            self._nlp = None
-        return self._nlp
+            return None
 
     @property
     def model_name(self) -> str:

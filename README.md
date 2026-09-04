@@ -8,8 +8,10 @@ que s'executa al mateix ordinador.
 > morfològica i sintàctica, validació gramatical i selecció determinista de
 > candidats.**
 
-**Versió 1.0.0.** Un cop instal·lats els recursos, tot funciona sense connexió i
-cap text no surt mai de l'ordinador.
+**Versió 1.3.0.** Un cop instal·lats els recursos, tot funciona sense connexió.
+Parafrasi-cat no envia text a serveis d'Internet: en mode local, el text no surt
+del dispositiu; en mode de xarxa local, només circula entre el navegador client
+i el servidor Parafrasi-cat dins de la LAN.
 
 ## Què és
 
@@ -73,10 +75,13 @@ interfície al navegador.
 ```bash
 parafrasi-cat web                       # obre http://127.0.0.1:8765/
 parafrasi-cat web --port 9000 --no-browser
+parafrasi-cat web --lan                 # també des de la xarxa local, amb codi d'accés
 ```
 
-El servidor es lliga a l'amfitrió local i la pàgina no carrega cap recurs
-extern.
+Per defecte el servidor es lliga a l'amfitrió local i la pàgina no carrega cap
+recurs extern. Amb `--lan` escolta a totes les interfícies d'aquesta màquina i
+demana un codi d'accés de sis xifres: vegeu
+[«Utilitzar Parafrasi-cat amb dos Chromebooks»](#utilitzar-parafrasi-cat-amb-dos-chromebooks).
 
 ## Mode lingüístic complet i mode bàsic
 
@@ -127,7 +132,7 @@ els seus components interns.
 
 A la secció **Empremta de l'autor**: poseu-hi un nom, trieu els vostres textos
 `.txt` o `.md` i premeu **Crea l'empremta**. L'anàlisi es fa en aquest
-ordinador, els textos no en surten i **no s'entrena cap model**: només se'n
+ordinador, els textos no van a Internet i **no s'entrena cap model**: només se'n
 desen recomptes i estadístics robustos a `style/<nom>.json`.
 
 També des del terminal:
@@ -424,13 +429,37 @@ desactivat no s'escriu res. Quan s'activa, cada reescriptura desa una línia JSO
 amb el text original, la data, la configuració, els candidats, les puntuacions,
 el candidat seleccionat, les regles, el feedback i l'edició final.
 
+## Utilitzar Parafrasi-cat amb dos Chromebooks
+
+Un Chromebook pot fer de servidor i un altre, de client:
+
+- **Chromebook 1**: ChromeOS amb Linux, parafrasi-cat i tots els recursos
+  lingüístics. S'engega amb `parafrasi-cat web --lan` (o `start_parafrasi_lan.sh`)
+  i mostra un codi d'accés de sis xifres, nou a cada arrencada.
+- **Chromebook 2**: només Chrome. Obre `http://IP-DEL-CHROMEBOOK-1:8765`,
+  escriu el codi i fa servir la mateixa interfície de sempre. No li cal Linux,
+  Python, Java, spaCy, LanguageTool ni Git.
+
+El resultat lingüístic és **idèntic** al del mode local: el mode de xarxa local
+només canvia per on viatja el text, no què fa el motor. Sense `--lan`, el
+servidor continua escoltant només a `127.0.0.1` i no demana cap codi.
+
+Si s'escriu el codi malament deu vegades seguides, el servidor deixa
+d'acceptar-ne cap durant un minut: així no es poden provar les sis xifres una
+per una.
+
+La guia completa —instal·lació, redirecció de ports de Crostini, quina adreça
+IP cal fer servir, seguretat i privacitat— és a
+[`docs/chromebook-dual.md`](docs/chromebook-dual.md).
+
 ## Fora de línia
 
 Cap component consulta Internet durant el parafraseig, l'anàlisi, la validació,
 la puntuació, la selecció, el feedback o l'exportació. Les úniques connexions
-possibles són amb aquest mateix ordinador: el navegador amb la interfície, i la
-interfície amb el servidor local de LanguageTool. Els tests ho comproven
-bloquejant tota connexió que no sigui de bucle local.
+possibles són amb aquest mateix ordinador —el navegador amb la interfície, i la
+interfície amb el servidor local de LanguageTool— i, si s'activa el mode de
+xarxa local, amb el navegador d'un altre dispositiu de la mateixa LAN. Els
+tests ho comproven bloquejant tota connexió que no sigui de bucle local.
 
 ## Com afegir una regla
 

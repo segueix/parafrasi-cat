@@ -3,6 +3,37 @@
 El format segueix [Keep a Changelog](https://keepachangelog.com/ca/1.1.0/) i el
 projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
+## 1.3.0
+
+- mode de xarxa local (`parafrasi-cat web --lan`), opcional i mai per defecte;
+- ús amb dos Chromebooks: un executa el motor, l'altre només obre Chrome;
+- autenticació temporal amb codi d'accés de sis xifres i sessió amb testimoni
+  aleatori (`HttpOnly`, `SameSite=Strict`), exigida a totes les rutes de l'API
+  en aquest mode;
+- comprovació de `Host` adaptada: adreces IP privades sí, dominis d'Internet
+  mai, en tots dos modes; també s'accepten les adreces del contenidor de
+  ChromeOS (`100.115.92.x`, `penguin.linux.test`), que no són registrables;
+- límit d'intents del codi d'accés: passats deu errors seguits, el servidor
+  deixa d'acceptar codis durant un minut, de manera que provar les sis xifres
+  una per una deixa de ser viable;
+- interfície remota sobre LAN: la mateixa aplicació, sense cap segona UI;
+- documentació de Crostini i de quina adreça IP cal fer servir
+  (`docs/chromebook-dual.md`) i llançador `start_parafrasi_lan.sh`;
+- privacitat descrita amb precisió: el text no va a Internet, i en mode de
+  xarxa local circula dins de la LAN entre el navegador i el servidor;
+- mateixa qualitat lingüística que el mode local, comprovada amb un test de
+  paritat entre els dos modes;
+- registre local i fitxers de preferències i d'empremta segurs amb dos
+  dispositius alhora: escriptura atòmica i lectura amb pany;
+- càrrega del parser segura amb dues peticions alhora: la segona espera el
+  model en comptes de veure'l com a no disponible;
+- una canonada construïda amb els pesos vells ja no es queda a la memòria si
+  mentrestant s'ha desat una valoració o una empremta;
+- una petició refusada (403 d'amfitrió o 401 de sessió) ja no desbarata la
+  petició següent de la mateixa connexió;
+- l'estat dels recursos lingüístics es comprova després d'arrencar el
+  servidor, que així contesta de seguida.
+
 ## 1.2.0
 
 L'empremta d'autor respon «com escriu?» i no només «quines paraules fa

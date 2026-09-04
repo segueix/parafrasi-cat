@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from parafrasi_cat.core.errors import ResourceError
+from parafrasi_cat.resources import write_atomically
 from parafrasi_cat.style.statistics import RobustSummary, confidence, round_floats
 
 SCHEMA_VERSION = "1.1"
@@ -195,7 +196,7 @@ class StyleFingerprint:
     def save(self, path: str | Path) -> Path:
         file = Path(path)
         file.parent.mkdir(parents=True, exist_ok=True)
-        file.write_text(self.to_json(), encoding="utf-8")
+        write_atomically(file, self.to_json())
         return file
 
     # -- accés còmode ------------------------------------------------------------------
