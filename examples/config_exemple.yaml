@@ -19,7 +19,8 @@ scoring:
   transformation_gain: 1.0
   semantic_risk: 1.0
   style_distance: 0.5
-  author_affinity: 2.0           # pes de l'adaptació autoral (només amb source_mode: llm_draft)
+  author_affinity: 2.0           # pes de l'adaptació autoral amb source_mode: llm_draft
+  author_affinity_own: 0.5       # el mateix pes amb text propi i empremta (desempat lleu)
   max_transformations: 3
 
 source_mode: own                 # own (text propi, per defecte) | llm_draft (esborrany generat

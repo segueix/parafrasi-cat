@@ -97,6 +97,11 @@ legend { padding: 0 0.35rem; font-weight: 600; font-size: 0.85rem; }
 .ajuda { margin: 0.35rem 0 0; color: var(--suau); font-size: 0.82rem; }
 .ajuda.avis { color: var(--avis); }
 .afinitat { margin: 0.2rem 0 0; }
+.empremta-resum { margin: 0.6rem 0 0; padding: 0.6rem; border: 1px solid var(--vora, #ccc); border-radius: 5px; font-size: 0.82rem; }
+.empremta-resum h3 { margin: 0 0 0.4rem; font-size: 0.9rem; }
+.transicions { list-style: none; margin: 0.3rem 0; padding: 0; columns: 2; }
+.transicions li { margin: 0.1rem 0; }
+.detalls { max-height: 18rem; overflow: auto; font-size: 0.72rem; white-space: pre-wrap; }
 
 .mode { margin: 0 0 0.6rem; padding: 0.5rem 0.6rem; border-radius: 5px; font-size: 0.82rem; }
 .mode.complet { border: 1px solid var(--afegit); }

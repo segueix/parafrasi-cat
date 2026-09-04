@@ -45,6 +45,7 @@ from parafrasi_cat.style.fingerprint import StyleFingerprint
 from parafrasi_cat.style.observations import DocumentObserver, StyleResources
 from parafrasi_cat.style.preferences import StylePreferences
 from parafrasi_cat.style.profiler import build_fingerprint
+from parafrasi_cat.syntax.spacy_parser import SpacySyntax
 from parafrasi_cat.web.history import DEFAULT_HISTORY_FILE, HistoryLog
 
 DEFAULT_RULE_SET = "parafrasi"
@@ -244,6 +245,7 @@ class RewriteService:
         self._pipelines: dict[PipelineConfig, Pipeline] = {}
         self._observer: DocumentObserver | None = None
         self._analyzer: RuleBasedAnalyzer | None = None
+        self._syntax: SpacySyntax | None = None
 
     @property
     def paths(self) -> ProjectPaths:
@@ -506,6 +508,12 @@ class RewriteService:
             self._observer = DocumentObserver(StyleResources.load(self._paths))  # variants.yaml
         return self._observer
 
+    def _syntax_provider(self) -> SpacySyntax:
+        """Parser local per al perfil sintàctic de l'empremta (només analitza)."""
+        if self._syntax is None:
+            self._syntax = SpacySyntax()
+        return self._syntax
+
     def _text_analyzer(self) -> RuleBasedAnalyzer:
         if self._analyzer is None:
             self._analyzer = RuleBasedAnalyzer()
@@ -601,6 +609,46 @@ class RewriteService:
             ],
         }
 
+    # -- resum d'una empremta: estructura i ritme ------------------------------------------------
+
+    def fingerprint_summary(self, reference: str) -> JsonDict:
+        """«Estructura i ritme» d'una empremta, en termes entenedors i amb els detalls a part.
+
+        Amb una empremta antiga (esquema 1.0) les seccions noves surten com a no
+        disponibles i es proposa tornar-la a crear; no s'inventa cap dada.
+        """
+        # «style/<nom>.json» (l'identificador del selector) o un nom dins de style/.
+        fingerprint = StyleFingerprint.load(self._paths.resolve_fingerprint(reference))
+        rhythm = fingerprint.features.get("rhythm_profile")
+        syntax = fingerprint.features.get("syntactic_profile")
+        hints: list[str] = []
+        if not fingerprint.has_rhythm_profile:
+            hints.append("ritme de frases")
+        if not fingerprint.has_syntactic_profile:
+            hints.append("estructura sintàctica")
+        return {
+            "id": reference,
+            "name": fingerprint.name,
+            "schema_version": fingerprint.schema_version,
+            "n_documents": fingerprint.n_documents,
+            "n_words": fingerprint.n_words,
+            "parser": str(fingerprint.generator.get("parser", "")),
+            "rhythm": _rhythm_summary(rhythm) if isinstance(rhythm, Mapping) else _unavailable(),
+            "syntax": _syntax_summary(syntax) if isinstance(syntax, Mapping) else _unavailable(),
+            "regenerate_hint": (
+                "Aquesta empremta no té " + " ni ".join(hints) + ". Torna-la a crear amb els "
+                "teus textos"
+                + (" i el parser instal·lat" if "estructura sintàctica" in hints else "")
+                + " per obtenir-los."
+                if hints
+                else ""
+            ),
+            "details": {
+                "rhythm_profile": dict(rhythm) if isinstance(rhythm, Mapping) else None,
+                "syntactic_profile": dict(syntax) if isinstance(syntax, Mapping) else None,
+            },
+        }
+
     # -- instal·lació de components opcionals ------------------------------------------------
 
     def install_component(self, component: str, confirmed: bool) -> JsonDict:
@@ -674,6 +722,7 @@ class RewriteService:
             self._text_analyzer(),
             name=clean,
             description="Creada des de la interfície",
+            syntax=self._syntax_provider(),
         )
         target = self._paths.fingerprints / f"{clean}.json"
         fingerprint.save(target)
@@ -764,6 +813,134 @@ _INSTALL_INFO: dict[str, JsonDict] = {
         ),
     },
 }
+
+
+_BUCKET_LABELS = {"short": "Curta", "medium": "Mitjana", "long": "Llarga"}
+_CONFIDENCE_LABELS = {"high": "alta", "medium": "mitjana", "low": "baixa"}
+
+
+def _unavailable() -> JsonDict:
+    return {"available": False}
+
+
+def _frequency_label(share: float) -> str:
+    if share >= 0.5:
+        return "molt freqüent"
+    if share >= 0.3:
+        return "freqüent"
+    if share >= 0.15:
+        return "ocasional"
+    return "poc freqüent"
+
+
+def _rhythm_summary(profile: Mapping[str, object]) -> JsonDict:
+    length = profile.get("length")
+    buckets = profile.get("buckets")
+    transitions = profile.get("transitions")
+    alternation = profile.get("alternation")
+    runs = profile.get("runs")
+    if not isinstance(length, Mapping) or not length:
+        return _unavailable()
+    shares = buckets.get("shares") if isinstance(buckets, Mapping) else None
+    thresholds = buckets.get("thresholds") if isinstance(buckets, Mapping) else None
+    row_shares = transitions.get("shares") if isinstance(transitions, Mapping) else None
+    lag = (
+        alternation.get("lag1_sentence_length_correlation")
+        if isinstance(alternation, Mapping)
+        else None
+    )
+    change = (
+        alternation.get("mean_absolute_sentence_length_change")
+        if isinstance(alternation, Mapping)
+        else None
+    )
+    if isinstance(lag, int | float) and not isinstance(lag, bool):
+        tendency = (
+            "alternança marcada"
+            if lag < -0.2
+            else "ritme força uniforme"
+            if lag > 0.2
+            else "alternança moderada"
+        )
+    else:
+        tendency = "no hi ha prou frases per mesurar l'alternança"
+    return {
+        "available": True,
+        "confidence": _CONFIDENCE_LABELS.get(str(profile.get("confidence")), "baixa"),
+        "sample_size_sentences": profile.get("sample_size_sentences", 0),
+        "typical_length": length.get("median"),
+        "mean_length": length.get("mean"),
+        "variation": length.get("cv"),
+        "shares": {
+            _BUCKET_LABELS[k]: float(v)
+            for k, v in (shares.items() if isinstance(shares, Mapping) else [])
+            if isinstance(v, int | float) and not isinstance(v, bool) and k in _BUCKET_LABELS
+        },
+        "thresholds": dict(thresholds) if isinstance(thresholds, Mapping) else {},
+        "tendency": tendency,
+        "lag1": lag,
+        "mean_change": change,
+        "transitions": [
+            {
+                "from": _BUCKET_LABELS[a],
+                "to": _BUCKET_LABELS[b],
+                "share": float(row_shares.get(f"{a}_to_{b}", 0.0)),
+                "label": _frequency_label(float(row_shares.get(f"{a}_to_{b}", 0.0))),
+            }
+            for a in ("short", "medium", "long")
+            for b in ("short", "medium", "long")
+            if isinstance(row_shares, Mapping)
+        ],
+        "runs": dict(runs) if isinstance(runs, Mapping) else {},
+    }
+
+
+def _syntax_summary(profile: Mapping[str, object]) -> JsonDict:
+    if profile.get("available") is not True:
+        return {"available": False, "reason": str(profile.get("reason", ""))}
+    coordination = profile.get("coordination")
+    subordination = profile.get("subordination")
+    order = profile.get("order")
+    complexity = profile.get("complexity")
+    distance = profile.get("dependency_distance")
+    patterns = profile.get("patterns")
+
+    def get(node: object, key: str) -> object:
+        return node.get(key) if isinstance(node, Mapping) else None
+
+    subject_before = get(order, "subject_before_verb_rate")
+    if isinstance(subject_before, int | float):
+        subject_order = (
+            "subjecte abans del verb"
+            if subject_before >= 0.6
+            else "subjecte després del verb"
+            if subject_before <= 0.4
+            else "subjecte abans i després del verb per igual"
+        )
+    else:
+        subject_order = "no hi ha prou subjectes per dir-ho"
+    top = get(patterns, "top")
+    return {
+        "available": True,
+        "confidence": _CONFIDENCE_LABELS.get(str(profile.get("confidence")), "baixa"),
+        "sample_size_sentences": profile.get("sample_size_sentences", 0),
+        "parser": str(profile.get("parser", "")),
+        "coordination_per_sentence": get(coordination, "per_sentence"),
+        "coordination_by_type": get(coordination, "by_type"),
+        "subordination_per_sentence": get(subordination, "per_sentence"),
+        "sentences_with_subordination_share": get(
+            subordination, "sentences_with_subordination_share"
+        ),
+        "subordination_by_type": get(subordination, "by_type"),
+        "subject_order": subject_order,
+        "subject_before_verb_rate": subject_before,
+        "preposed_complement_rate": get(order, "preposed_complement_rate"),
+        "clauses_per_sentence": get(complexity, "clauses_per_sentence"),
+        "simple_sentence_ratio": get(complexity, "simple_sentence_ratio"),
+        "mean_parse_depth": get(complexity, "mean_parse_depth"),
+        "mean_dependency_distance": get(distance, "mean_dependency_distance"),
+        "top_patterns": list(top[:5]) if isinstance(top, list) else [],
+    }
 
 
 def install_info(component: str = "languagetool") -> JsonDict:

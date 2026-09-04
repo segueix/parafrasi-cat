@@ -19,6 +19,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 from parafrasi_cat.core.errors import ParafrasiError
 from parafrasi_cat.web.service import FeedbackRequest, RewriteRequest, RewriteService
@@ -142,6 +143,13 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._send_json(self._service.feedback_summary())
         elif path == "/api/resources":
             self._send_json(self._service.resources())
+        elif path == "/api/fingerprint/summary":
+            query = parse_qs(urlsplit(self.path).query)
+            reference = (query.get("id") or [""])[0]
+            if not reference:
+                self._send_error_json("Cal indicar l'empremta («id»)", HTTPStatus.BAD_REQUEST)
+                return
+            self._send_json(self._service.fingerprint_summary(reference))
         elif path == "/api/history":
             self._send_json(self._service.history_entries())
         elif path == "/api/history/export":

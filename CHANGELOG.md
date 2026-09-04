@@ -3,6 +3,30 @@
 El format segueix [Keep a Changelog](https://keepachangelog.com/ca/1.1.0/) i el
 projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
+## 1.2.0
+
+L'empremta d'autor respon «com escriu?» i no només «quines paraules fa
+servir?». Esquema de l'empremta 1.1, compatible amb les empremtes antigues.
+
+- `rhythm_profile`: longitud de frase en tokens lingüístics (mitjana, mediana,
+  desviació, coeficient de variació, percentils), franges curta / mitjana /
+  llarga amb llindars derivats del corpus, matriu de transició, trigrames,
+  ratxes, correlació de retard 1, canvi absolut mitjà i paràgrafs.
+- `syntactic_profile`, calculat amb el parser local (que només analitza):
+  coordinació per tipus i mida, subordinació per tipus i profunditat, ordre
+  del subjecte i dels complements, distància de dependències, complexitat i
+  patrons abstractes de frase. Cap frase del corpus no es guarda.
+- Suficiència de mostra explícita: `sample_size` i `confidence` (`low`,
+  `medium`, `high`) a cada secció; una mètrica poc fiable no puntua.
+- Puntuació: components `ritme` i `sintaxi` dins de l'afinitat amb l'autor
+  (`rhythm_similarity_score`, `syntactic_similarity_score`), amb explicacions
+  per candidat; pes reduït amb text propi i complet amb esborranys LLM; sempre
+  per sota dels invariants.
+- Web: secció «Estructura i ritme» en triar una empremta, amb la matriu de
+  transició en paraules i «Veure detalls».
+- TextDescriptives avaluada i descartada (dependències pesants per a mètriques
+  trivials); tot s'implementa internament.
+
 ## 1.1.0
 
 - selector d'origen del text: text propi (per defecte, comportament de sempre)

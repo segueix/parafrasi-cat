@@ -28,7 +28,7 @@ from parafrasi_cat.core.transformation import Transformation, TransformationType
 from parafrasi_cat.pipeline import FINGERPRINT_REQUIRED, SourceMode
 from parafrasi_cat.resources import ProjectPaths
 from parafrasi_cat.scoring import DIMENSIONS, CompositeScorer, ScoringContext, ScoringWeights
-from parafrasi_cat.style.adaptation import AuthorAdaptation, UnitStats
+from parafrasi_cat.style.adaptation import AdaptationContext, AuthorAdaptation
 from parafrasi_cat.style.corpus import load_corpus
 from parafrasi_cat.style.observations import StyleResources
 from parafrasi_cat.style.preferences import StylePreferences
@@ -132,18 +132,25 @@ def candidate(source: str, text: str, before: str, after: str) -> Candidate:
 
 
 def test_own_text_keeps_the_previous_behaviour(fingerprint_file: Path) -> None:
+    """Text propi: el mateix resultat amb i sense indicar-ho; l'afinitat, un desempat lleu."""
     implicit = build_pipeline(config(fingerprint_file))
     explicit = build_pipeline(config(fingerprint_file, SourceMode.OWN))
-    assert implicit.source_mode == "own" and implicit.adaptation is None
-    assert explicit.adaptation is None
+    assert implicit.source_mode == "own" and explicit.source_mode == "own"
     first, second = implicit.run(DRAFT), explicit.run(DRAFT)
     assert first.to_dict() == second.to_dict()
     assert first.source_mode == "own"
-    for sentence in first.sentences:
+    # Amb empremta, el text propi rep l'afinitat amb el pes reduït (desempat, no imitació);
+    # sense empremta no hi ha cap adaptació.
+    weights = ScoringWeights()
+    scorer = implicit._scorer  # noqa: SLF001
+    assert isinstance(scorer, CompositeScorer)
+    assert scorer.weights.author_affinity == weights.author_affinity_own
+    plain = build_pipeline(PipelineConfig(rule_set="parafrasi", level=5))
+    assert plain.adaptation is None
+    for sentence in plain.run(DRAFT).sentences:
         for evaluated in sentence.candidates:
             assert evaluated.score is not None
             assert evaluated.score.dimensions["afinitat_autor"] is None
-            assert evaluated.score.author_explanation == ""
 
 
 def test_source_mode_defaults_to_own_everywhere() -> None:
@@ -374,4 +381,4 @@ def test_the_author_mode_opens_no_external_connection(fingerprint_file: Path) ->
     result = pipeline.run(DRAFT)
     assert result.output_text
     assert pipeline.adaptation is not None
-    assert pipeline.adaptation.assess(PLAIN, context=UnitStats()).score > 0.0
+    assert pipeline.adaptation.assess(PLAIN, context=AdaptationContext()).score > 0.0

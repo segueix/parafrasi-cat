@@ -168,6 +168,9 @@ def _convert(token: Any) -> SyntaxToken:
         person=_first(morph.get("Person"), None),
         mood=_first(morph.get("Mood"), _MOOD),
         tense=_first(morph.get("Tense"), _TENSE),
+        verb_form=_first(morph.get("VerbForm"), None),
+        pron_type=_first(morph.get("PronType"), None),
+        adv_type=_first(morph.get("AdvType"), None),
     )
 
 

@@ -151,18 +151,24 @@ def build_pipeline(
             analyzer=analyzer,
         )
     adaptation = None
-    if config.source_mode.adapts_to_author:
+    weights = config.scoring
+    if config.source_mode.adapts_to_author and style_profile.preferences is None:
         # Esborrany generat amb LLM: l'adaptació exigeix l'empremta real de l'autor.
         # Sense empremta no s'executa cap pseudomode autoral: es diu clarament.
-        if style_profile.preferences is None:
-            raise ConfigError(FINGERPRINT_REQUIRED)
+        raise ConfigError(FINGERPRINT_REQUIRED)
+    if style_profile.preferences is not None:
+        # Amb empremta, l'afinitat amb l'autor entra a la puntuació: amb tot el pes
+        # per a un esborrany generat amb LLM, i com un desempat lleu amb text propi.
         adaptation = AuthorAdaptation(
             style_profile.preferences,
             analyzer,
             StyleResources.load(paths, config.language, lexicon=lexicon),
             explicit_forms=resolver.explicit_forms(),
+            syntax=syntax,
         )
-    scorer = CompositeScorer(config.scoring, style_evaluator, preference_evaluator, adaptation)
+        if not config.source_mode.adapts_to_author:
+            weights = replace(weights, author_affinity=weights.author_affinity_own)
+    scorer = CompositeScorer(weights, style_evaluator, preference_evaluator, adaptation)
 
     return Pipeline(
         analyzer=analyzer,

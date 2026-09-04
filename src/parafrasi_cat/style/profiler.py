@@ -23,6 +23,7 @@ from parafrasi_cat.style.observations import (
     StyleSettings,
     VariantGroup,
 )
+from parafrasi_cat.style.rhythm import rhythm_profile
 from parafrasi_cat.style.statistics import (
     confidence,
     iqr,
@@ -35,6 +36,8 @@ from parafrasi_cat.style.statistics import (
     robust_rate,
     shares,
 )
+from parafrasi_cat.style.syntax_profile import syntactic_profile, unavailable_profile
+from parafrasi_cat.syntax.analysis import SyntaxProvider
 
 #: Proporció mínima i observacions mínimes per declarar una variant «preferida».
 PREFERRED_MIN_SHARE = 0.6
@@ -56,6 +59,10 @@ _PUNCTUATION_KEYS = (
     "exclamation",
     "ellipsis",
 )
+_SYNTAX_METHOD = (
+    "perfil sintàctic i patrons abstractes amb el parser local (spaCy, UD Catalan AnCora), "
+    "que només analitza"
+)
 _METHOD = (
     "recomptes deterministes basats en regles i llistes editables; "
     "estadístics robustos (mediana ponderada a partir de cinc documents, mitjana amb pesos "
@@ -64,10 +71,16 @@ _METHOD = (
 
 
 def observe_corpus(
-    documents: Iterable[CorpusDocument], resources: StyleResources, analyzer: Analyzer
+    documents: Iterable[CorpusDocument],
+    resources: StyleResources,
+    analyzer: Analyzer,
+    syntax: SyntaxProvider | None = None,
 ) -> list[DocumentObservations]:
+    """Observa cada document; amb ``syntax`` (parser local) també l'estructura sintàctica."""
     observer = DocumentObserver(resources)
-    return [observer.observe(analyzer.analyze(doc.text), doc.name) for doc in documents]
+    return [
+        observer.observe(analyzer.analyze(doc.text), doc.name, syntax=syntax) for doc in documents
+    ]
 
 
 def build_fingerprint(
@@ -78,18 +91,24 @@ def build_fingerprint(
     name: str = "autor",
     description: str = "",
     language: str = "ca",
+    syntax: SyntaxProvider | None = None,
 ) -> StyleFingerprint:
-    """Construeix l'empremta del corpus principal i, si n'hi ha, valida amb el de validació."""
+    """Construeix l'empremta del corpus principal i, si n'hi ha, valida amb el de validació.
+
+    Amb ``syntax`` (el parser local, que només analitza) l'empremta inclou el
+    perfil sintàctic; sense, la secció queda marcada com a no disponible.
+    """
     main_documents = corpus.main
     if not main_documents:
         raise ResourceError("El corpus principal no conté cap document amb text")
-    main = observe_corpus(main_documents, resources, analyzer)
-    features = aggregate(main, resources.settings, resources.variant_groups)
+    parser = syntax if syntax is not None and syntax.available else None
+    main = observe_corpus(main_documents, resources, analyzer, parser)
+    features = aggregate(main, resources.settings, resources.variant_groups, parser=parser)
     fingerprint = StyleFingerprint(
         name=name,
         description=description,
         language=language,
-        generator=_generator(main_documents),
+        generator=_generator(main_documents, parser),
         corpus=_corpus_summary(main_documents, main, corpus),
         features=features,
         validation=None,
@@ -98,14 +117,14 @@ def build_fingerprint(
     validation_documents = corpus.validation
     if not validation_documents:
         return fingerprint
-    validation = observe_corpus(validation_documents, resources, analyzer)
+    validation = observe_corpus(validation_documents, resources, analyzer, parser)
     validation_fingerprint = StyleFingerprint(
         name=f"{name} (validació)",
         description="",
         language=language,
-        generator=_generator(validation_documents),
+        generator=_generator(validation_documents, parser),
         corpus=_corpus_summary(validation_documents, validation, None),
-        features=aggregate(validation, resources.settings, resources.variant_groups),
+        features=aggregate(validation, resources.settings, resources.variant_groups, parser=parser),
     )
     from parafrasi_cat.style.compare import compare_fingerprints
 
@@ -139,18 +158,32 @@ def build_fingerprint(
     )
 
 
-def _generator(documents: Sequence[CorpusDocument]) -> dict[str, object]:
+def _generator(
+    documents: Sequence[CorpusDocument], parser: SyntaxProvider | None = None
+) -> dict[str, object]:
     from parafrasi_cat import __version__
 
     digest = hashlib.sha256("\n".join(d.sha256 for d in documents).encode("utf-8")).hexdigest()
     return {
         "tool": "parafrasi-cat",
         "version": __version__,
-        "method": _METHOD,
+        "method": _METHOD if parser is None else _METHOD + "; " + _SYNTAX_METHOD,
         "deterministic": True,
-        "uses_models": False,
+        # Cap model no genera res. Si hi ha parser, s'ha fet servir per *analitzar*
+        # l'estructura de les frases, i es diu quin.
+        "uses_models": parser is not None,
+        "parser": _parser_name(parser),
         "corpus_hash": digest[:12],
     }
+
+
+def _parser_name(parser: SyntaxProvider | None) -> str:
+    if parser is None:
+        return ""
+    describe = getattr(parser, "describe", None)
+    if callable(describe):
+        return str(describe())
+    return type(parser).__name__
 
 
 def _document_entries(
@@ -193,6 +226,8 @@ def aggregate(
     observations: Sequence[DocumentObservations],
     settings: StyleSettings,
     variant_groups: Sequence[VariantGroup] = (),
+    *,
+    parser: SyntaxProvider | None = None,
 ) -> dict[str, object]:
     """Agrega les observacions de tots els documents en el diccionari ``features``."""
     if not observations:
@@ -215,6 +250,29 @@ def aggregate(
     features["lexical_repetition"] = _lexical_repetition(observations, settings)
     features["word_class_density"] = _word_classes(observations)
     features["variant_preferences"] = _variants(observations, variant_groups, settings)
+    features["rhythm_profile"] = rhythm_profile(
+        [o.sentence_tokens for o in observations],
+        n_documents=sum(1 for o in observations if o.sentence_tokens),
+        paragraphs=[
+            sequence
+            for o in observations
+            if o.n_paragraphs > 1
+            for sequence in o.paragraph_token_sequences
+        ],
+    )
+    if parser is None:
+        features["syntactic_profile"] = unavailable_profile(
+            "l'empremta s'ha creat sense el parser sintàctic local; torna-la a crear "
+            "amb el parser instal·lat per obtenir el perfil sintàctic"
+        )
+    else:
+        features["syntactic_profile"] = syntactic_profile(
+            [stats for o in observations for stats in o.syntax],
+            n_documents=sum(1 for o in observations if o.syntax),
+            parser=_parser_name(parser),
+            skipped_sentences=sum(o.syntax_skipped for o in observations),
+            impersonal_sentences=sum(len(o.impersonal) for o in observations),
+        )
     return features
 
 

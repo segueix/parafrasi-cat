@@ -9,8 +9,9 @@ L'empremta estilística (:class:`StyleFingerprint`) és el resultat de
 l'anàlisi del corpus d'un autor: un JSON explícit i editable que es
 construeix amb :func:`build_fingerprint` (ordre ``parafrasi-cat style build``),
 es compara amb :func:`compare_fingerprints` i es consulta amb
-:class:`StylePreferences`. Tot es calcula amb regles i recomptes; no s'hi fa
-servir cap model.
+:class:`StylePreferences`. Tot es calcula amb regles i recomptes; l'únic
+model que hi intervé és el parser sintàctic local, que només analitza les
+frases per al perfil sintàctic (esquema 1.1) i mai no genera res.
 """
 
 from parafrasi_cat.style.compare import (

@@ -13,6 +13,12 @@ comparable, calcula una distància entre 0 (igual) i 1 (màximament diferent):
 
 La distància global és la mitjana ponderada per la confiança mínima de cada
 parell de nodes, de manera que les característiques poc observades pesen poc.
+
+Els perfils de ritme i sintàctic (esquema 1.1) no entren en aquesta
+comparació: tenen la seva pròpia mesura de semblança, pensada per puntuar
+candidats (``style.rhythm.rhythm_similarity`` i
+``style.syntax_profile.syntactic_similarity``), i les seves proporcions per
+fila no són distribucions comparables amb variació total.
 """
 
 from __future__ import annotations
@@ -24,6 +30,8 @@ from parafrasi_cat.style.fingerprint import FeatureStat, StyleFingerprint, is_st
 from parafrasi_cat.style.statistics import jaccard, relative_difference, total_variation
 
 _LIST_KEYS = frozenset({"top", "items", "top_words"})
+#: Seccions amb mesura de semblança pròpia, fora de la comparació genèrica.
+_PROFILE_KEYS = frozenset({"rhythm_profile", "syntactic_profile"})
 _LIST_WEIGHT = 0.5
 _TOP_N = 10
 
@@ -143,7 +151,7 @@ def _walk(
         return
     weight = min(_confidence(a), _confidence(b), parent_weight)
     for key in sorted(set(a.keys()) | set(b.keys())):
-        if key not in a or key not in b:
+        if key not in a or key not in b or (not path and key in _PROFILE_KEYS):
             continue
         child_path = f"{path}.{key}" if path else str(key)
         value_a, value_b = a[key], b[key]

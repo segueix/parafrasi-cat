@@ -29,7 +29,7 @@ from parafrasi_cat.rules.base import ParagraphContext, RuleContext
 from parafrasi_cat.rules.ruleset import RuleSet, RuleSetConfig
 from parafrasi_cat.scoring.scorer import ScoreBreakdown, Scorer, ScoringContext
 from parafrasi_cat.scoring.selection import select_best
-from parafrasi_cat.style.adaptation import AuthorAdaptation, UnitStats
+from parafrasi_cat.style.adaptation import AdaptationContext, AuthorAdaptation, UnitStats
 from parafrasi_cat.style.profile import StyleProfile
 from parafrasi_cat.syntax.analysis import CachedSyntax, NullSyntax, SyntaxProvider
 from parafrasi_cat.validation.base import ValidationContext, Validator
@@ -285,7 +285,7 @@ class Pipeline:
         sentence: Sentence,
         protected: tuple[ProtectedSpan, ...],
         document_text: str,
-        document: UnitStats | None = None,
+        document: AdaptationContext | None = None,
     ) -> SentenceResult:
         ctx = self._sentence_context(sentence, protected, document_text)
         max_level = self._level_for(ctx)
@@ -353,7 +353,7 @@ class Pipeline:
         sentence_results: tuple[SentenceResult, ...],
         protected: tuple[ProtectedSpan, ...],
         document_text: str,
-        document: UnitStats | None = None,
+        document: AdaptationContext | None = None,
     ) -> ParagraphResult:
         inner = tuple(r for r in sentence_results if paragraph.span.contains(r.span))
         intermediate = _reassemble(
@@ -403,7 +403,7 @@ class Pipeline:
         self,
         candidates: tuple[Candidate, ...],
         validation_ctx: ValidationContext,
-        document: UnitStats | None = None,
+        document: AdaptationContext | None = None,
     ) -> tuple[tuple[EvaluatedCandidate, ...], EvaluatedCandidate]:
         evaluated: list[EvaluatedCandidate] = []
         for candidate in candidates:
@@ -449,11 +449,15 @@ class Pipeline:
         return None
 
 
-def _context(stats: Mapping[int, UnitStats], own: set[int]) -> UnitStats | None:
-    """Recomptes de la resta del document, sense les frases de la unitat que es puntua."""
-    if not stats:
+def _context(stats: Mapping[int, UnitStats], own: set[int]) -> AdaptationContext | None:
+    """La resta del document, en ordre: abans i després de la unitat que es puntua."""
+    if not stats or not own:
         return None
-    return UnitStats.total(value for index, value in stats.items() if index not in own)
+    first, last = min(own), max(own)
+    return AdaptationContext(
+        before=UnitStats.total(value for index, value in sorted(stats.items()) if index < first),
+        after=UnitStats.total(value for index, value in sorted(stats.items()) if index > last),
+    )
 
 
 def _score_of(evaluated: EvaluatedCandidate) -> ScoreBreakdown:

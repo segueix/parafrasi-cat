@@ -30,10 +30,18 @@ La puntuació del motor la fa servir com un bonus o una penalització
 epistemològic ni un error gramatical, perquè aquests invaliden el candidat
 abans que cap estil compti.
 
-El que **no** es mesura, perquè l'empremta encara no ho registra: l'estructura
-sintàctica (coordinacions, subordinacions, ordre de complements) i
-l'alternança exacta entre frases curtes i llargues. El parser sintàctic, si hi
-és, continua servint només com a analitzador de seguretat.
+Amb una empremta de l'esquema 1.1 s'hi afegeixen dos components més:
+
+- **ritme**: la seqüència de longituds del document sencer (amb el candidat al
+  seu lloc) comparada amb el perfil de ritme de l'autor: franges, transicions,
+  canvi absolut mitjà, variació i correlació de retard 1;
+- **sintaxi**: coordinació, subordinació, ordre del subjecte i dels
+  complements, distància de dependències, profunditat i clàusules per frase
+  del document, i familiaritat del patró abstracte de cada frase del candidat.
+  Necessita el parser local, que només analitza.
+
+Cap dels dos no s'aplica si l'empremta els marca amb confiança baixa: amb
+poques frases no s'inventa cap patró.
 """
 
 from __future__ import annotations
@@ -46,11 +54,20 @@ from parafrasi_cat.analyzer.analysis import Analyzer
 from parafrasi_cat.analyzer.lexicon import normalize_form
 from parafrasi_cat.style.observations import DocumentObserver, StyleResources
 from parafrasi_cat.style.preferences import StylePreferences
+from parafrasi_cat.style.rhythm import rhythm_similarity
 from parafrasi_cat.style.statistics import iqr, median, relative_difference, total_variation
+from parafrasi_cat.style.syntax_profile import (
+    SentenceSyntaxStats,
+    observe_sentence_syntax,
+    syntactic_similarity,
+)
+from parafrasi_cat.syntax.analysis import SyntaxProvider
 
 #: Pes de cada component dins de l'afinitat global.
 COMPONENT_WEIGHTS: Mapping[str, float] = {
-    "longitud": 2.0,
+    "longitud": 1.5,
+    "ritme": 1.5,
+    "sintaxi": 2.0,
     "connectors": 2.0,
     "puntuacio": 1.0,
     "terminologia": 1.0,
@@ -68,6 +85,8 @@ _MIN_DELTA = 0.005
 
 _LABELS = {
     "longitud": "longitud de frases",
+    "ritme": "ritme de frases",
+    "sintaxi": "estructura sintàctica",
     "connectors": "connectors",
     "puntuacio": "puntuació",
     "terminologia": "terminologia",
@@ -86,6 +105,10 @@ class UnitStats:
     impersonal: int = 0
     passive: int = 0
     content: tuple[str, ...] = ()
+    tokens: tuple[int, ...] = ()
+    """Tokens lingüístics per frase, en ordre (la unitat del perfil de ritme)."""
+    syntax: tuple[SentenceSyntaxStats, ...] = ()
+    """Recomptes sintàctics de cada frase analitzada amb fiabilitat (buit sense parser)."""
 
     @property
     def n_sentences(self) -> int:
@@ -105,6 +128,8 @@ class UnitStats:
             impersonal=self.impersonal + other.impersonal,
             passive=self.passive + other.passive,
             content=self.content + other.content,
+            tokens=self.tokens + other.tokens,
+            syntax=self.syntax + other.syntax,
         )
 
     @classmethod
@@ -116,22 +141,49 @@ class UnitStats:
 
 
 @dataclass(frozen=True, slots=True)
+class AdaptationContext:
+    """La resta del document, en ordre: el que hi ha abans i després de la unitat."""
+
+    before: UnitStats = UnitStats()
+    after: UnitStats = UnitStats()
+
+    @property
+    def others(self) -> UnitStats:
+        return self.before + self.after
+
+    def around(self, own: UnitStats) -> UnitStats:
+        """El document sencer amb la unitat al seu lloc (les seqüències conserven l'ordre)."""
+        return self.before + own + self.after
+
+
+@dataclass(frozen=True, slots=True)
 class AuthorAffinity:
     """Afinitat d'un text amb l'empremta: global, per components i amb notes."""
 
     score: float
     components: dict[str, float] = field(default_factory=dict)
     notes: dict[str, str] = field(default_factory=dict)
+    partials: dict[str, dict[str, float]] = field(default_factory=dict)
+    """Puntuacions parcials dels components compostos (ritme, sintaxi)."""
 
     @property
     def available(self) -> bool:
         return bool(self.components)
+
+    @property
+    def rhythm_similarity_score(self) -> float | None:
+        return self.components.get("ritme")
+
+    @property
+    def syntactic_similarity_score(self) -> float | None:
+        return self.components.get("sintaxi")
 
     def to_dict(self) -> dict[str, object]:
         return {
             "score": self.score,
             "components": dict(self.components),
             "notes": dict(self.notes),
+            "partials": {k: dict(v) for k, v in self.partials.items()},
         }
 
 
@@ -151,15 +203,37 @@ class AuthorAdaptation:
         resources: StyleResources,
         *,
         explicit_forms: Iterable[str] = (),
+        syntax: SyntaxProvider | None = None,
     ) -> None:
         self._preferences = preferences
         self._analyzer = analyzer
         self._observer = DocumentObserver(resources)
         self._bins = resources.settings.sentence_length_bins
         self._explicit = frozenset(normalize_form(form) for form in explicit_forms)
+        self._syntax = syntax if syntax is not None and syntax.available else None
         self._stats_cache: dict[str, UnitStats] = {}
-        self._affinity_cache: dict[tuple[str, UnitStats | None, str | None], AuthorAffinity] = {}
+        self._affinity_cache: dict[
+            tuple[str, AdaptationContext | None, str | None], AuthorAffinity
+        ] = {}
         self._stable_terms = self._author_terms()
+        fingerprint = preferences.fingerprint
+        rhythm = fingerprint.features.get("rhythm_profile")
+        self._rhythm: Mapping[str, object] | None = (
+            rhythm
+            if fingerprint.has_rhythm_profile
+            and isinstance(rhythm, Mapping)
+            and rhythm.get("confidence") != "low"
+            else None
+        )
+        syntactic = fingerprint.features.get("syntactic_profile")
+        self._syntactic: Mapping[str, object] | None = (
+            syntactic
+            if fingerprint.has_syntactic_profile
+            and isinstance(syntactic, Mapping)
+            and syntactic.get("confidence") != "low"
+            and self._syntax is not None
+            else None
+        )
 
     @property
     def preferences(self) -> StylePreferences:
@@ -185,7 +259,16 @@ class AuthorAdaptation:
             "passive.per_100_sentences"
         ):
             active.append("construccions")
+        if self._rhythm is not None:
+            active.append("ritme")
+        if self._syntactic is not None:
+            active.append("sintaxi")
         return tuple(active)
+
+    @property
+    def uses_parser(self) -> bool:
+        """Cert si el component sintàctic està actiu (empremta amb perfil i parser present)."""
+        return self._syntactic is not None
 
     def describe(self) -> str:
         components = ", ".join(_LABELS[c] for c in self.active_components()) or "cap"
@@ -198,7 +281,14 @@ class AuthorAdaptation:
         cached = self._stats_cache.get(text)
         if cached is not None:
             return cached
-        observations = self._observer.observe(self._analyzer.analyze(text))
+        analysis = self._analyzer.analyze(text)
+        observations = self._observer.observe(analysis)
+        syntax: list[SentenceSyntaxStats] = []
+        if self._syntax is not None:
+            for sentence in analysis.sentences:
+                parsed = observe_sentence_syntax(self._syntax.parse(sentence.text))
+                if parsed is not None:
+                    syntax.append(parsed)
         stats = UnitStats(
             lengths=tuple(observations.sentence_lengths),
             n_words=observations.n_words,
@@ -207,6 +297,8 @@ class AuthorAdaptation:
             impersonal=len(observations.impersonal),
             passive=len(observations.passive),
             content=tuple(observations.content_tokens),
+            tokens=tuple(observations.sentence_tokens),
+            syntax=tuple(syntax),
         )
         self._stats_cache[text] = stats
         return stats
@@ -217,12 +309,12 @@ class AuthorAdaptation:
         self,
         text: str,
         *,
-        context: UnitStats | None = None,
+        context: AdaptationContext | None = None,
         source_text: str | None = None,
     ) -> AuthorAffinity:
         """Afinitat de ``text`` amb l'autor.
 
-        ``context`` són els recomptes de la resta del document, si n'hi ha;
+        ``context`` és la resta del document, en ordre, si n'hi ha;
         ``source_text`` és el tros original que el text substitueix, per
         mesurar la terminologia que conserva.
         """
@@ -231,13 +323,17 @@ class AuthorAdaptation:
         if cached is not None:
             return cached
         own = self.stats_of(text)
-        document = own if context is None else own + context
+        document = own if context is None else context.around(own)
+        others = None if context is None else context.others
         components: dict[str, float] = {}
         notes: dict[str, str] = {}
+        partials: dict[str, dict[str, float]] = {}
         self._length(own, document, components, notes)
+        self._rhythm_component(document, components, notes, partials)
+        self._syntax_component(own, document, components, notes, partials)
         self._connectors(own, components, notes)
         self._punctuation(own, components, notes)
-        self._terminology(own, context, source_text, components, notes)
+        self._terminology(own, others, source_text, components, notes)
         self._constructions(document, components, notes)
         weight = sum(COMPONENT_WEIGHTS[name] for name in components)
         score = (
@@ -245,9 +341,24 @@ class AuthorAdaptation:
             if weight
             else 0.0
         )
-        result = AuthorAffinity(round(score, 4), components, notes)
+        result = AuthorAffinity(round(score, 4), components, notes, partials)
         self._affinity_cache[key] = result
         return result
+
+    def rhythm_similarity(self, lengths: Sequence[int]) -> float | None:
+        """Semblança de ritme (0-1) d'una seqüència de longituds amb l'autor, o ``None``."""
+        if self._rhythm is None:
+            return None
+        score, _, _ = rhythm_similarity(lengths, self._rhythm)
+        return score
+
+    def syntactic_similarity(self, text: str) -> float | None:
+        """Semblança sintàctica (0-1) d'un text amb l'autor, o ``None`` sense perfil o parser."""
+        if self._syntactic is None:
+            return None
+        stats = self.stats_of(text).syntax
+        score, _, _ = syntactic_similarity(stats, self._syntactic)
+        return score
 
     def explain(self, candidate: AuthorAffinity, baseline: AuthorAffinity) -> str:
         """Per què el candidat s'assembla més (o menys) a l'autor que l'original."""
@@ -258,10 +369,53 @@ class AuthorAdaptation:
             delta = candidate.components[name] - baseline.components[name]
             if abs(delta) < _MIN_DELTA:
                 continue
-            parts.append(f"{_reason(name, delta)} ({delta:+.2f})")
+            detail = _dominant_partial(
+                candidate.partials.get(name, {}), baseline.partials.get(name, {})
+            )
+            parts.append(f"{_reason(name, delta, detail)} ({delta:+.2f})")
         if not parts:
             return "cap diferència d'estil mesurable respecte de l'original"
         return "; ".join(parts)
+
+    # -- ritme i sintaxi -------------------------------------------------------------------------
+
+    def _rhythm_component(
+        self,
+        document: UnitStats,
+        components: dict[str, float],
+        notes: dict[str, str],
+        partials: dict[str, dict[str, float]],
+    ) -> None:
+        if self._rhythm is None:
+            return
+        score, partial, note = rhythm_similarity(document.tokens, self._rhythm)
+        if score is None:
+            return
+        components["ritme"] = round(score, 4)
+        partials["ritme"] = partial
+        notes["ritme"] = note
+
+    def _syntax_component(
+        self,
+        own: UnitStats,
+        document: UnitStats,
+        components: dict[str, float],
+        notes: dict[str, str],
+        partials: dict[str, dict[str, float]],
+    ) -> None:
+        """Taxes sobre el document sencer; familiaritat del patró sobre la unitat."""
+        if self._syntactic is None or not own.syntax:
+            return
+        _, document_partial, _ = syntactic_similarity(document.syntax, self._syntactic)
+        _, own_partial, _ = syntactic_similarity(own.syntax, self._syntactic)
+        partial = {k: v for k, v in document_partial.items() if k != "patrons"}
+        if "patrons" in own_partial:
+            partial["patrons"] = own_partial["patrons"]
+        if not partial:
+            return
+        components["sintaxi"] = round(sum(partial.values()) / len(partial), 4)
+        partials["sintaxi"] = partial
+        notes["sintaxi"] = ", ".join(f"{k} {v:.2f}" for k, v in partial.items())
 
     # -- components -------------------------------------------------------------------------
 
@@ -441,8 +595,47 @@ class AuthorAdaptation:
         return frozenset(forms)
 
 
-def _reason(name: str, delta: float) -> str:
+_SYNTAX_REASONS = {
+    "subordinacio": "estructura de subordinació més semblant",
+    "coordinacio": "coordinació més semblant a la del teu corpus",
+    "complements": "ordre dels complements més habitual en el teu corpus",
+    "ordre_subjecte": "ordre del subjecte més habitual en el teu corpus",
+    "patrons": "patrons de frase més habituals en el teu corpus",
+    "distancia": "distància de dependències més semblant",
+    "profunditat": "profunditat sintàctica més semblant",
+    "clausules": "nombre de clàusules més semblant",
+}
+_RHYTHM_REASONS = {
+    "variacio": "menys uniformitat de longitud",
+    "franges": "proporció de frases curtes, mitjanes i llargues més propera",
+    "transicions": "alternança de longituds més propera",
+    "canvi": "canvis de longitud entre frases més semblants",
+    "retard": "alternança de longituds més propera",
+}
+
+
+def _dominant_partial(candidate: Mapping[str, float], baseline: Mapping[str, float]) -> str:
+    """Parcial que més ha canviat entre l'original i el candidat (buit si cap)."""
+    deltas = {k: candidate[k] - baseline[k] for k in candidate if k in baseline}
+    if not deltas:
+        return ""
+    return max(deltas, key=lambda k: (abs(deltas[k]), k))
+
+
+def _reason(name: str, delta: float, detail: str = "") -> str:
     better = delta > 0
+    if name == "ritme":
+        if better and detail in _RHYTHM_REASONS:
+            return _RHYTHM_REASONS[detail]
+        return "ritme de frases " + ("més" if better else "menys") + " proper a la teva empremta"
+    if name == "sintaxi":
+        if better and detail in _SYNTAX_REASONS:
+            return _SYNTAX_REASONS[detail]
+        return (
+            "estructura sintàctica "
+            + ("més" if better else "menys")
+            + " semblant a la del teu corpus"
+        )
     if name == "longitud":
         return "longitud de frases " + ("més" if better else "menys") + " propera a l'empremta"
     if name == "connectors":
@@ -497,6 +690,7 @@ def _clip(value: float) -> float:
 __all__ = [
     "COMPONENT_WEIGHTS",
     "PUNCTUATION_MARKS",
+    "AdaptationContext",
     "AuthorAdaptation",
     "AuthorAffinity",
     "UnitStats",

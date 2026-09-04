@@ -29,6 +29,7 @@ from parafrasi_cat.style.preferences import StylePreferences
 from parafrasi_cat.style.profile import StyleProfile
 from parafrasi_cat.style.profiler import build_fingerprint
 from parafrasi_cat.style.schema import SCHEMA_FILE, load_schema, validate
+from parafrasi_cat.syntax.spacy_parser import SpacySyntax
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -113,7 +114,12 @@ def _build(args: argparse.Namespace) -> int:
     resources = StyleResources.load(paths, lexicon=lexicon)
     analyzer = RuleBasedAnalyzer(lexicon=lexicon)
     fingerprint = build_fingerprint(
-        corpus, resources, analyzer, name=name, description=args.description
+        corpus,
+        resources,
+        analyzer,
+        name=name,
+        description=args.description,
+        syntax=SpacySyntax(),  # només analitza; sense el model, el perfil queda no disponible
     )
     schema_file = paths.optional(SCHEMA_FILE)
     if schema_file is not None:

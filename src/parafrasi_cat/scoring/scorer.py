@@ -34,7 +34,7 @@ from typing import Protocol, runtime_checkable
 from parafrasi_cat.candidates.candidate import Candidate
 from parafrasi_cat.preferences.evaluator import PreferenceEvaluator
 from parafrasi_cat.scoring.weights import ScoringWeights
-from parafrasi_cat.style.adaptation import AuthorAdaptation, UnitStats
+from parafrasi_cat.style.adaptation import AdaptationContext, AuthorAdaptation
 from parafrasi_cat.style.evaluator import StyleEvaluator
 from parafrasi_cat.validation.grammar import WARNING_PENALTY
 from parafrasi_cat.validation.result import ValidationDimension, ValidationResult
@@ -68,14 +68,14 @@ _DIMENSION_LABELS = {
 class ScoringContext:
     """Resultat de la validació i text original, per puntuar per dimensions.
 
-    ``document`` són els recomptes de la resta del document (sense la unitat
-    que es puntua), perquè l'afinitat autoral mesuri el ritme i les densitats
-    sobre tot el text i no sobre una frase sola.
+    ``document`` és la resta del document, en ordre (abans i després de la
+    unitat que es puntua), perquè l'afinitat autoral mesuri el ritme i les
+    densitats sobre tot el text i no sobre una frase sola.
     """
 
     validation: ValidationResult | None = None
     source_text: str = ""
-    document: UnitStats | None = None
+    document: AdaptationContext | None = None
 
 
 @dataclass(frozen=True, slots=True)

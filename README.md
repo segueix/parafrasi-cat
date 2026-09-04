@@ -137,6 +137,53 @@ parafrasi-cat style build corpus/author/ --profile resources/style/autor.yaml
 parafrasi-cat style show style/autor.json
 ```
 
+## L'empremta: estructura i ritme
+
+Des de la 1.2, l'empremta no descriu només *quines paraules* fa servir
+l'autor, sinó *com escriu*:
+
+| Secció | Què registra |
+|---|---|
+| `rhythm_profile` | longitud de frase en tokens lingüístics (paraules, clítics i xifres, sense puntuació): mitjana, mediana, desviació, coeficient de variació, percentils; franges curta / mitjana / llarga amb llindars derivats del corpus (tercils); matriu de transició entre franges; trigrames; ratxes; correlació de retard 1; canvi absolut mitjà; paràgrafs, si el text els conserva |
+| `syntactic_profile` | amb el parser local: coordinació (per frase, per tipus, mida dels grups, conjuncions), subordinació (relatives, adverbials, completives, infinitives; profunditat), ordre del subjecte i dels complements, distància de dependències, complexitat (clàusules, profunditat de l'arbre) i patrons abstractes com «TEMP + MAIN» o «MAIN + REL» |
+
+Cap de les dues seccions no guarda frases del corpus: només estadístics,
+distribucions i patrons abstractes. Cada secció porta la mida de la mostra i
+una confiança (`low`, `medium`, `high`) amb criteri documentat: `high` amb 40
+frases o més en 2 documents o més, `medium` amb 15 o més, `low` la resta. Amb
+menys de 12 frases, els llindars de franja són els de reserva (curta ≤ 12,
+llarga ≥ 25) i queden marcats com a tals; amb menys de 6 parelles de frases
+consecutives, la correlació de retard 1 és `null`. Una mètrica amb confiança baixa no entra
+mai a la puntuació.
+
+El parser sintàctic (spaCy, UD Catalan AnCora) **només analitza**: aporta
+dependències, categories i trets i el motor en fa recomptes. Sense el parser
+instal·lat, el perfil sintàctic queda marcat com a no disponible. Les
+empremtes antigues (esquema 1.0) es carreguen igualment; la interfície diu què
+els falta i proposa tornar-les a crear amb els teus textos.
+
+A la web, en triar una empremta apareix la secció **Estructura i ritme**:
+longitud típica, variació, proporció curta / mitjana / llarga, tendència
+d'alternança (amb la matriu de transició en paraules: «Curta → Llarga: molt
+freqüent»), coordinació, subordinació, ordre predominant del subjecte,
+complexitat i confiança de la mostra, amb un «Veure detalls» tècnic.
+
+En la puntuació de candidats, l'afinitat amb l'autor incorpora dos components
+més: **ritme** (`rhythm_similarity_score`: la seqüència de longituds del
+document amb el candidat al seu lloc, comparada amb la de l'autor) i
+**sintaxi** (`syntactic_similarity_score`: taxes de coordinació, subordinació,
+ordre, distància, profunditat i familiaritat dels patrons). Amb text propi
+compten com a desempat lleu entre candidats segurs; amb un esborrany generat
+amb LLM, amb tot el pes. Continuen per sota dels invariants: cap ritme no
+compensa un fet perdut. L'empremta descriu tendències, no una plantilla: no es
+força cap paràgraf a reproduir-ne les proporcions.
+
+La biblioteca TextDescriptives s'ha avaluat i descartat: arrossega pandas,
+numpy < 2, pyphen, ftfy i pydantic, i les mètriques necessàries (distància de
+dependències, estadístics de longitud, recomptes de dependències) són trivials
+d'implementar sense cap dependència nova. Estan a `style/rhythm.py` i
+`style/syntax_profile.py`.
+
 ## Com parafrasejar
 
 Des de la interfície: enganxeu o carregueu el text, trieu nivell, empremta,
@@ -417,10 +464,10 @@ make check       # tot
 - **En mode bàsic la comprovació és més fina.** Sense parser ni LanguageTool,
   el validador intern detecta contraccions incorrectes, signes desaparellats i
   defectes de puntuació, però no la concordança ni el règim verbal.
-- **L'adaptació autoral no mesura l'estructura sintàctica.** L'empremta
-  encara no registra coordinacions, subordinacions ni ordre de complements, i
-  tampoc l'alternança exacta entre frases curtes i llargues; quan ho faci, s'hi
-  podrà afegir sense tocar el motor.
+- **El perfil sintàctic depèn del parser.** Les relatives es reconeixen pel
+  pronom relatiu i les passives pel participi amb «ser» o per `expl:pass`,
+  perquè el model no distingeix `acl:relcl` ni `nsubj:pass`; els complements
+  locatius gairebé mai no es poden classificar. En cas de dubte no es compta.
 - **La concordança que es comprova és la de subjecte i verb.** No es comprova
   la de determinant i nom ni la dels participis, i els subjectes col·lectius
   («la majoria dels autors») queden fora expressament: hi són correctes totes

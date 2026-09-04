@@ -68,6 +68,12 @@ class SyntaxToken:
     person: str | None = None
     mood: str | None = None
     tense: str | None = None
+    verb_form: str | None = None
+    """Forma verbal universal («Fin», «Inf», «Part», «Ger»), si el parser la dona."""
+    pron_type: str | None = None
+    """Tipus de pronom («Rel», «Prs», «Dem»...), per reconèixer relatives."""
+    adv_type: str | None = None
+    """Tipus adverbial («Tim», «Loc»), per reconèixer complements temporals i locatius."""
 
     @property
     def is_root(self) -> bool:
@@ -103,6 +109,9 @@ class SyntaxToken:
             "person": self.person,
             "mood": self.mood,
             "tense": self.tense,
+            "verb_form": self.verb_form,
+            "pron_type": self.pron_type,
+            "adv_type": self.adv_type,
         }
 
 

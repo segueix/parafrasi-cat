@@ -106,6 +106,74 @@ function omplirOrigens(origens) {
   }
 }
 
+// --- estructura i ritme de l'empremta ------------------------------------------
+
+function fila(dl, terme, valor) {
+  const div = document.createElement("div");
+  const dt = document.createElement("dt");
+  dt.textContent = terme;
+  const dd = document.createElement("dd");
+  dd.textContent = valor;
+  div.append(dt, dd);
+  dl.append(div);
+}
+
+const percent = (x) => `${Math.round(Number(x) * 100)} %`;
+const num = (x, d = 1) => (x === null || x === undefined ? "—" : Number(x).toFixed(d));
+
+async function mostrarEstructuraRitme() {
+  const seccio = $("estructura-ritme");
+  if (!estilEsEmpremta()) {
+    seccio.hidden = true;
+    return;
+  }
+  try {
+    const resum = await api(`/api/fingerprint/summary?id=${encodeURIComponent($("estil").value)}`);
+    seccio.hidden = false;
+    const avis = $("empremta-avis");
+    avis.hidden = !resum.regenerate_hint;
+    avis.textContent = resum.regenerate_hint;
+
+    const ritme = $("empremta-ritme");
+    ritme.replaceChildren();
+    if (resum.rhythm.available) {
+      const r = resum.rhythm;
+      fila(ritme, "Longitud típica", `${num(r.typical_length, 0)} tokens per frase (mitjana ${num(r.mean_length)})`);
+      fila(ritme, "Variació de longitud", `coeficient ${num(r.variation, 2)} · canvi mitjà ${num(r.mean_change)} tokens`);
+      fila(ritme, "Curta / mitjana / llarga", Object.entries(r.shares).map(([k, v]) => `${k} ${percent(v)}`).join(" · ") +
+        ` (curta ≤ ${r.thresholds.short_max}, llarga ≥ ${r.thresholds.long_min})`);
+      fila(ritme, "Alternança", r.tendency);
+      fila(ritme, "Confiança de la mostra", `${r.confidence} (${r.sample_size_sentences} frases)`);
+    } else {
+      fila(ritme, "Ritme", "no disponible en aquesta empremta");
+    }
+
+    const transicions = $("empremta-transicions");
+    transicions.replaceChildren();
+    for (const t of resum.rhythm.available ? resum.rhythm.transitions : []) {
+      transicions.append(liText(`${t.from} → ${t.to}: ${t.label} (${percent(t.share)})`));
+    }
+
+    const sintaxi = $("empremta-sintaxi");
+    sintaxi.replaceChildren();
+    if (resum.syntax.available) {
+      const x = resum.syntax;
+      fila(sintaxi, "Coordinació", `${num(x.coordination_per_sentence, 2)} per frase`);
+      fila(sintaxi, "Subordinació", `${num(x.subordination_per_sentence, 2)} per frase · ${percent(x.sentences_with_subordination_share)} de frases amb subordinada`);
+      fila(sintaxi, "Ordre predominant", x.subject_order);
+      fila(sintaxi, "Complexitat", `${num(x.clauses_per_sentence, 1)} clàusules per frase · profunditat ${num(x.mean_parse_depth, 1)} · distància ${num(x.mean_dependency_distance, 1)}`);
+      fila(sintaxi, "Confiança de la mostra", `${x.confidence} (${x.sample_size_sentences} frases)`);
+    } else {
+      fila(sintaxi, "Estructura sintàctica", resum.syntax.reason || "no disponible en aquesta empremta");
+    }
+    $("empremta-detalls").textContent = JSON.stringify(resum.details, null, 1);
+  } catch (error) {
+    seccio.hidden = false;
+    missatge($("empremta-avis"), error.message, true);
+    $("empremta-avis").hidden = false;
+  }
+}
+
 function estilEsEmpremta() {
   const triat = estat.opcions.style_profiles.find((p) => p.id === $("estil").value);
   return Boolean(triat && triat.kind === "fingerprint");
@@ -301,6 +369,7 @@ async function crearEmpremta() {
     omplirSelect($("estil"), estat.opcions.style_profiles);
     $("estil").value = resposta.id;
     actualitzarOrigen();
+    mostrarEstructuraRitme();
   } catch (error) {
     missatge($("estat-empremta"), error.message, true);
   } finally {
@@ -324,8 +393,10 @@ async function carregarOpcions() {
   omplirSelect($("estil"), estat.opcions.style_profiles);
   $("estil").value = "default";
   $("estil").addEventListener("change", actualitzarOrigen);
+  $("estil").addEventListener("change", mostrarEstructuraRitme);
   omplirOrigens(estat.opcions.source_modes);
   actualitzarOrigen();
+  mostrarEstructuraRitme();
   omplirDiccionaris(estat.opcions.dictionaries);
   omplirSelect($("preferencies"), estat.opcions.preferences, "cap");
   mostrarRecursos(estat.opcions.resources, estat.opcions.installers);

@@ -15,7 +15,7 @@ from pathlib import Path
 from parafrasi_cat.core.errors import ResourceError
 from parafrasi_cat.style.statistics import RobustSummary, confidence, round_floats
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 _STAT_KEYS = frozenset({"value", "unit", "n_observations", "confidence"})
 
 
@@ -227,6 +227,18 @@ class StyleFingerprint:
     def variant_groups(self) -> tuple[str, ...]:
         node = self.features.get("variant_preferences")
         return tuple(str(k) for k in node) if isinstance(node, Mapping) else ()
+
+    @property
+    def has_rhythm_profile(self) -> bool:
+        """Cert si l'empremta porta el perfil de ritme (esquema 1.1 o posterior)."""
+        node = self.features.get("rhythm_profile")
+        return isinstance(node, Mapping) and bool(node.get("length"))
+
+    @property
+    def has_syntactic_profile(self) -> bool:
+        """Cert si l'empremta porta el perfil sintàctic calculat amb el parser."""
+        node = self.features.get("syntactic_profile")
+        return isinstance(node, Mapping) and node.get("available") is True
 
     @property
     def n_documents(self) -> int:
