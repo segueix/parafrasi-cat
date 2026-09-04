@@ -140,6 +140,25 @@ class ProjectPaths:
         )
 
 
+def write_atomically(path: str | Path, text: str, *, encoding: str = "utf-8") -> Path:
+    """Escriu un fitxer sencer o no l'escriu.
+
+    Es desa a un fitxer temporal del mateix directori i es mou al seu lloc amb
+    ``os.replace``, que és atòmic dins d'un mateix sistema de fitxers. Així, si
+    dues peticions coincideixen —dos navegadors a la xarxa local— o el procés
+    s'atura a mitges, ningú no arriba a llegir un fitxer a mig escriure.
+    """
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(text, encoding=encoding)
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return target
+
+
 def _is_project_root(path: Path) -> bool:
     return path.joinpath(*_LANGUAGE_MARKER).is_dir()
 

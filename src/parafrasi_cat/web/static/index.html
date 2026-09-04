@@ -10,9 +10,10 @@
 <header class="capçalera">
   <h1>parafrasi-cat</h1>
   <p class="nota">
-    Reredacció en català amb regles explícites. Tot s'executa en aquest ordinador:
-    sense LLM, sense serveis externs i sense enviar el text enlloc.
+    Reredacció en català amb regles explícites. El motor s'executa en un sol
+    ordinador: sense LLM, sense serveis externs i sense enviar el text a Internet.
   </p>
+  <p id="nota-acces" class="nota"></p>
 </header>
 
 <main class="disposicio">
@@ -67,6 +68,15 @@
     <select id="preferencies" name="preferencies"></select>
 
     <fieldset>
+      <legend>Accés a la interfície</legend>
+      <div id="modes-acces" class="opcions"></div>
+      <p id="descripcio-acces" class="ajuda"></p>
+      <p id="privacitat-acces" class="ajuda"></p>
+      <p id="avis-acces" class="ajuda avis" hidden></p>
+      <p id="canvi-acces" class="ajuda" hidden></p>
+    </fieldset>
+
+    <fieldset>
       <legend>Recursos lingüístics</legend>
       <p id="mode-linguistic" class="mode"></p>
       <ul id="recursos" class="recursos"></ul>
@@ -88,8 +98,9 @@
     <fieldset>
       <legend>Empremta de l'autor</legend>
       <p class="ajuda">
-        Analitza textos vostres per aprendre'n l'estil. Els textos no surten d'aquest
-        ordinador i no s'entrena cap model: només se'n desen recomptes i estadístics.
+        Analitza textos vostres per aprendre'n l'estil. Els textos van només a l'ordinador
+        que executa Parafrasi-cat, mai a Internet, i <strong>no s'entrena cap model</strong>:
+        només se'n desen recomptes i estadístics.
       </p>
       <label for="nom-empremta">Nom</label>
       <input type="text" id="nom-empremta" placeholder="autor">

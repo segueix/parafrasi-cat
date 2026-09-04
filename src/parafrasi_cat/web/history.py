@@ -6,13 +6,15 @@ candidat seleccionat, les regles aplicades, el feedback i l'edició manual
 final. És local, llegible, exportable i es pot desactivar.
 
 **Quan està desactivat no s'escriu res**: ni el text, ni la configuració, ni
-cap metadada. No hi ha telemetria de cap mena; el fitxer no surt mai de
-l'ordinador.
+cap metadada. No hi ha telemetria de cap mena i el fitxer no s'envia enlloc:
+es desa a l'ordinador que executa el motor i només el descarrega qui obre la
+interfície, quan ho demana.
 """
 
 from __future__ import annotations
 
 import json
+import threading
 import uuid
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
@@ -103,6 +105,8 @@ class HistoryLog:
     def __init__(self, path: str | Path, *, enabled: bool = False) -> None:
         self._path = Path(path)
         self._enabled = enabled
+        #: Dues pestanyes poden desar alhora: cada línia s'escriu sencera.
+        self._lock = threading.Lock()
 
     @property
     def path(self) -> Path:
@@ -128,10 +132,11 @@ class HistoryLog:
             data.setdefault("entry_id", uuid.uuid4().hex[:12])
             data.setdefault("timestamp", _now())
             record = HistoryEntry.from_dict(data)
-        self._path.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps(record.to_dict(), ensure_ascii=False)
-        with self._path.open("a", encoding="utf-8") as handle:
-            handle.write(line + "\n")
+        with self._lock:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            with self._path.open("a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
         return record
 
     def __iter__(self) -> Iterator[HistoryEntry]:
@@ -141,11 +146,19 @@ class HistoryLog:
         return len(self.entries())
 
     def entries(self) -> tuple[HistoryEntry, ...]:
-        """Entrades desades, de la més antiga a la més recent."""
-        if not self._path.is_file():
-            return ()
+        """Entrades desades, de la més antiga a la més recent.
+
+        La lectura es fa amb el mateix pany que l'escriptura: amb dos
+        dispositius, un pot demanar l'historial mentre l'altre hi desa una
+        entrada, i sense el pany se'n llegiria una línia a mitges. El pany
+        només cobreix la lectura del fitxer; l'anàlisi es fa a fora.
+        """
+        with self._lock:
+            if not self._path.is_file():
+                return ()
+            text = self._path.read_text(encoding="utf-8")
         result: list[HistoryEntry] = []
-        for number, raw in enumerate(self._path.read_text(encoding="utf-8").splitlines(), start=1):
+        for number, raw in enumerate(text.splitlines(), start=1):
             line = raw.strip()
             if not line:
                 continue

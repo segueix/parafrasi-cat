@@ -4,6 +4,7 @@
 // local d'aquesta mateixa màquina; aquest fitxer només mostra el resultat.
 
 const estat = {
+  acces: null,
   opcions: null,
   resultat: null,
   textUnitat: new Map(),
@@ -27,6 +28,11 @@ const $ = (id) => document.getElementById(id);
 
 async function api(ruta, opcions) {
   const resposta = await fetch(ruta, opcions);
+  if (resposta.status === 401) {
+    // La sessió del mode de xarxa local ha caducat: cal tornar a entrar-hi.
+    window.location.replace("/");
+    throw new Error("La sessió ha caducat. Torneu a introduir el codi d'accés.");
+  }
   const dades = await resposta.json().catch(() => ({ error: "Resposta il·legible" }));
   if (!resposta.ok) throw new Error(dades.error || `Error ${resposta.status}`);
   return dades;
@@ -79,6 +85,66 @@ function omplirModes(modes) {
 function modeTriat() {
   const marcat = document.querySelector('input[name="mode"]:checked');
   return marcat ? marcat.value : "profund";
+}
+
+// --- accés a la interfície ---------------------------------------------------
+// El mode el fixa qui arrenca el servidor: canviar-lo demana tornar-lo a
+// engegar, perquè el port on escolta es decideix en obrir-lo.
+
+const MODES_ACCES = [
+  { id: "local", label: "Només aquest ordinador" },
+  { id: "lan", label: "Xarxa local" },
+];
+
+function accesTriat() {
+  const marcat = document.querySelector('input[name="acces"]:checked');
+  return marcat ? marcat.value : "local";
+}
+
+function mostrarAcces(acces) {
+  estat.acces = acces;
+  const contenidor = $("modes-acces");
+  contenidor.replaceChildren();
+  for (const mode of MODES_ACCES) {
+    const etiqueta = document.createElement("label");
+    etiqueta.className = "opcio";
+    const entrada = document.createElement("input");
+    entrada.type = "radio";
+    entrada.name = "acces";
+    entrada.value = mode.id;
+    entrada.checked = mode.id === acces.mode;
+    entrada.addEventListener("change", actualitzarAcces);
+    etiqueta.append(entrada, ` ${mode.label}`);
+    contenidor.append(etiqueta);
+  }
+  $("nota-acces").textContent = `${acces.label}. ${acces.privacy}`;
+  actualitzarAcces();
+}
+
+function actualitzarAcces() {
+  const acces = estat.acces;
+  if (!acces) return;
+  const triat = accesTriat();
+  const esLan = triat === "lan";
+  $("descripcio-acces").textContent = esLan
+    ? "Permet accedir a Parafrasi-cat des d'un altre dispositiu connectat a la mateixa xarxa local. El motor continua executant-se en aquest ordinador."
+    : "La interfície només s'obre en aquest ordinador.";
+  $("privacitat-acces").textContent = esLan
+    ? "El text només circula dins de la xarxa local entre el navegador client i l'ordinador que executa Parafrasi-cat. No s'envia a cap servei d'Internet."
+    : "El text no surt d'aquest ordinador.";
+  const avis = $("avis-acces");
+  avis.hidden = !esLan;
+  avis.textContent = esLan
+    ? "Utilitza aquesta funció només en una xarxa Wi-Fi privada i de confiança. La connexió dins de la xarxa local és HTTP i no va xifrada."
+    : "";
+  const canvi = $("canvi-acces");
+  canvi.hidden = triat === acces.mode;
+  canvi.textContent =
+    triat === acces.mode
+      ? ""
+      : esLan
+        ? "Per activar-ho, atureu el servidor i torneu-lo a engegar amb «parafrasi-cat web --lan». Us donarà un codi d'accés per al segon dispositiu."
+        : "Per tornar-hi, atureu el servidor i torneu-lo a engegar amb «parafrasi-cat web».";
 }
 
 // --- origen del text ---------------------------------------------------------
@@ -298,7 +364,8 @@ function demanarInstalacio(component) {
   $("detall-instal-lacio").textContent =
     `Component: ${info.component}. Origen: ${info.origin}. Versió: ${info.version}. ` +
     `Mida aproximada: ${info.approximate_size_mb} MB. Llicència: ${info.license}. ` +
-    `Requisit: ${info.requirement}. ${info.note}`;
+    `Requisit: ${info.requirement}. ${info.note} ` +
+    "Els recursos s'instal·laran a l'ordinador que executa Parafrasi-cat.";
   $("confirma-instal-lacio").hidden = false;
 }
 
@@ -385,6 +452,7 @@ function mostrarEstatHistorial(historial) {
 }
 
 async function carregarOpcions() {
+  mostrarAcces(await api("/api/access"));
   estat.opcions = await api("/api/options");
   omplirSelect($("nivell"), estat.opcions.levels.map((n) => ({ id: n.level, label: n.label })));
   $("nivell").value = String(estat.opcions.modes.at(-1).max_level);
@@ -652,13 +720,16 @@ async function copiar() {
   }
 }
 
-function exportar() {
-  const bloc = new Blob([$("final").value], { type: "text/plain;charset=utf-8" });
+function baixar(bloc, nom) {
   const enllac = document.createElement("a");
   enllac.href = URL.createObjectURL(bloc);
-  enllac.download = "parafrasi-cat.txt";
+  enllac.download = nom;
   enllac.click();
   URL.revokeObjectURL(enllac.href);
+}
+
+function exportar() {
+  baixar(new Blob([$("final").value], { type: "text/plain;charset=utf-8" }), "parafrasi-cat.txt");
   missatge($("estat-final"), "Fitxer exportat.");
 }
 
@@ -725,6 +796,22 @@ async function desarAlRegistre() {
   }
 }
 
+async function exportarHistorial() {
+  // Es baixa amb fetch per poder detectar la sessió caducada del mode de
+  // xarxa local; la descàrrega es desa al dispositiu que mira la interfície.
+  try {
+    const resposta = await fetch("/api/history/export");
+    if (resposta.status === 401) {
+      window.location.replace("/");
+      return;
+    }
+    if (!resposta.ok) throw new Error(`Error ${resposta.status}`);
+    baixar(await resposta.blob(), "historial.json");
+  } catch (error) {
+    missatge($("estat"), error.message, true);
+  }
+}
+
 // --- arrencada ---------------------------------------------------------------
 
 async function iniciar() {
@@ -746,9 +833,7 @@ async function iniciar() {
   $("fitxer-text").addEventListener("change", carregarFitxerText);
   $("fitxers-empremta").addEventListener("change", carregarTextosEmpremta);
   $("crea-empremta").addEventListener("click", crearEmpremta);
-  $("exporta-historial").addEventListener("click", () => {
-    window.location.assign("/api/history/export");
-  });
+  $("exporta-historial").addEventListener("click", exportarHistorial);
 }
 
 document.addEventListener("DOMContentLoaded", iniciar);

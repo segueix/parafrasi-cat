@@ -27,7 +27,7 @@ import yaml
 
 from parafrasi_cat.core.errors import ConfigError, ResourceError
 from parafrasi_cat.dictionaries.dictionary import normalize_term
-from parafrasi_cat.resources import as_int, as_mapping, as_str, load_mapping
+from parafrasi_cat.resources import as_int, as_mapping, as_str, load_mapping, write_atomically
 
 DEFAULT_PRIOR = 3
 DEFAULT_FEEDBACK_FILE = "feedback.yml"
@@ -225,7 +225,7 @@ class FeedbackStore:
         if target is None:
             raise ResourceError("No s'ha indicat cap fitxer on desar el feedback")
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(self.to_yaml(), encoding="utf-8")
+        write_atomically(target, self.to_yaml())
         self._path = target
         return target
 

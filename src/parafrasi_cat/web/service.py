@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import threading
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -227,6 +228,12 @@ class RewriteService:
     Manté una cau de canonades per configuració, perquè la interfície no hagi
     de tornar a carregar el lexicó i les regles a cada petició. La cau es
     buida quan es registra feedback, ja que els pesos canvien.
+
+    El servidor és de diversos fils i, en mode de xarxa local, hi poden
+    arribar dos navegadors alhora. Tot el que escriu (feedback, empremtes,
+    registre, cau de canonades) passa per un pany, de manera que dues
+    peticions simultànies no es trepitgen. La reescriptura, que només
+    llegeix, no s'hi serialitza.
     """
 
     def __init__(
@@ -243,6 +250,14 @@ class RewriteService:
             HistoryLog(self._paths.root / DEFAULT_HISTORY_FILE) if history is None else history
         )
         self._pipelines: dict[PipelineConfig, Pipeline] = {}
+        # Puja cada cop que es buida la memòria de canonades: una canonada
+        # que s'estigui construint amb els pesos vells no s'hi desa.
+        self._pipeline_generation = 0
+        #: Reentrant: registrar feedback buida la cau de canonades dins del mateix pany.
+        self._lock = threading.RLock()
+        #: Instal·ladors en marxa, per component: dos navegadors no en poden
+        #: engegar dos alhora del mateix component.
+        self._installers: dict[str, subprocess.Popen[bytes]] = {}
         self._observer: DocumentObserver | None = None
         self._analyzer: RuleBasedAnalyzer | None = None
         self._syntax: SpacySyntax | None = None
@@ -372,10 +387,22 @@ class RewriteService:
 
     def pipeline_for(self, config: PipelineConfig) -> Pipeline:
         pipeline = self._pipelines.get(config)
-        if pipeline is None:
-            pipeline = build_pipeline(config)
-            self._pipelines[config] = pipeline
-        return pipeline
+        if pipeline is not None:
+            return pipeline
+        with self._lock:
+            generacio = self._pipeline_generation
+        # Construir la canonada triga i es fa fora del pany: si es fes a dins,
+        # el primer «reescriu» d'un navegador aturaria l'altre uns segons.
+        pipeline = build_pipeline(config)
+        with self._lock:
+            if generacio != self._pipeline_generation:
+                # Mentre es construïa, algú ha desat una valoració o una
+                # empremta: aquesta canonada ja duu els pesos vells i no s'ha
+                # de desar, però serveix per a la petició que l'ha demanada.
+                return pipeline
+            # Dos navegadors poden construir la mateixa canonada alhora; es
+            # queda la primera que hi arribi i totes dues reben la mateixa.
+            return self._pipelines.setdefault(config, pipeline)
 
     def rewrite(self, request: RewriteRequest) -> JsonDict:
         """Executa la canonada i retorna tot el que la interfície ha de mostrar."""
@@ -510,9 +537,12 @@ class RewriteService:
 
     def _syntax_provider(self) -> SpacySyntax:
         """Parser local per al perfil sintàctic de l'empremta (només analitza)."""
-        if self._syntax is None:
-            self._syntax = SpacySyntax()
-        return self._syntax
+        with self._lock:
+            # Crear-lo no carrega res (la càrrega és mandrosa): el pany només
+            # evita que dos navegadors alhora en facin dos.
+            if self._syntax is None:
+                self._syntax = SpacySyntax()
+            return self._syntax
 
     def _text_analyzer(self) -> RuleBasedAnalyzer:
         if self._analyzer is None:
@@ -570,20 +600,23 @@ class RewriteService:
                     "no s'ha registrat res."
                 ),
             }
-        store = FeedbackStore.load(path)
-        recorded: list[JsonDict] = []
-        for variant in variants:
-            counts = store.record(variant, request.verdict)
-            recorded.append(
-                {
-                    "variant": variant,
-                    **counts.to_dict(),
-                    "weight": round(counts.weight(store.prior), 4),
-                    "description": counts.describe(),
-                }
-            )
-        store.save(path)
-        self._pipelines.clear()  # els pesos han canviat: cal reconstruir les canonades
+        with self._lock:
+            # Llegir, actualitzar i desar sense que dues peticions es perdin recomptes.
+            store = FeedbackStore.load(path)
+            recorded: list[JsonDict] = []
+            for variant in variants:
+                counts = store.record(variant, request.verdict)
+                recorded.append(
+                    {
+                        "variant": variant,
+                        **counts.to_dict(),
+                        "weight": round(counts.weight(store.prior), 4),
+                        "description": counts.describe(),
+                    }
+                )
+            store.save(path)
+            self._pipelines.clear()  # els pesos han canviat: cal reconstruir les canonades
+            self._pipeline_generation += 1
         return {
             "verdict": request.verdict,
             "source_mode": request.source_mode.value,
@@ -656,7 +689,11 @@ class RewriteService:
 
         Sense confirmació no es baixa res: només es retorna la informació del
         component perquè la interfície la pugui ensenyar. La descàrrega la fan
-        els scripts de ``scripts/``, que són fora del paquet.
+        els scripts de ``scripts/``, que són fora del paquet, i s'executen en
+        aquest ordinador, no al dispositiu que ho ha demanat.
+
+        Si el component ja s'està instal·lant —dos navegadors hi poden ser
+        alhora en mode de xarxa local— no se n'engega un segon.
         """
         relative = INSTALLERS.get(component)
         if relative is None:
@@ -677,17 +714,33 @@ class RewriteService:
                 ),
                 "command": f"python {relative} --yes",
             }
-        process = subprocess.Popen(  # noqa: S603 - ruta pròpia del projecte, sense shell
-            [sys.executable, str(script), "--yes"],
-            cwd=self._paths.root,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        with self._lock:
+            running = self._installers.get(component)
+            if running is not None and running.poll() is None:
+                return {
+                    **info,
+                    "started": False,
+                    "pid": running.pid,
+                    "message": (
+                        "Aquest component ja s'està instal·lant en aquest ordinador. "
+                        "Espereu que acabi; l'estat s'actualitzarà sol."
+                    ),
+                }
+            process = subprocess.Popen(  # noqa: S603 - ruta pròpia del projecte, sense shell
+                [sys.executable, str(script), "--yes"],
+                cwd=self._paths.root,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            self._installers[component] = process
         return {
             **info,
             "started": True,
             "pid": process.pid,
-            "message": "S'està instal·lant. Pot trigar uns minuts; l'estat s'actualitzarà sol.",
+            "message": (
+                "S'està instal·lant a l'ordinador que executa Parafrasi-cat. "
+                "Pot trigar uns minuts; l'estat s'actualitzarà sol."
+            ),
         }
 
     # -- empremta de l'autor -----------------------------------------------------------------
@@ -697,9 +750,10 @@ class RewriteService:
     ) -> JsonDict:
         """Construeix l'empremta d'un autor amb els textos que arriben de la interfície.
 
-        Els textos són de l'usuari i no surten d'aquest ordinador: es processen
-        en memòria i només se'n desa l'empremta, que és un JSON de recomptes i
-        estadístics. No s'entrena cap model.
+        Els textos són de l'usuari i no van a Internet: viatgen fins a
+        l'ordinador que executa el motor —el mateix, o un altre de la xarxa
+        local—, s'hi processen en memòria i només se'n desa l'empremta, que és
+        un JSON de recomptes i estadístics. No s'entrena cap model.
 
         Només hi entren textos propis: un esborrany generat amb LLM no pot formar
         part del corpus de l'autor, perquè contaminaria l'empremta.
@@ -725,8 +779,10 @@ class RewriteService:
             syntax=self._syntax_provider(),
         )
         target = self._paths.fingerprints / f"{clean}.json"
-        fingerprint.save(target)
-        self._pipelines.clear()  # hi ha una empremta nova disponible
+        with self._lock:
+            fingerprint.save(target)
+            self._pipelines.clear()  # hi ha una empremta nova disponible
+            self._pipeline_generation += 1
         return {
             "name": clean,
             "path": str(target),
