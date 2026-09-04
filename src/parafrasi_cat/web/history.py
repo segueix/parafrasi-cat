@@ -92,6 +92,7 @@ class HistoryEntry:
             "style_profile": config.get("style_profile", ""),
             "dictionaries": config.get("dictionaries", []),
             "preferences": config.get("preferences", ""),
+            "source_mode": config.get("source_mode", "own"),
             "n_feedback": len(self.feedback),
         }
 

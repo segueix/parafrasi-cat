@@ -14,7 +14,7 @@ from parafrasi_cat.core.errors import ConfigError
 from parafrasi_cat.dictionaries.dictionary import DictionarySet
 from parafrasi_cat.morphology.provider import MorphologyProvider
 from parafrasi_cat.morphology.registry import create_morphology_provider
-from parafrasi_cat.pipeline.config import PipelineConfig
+from parafrasi_cat.pipeline.config import FINGERPRINT_REQUIRED, PipelineConfig
 from parafrasi_cat.pipeline.pipeline import Pipeline
 from parafrasi_cat.preferences.author import AuthorPreferences
 from parafrasi_cat.preferences.evaluator import PreferenceEvaluator
@@ -33,6 +33,7 @@ from parafrasi_cat.rules.dictionary import DictionaryPreferenceRule
 from parafrasi_cat.rules.registry import RuleRegistry, default_registry
 from parafrasi_cat.rules.ruleset import RuleSet, RuleSetConfig, build_rule_set
 from parafrasi_cat.scoring.scorer import CompositeScorer
+from parafrasi_cat.style.adaptation import AuthorAdaptation
 from parafrasi_cat.style.evaluator import StyleEvaluator
 from parafrasi_cat.style.observations import StyleResources
 from parafrasi_cat.style.profile import load_style_profile
@@ -149,7 +150,19 @@ def build_pipeline(
             max_sentence_length=author.max_sentence_length if author is not None else None,
             analyzer=analyzer,
         )
-    scorer = CompositeScorer(config.scoring, style_evaluator, preference_evaluator)
+    adaptation = None
+    if config.source_mode.adapts_to_author:
+        # Esborrany generat amb LLM: l'adaptació exigeix l'empremta real de l'autor.
+        # Sense empremta no s'executa cap pseudomode autoral: es diu clarament.
+        if style_profile.preferences is None:
+            raise ConfigError(FINGERPRINT_REQUIRED)
+        adaptation = AuthorAdaptation(
+            style_profile.preferences,
+            analyzer,
+            StyleResources.load(paths, config.language, lexicon=lexicon),
+            explicit_forms=resolver.explicit_forms(),
+        )
+    scorer = CompositeScorer(config.scoring, style_evaluator, preference_evaluator, adaptation)
 
     return Pipeline(
         analyzer=analyzer,
@@ -173,6 +186,8 @@ def build_pipeline(
         preferences_name=author.name if author is not None else "",
         preferred_sentence_length=author.preferred_sentence_length if author else None,
         max_sentence_length=author.max_sentence_length if author else None,
+        adaptation=adaptation,
+        source_mode=config.source_mode.value,
     )
 
 

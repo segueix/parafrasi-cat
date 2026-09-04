@@ -5,9 +5,22 @@ projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
 ## 1.1.0
 
-Endureix el motor davant de les limitacions conegudes de la 1.0. No hi ha cap
-regla nova ni cap ampliació de cobertura: el que canvia és què s'autoritza i
-com s'explica el que no.
+- selector d'origen del text: text propi (per defecte, comportament de sempre)
+  o esborrany generat amb LLM;
+- adaptació autoral per a esborranys generats amb LLM, basada només en
+  l'empremta real de l'autor: sense LLM, sense generació neuronal, sense cap
+  detector d'IA;
+- scoring de similitud amb l'empremta (`afinitat_autor`): longitud i ritme de
+  les frases, sobreús i familiaritat de connectors, puntuació, estabilitat
+  terminològica i construccions, amb explicació per candidat i sempre per sota
+  dels invariants factuals, epistemològics i gramaticals;
+- protecció contra contaminació del corpus: un text marcat com a esborrany no
+  pot entrar mai a cap empremta, i el feedback registra d'on venia el text;
+- manteniment del funcionament offline i determinista.
+
+També endureix el motor davant de les limitacions conegudes de la 1.0. No hi
+ha cap regla nova ni cap ampliació de cobertura: el que canvia és què
+s'autoritza i com s'explica el que no.
 
 ### Errors nous contra errors de l'original
 

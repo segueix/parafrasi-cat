@@ -95,6 +95,8 @@ legend { padding: 0 0.35rem; font-weight: 600; font-size: 0.85rem; }
 .linia { margin-top: 0.9rem; display: flex; gap: 0.4rem; align-items: baseline; }
 
 .ajuda { margin: 0.35rem 0 0; color: var(--suau); font-size: 0.82rem; }
+.ajuda.avis { color: var(--avis); }
+.afinitat { margin: 0.2rem 0 0; }
 
 .mode { margin: 0 0 0.6rem; padding: 0.5rem 0.6rem; border-radius: 5px; font-size: 0.82rem; }
 .mode.complet { border: 1px solid var(--afegit); }

@@ -26,7 +26,7 @@ from parafrasi_cat.analyzer.analysis import RuleBasedAnalyzer
 from parafrasi_cat.core.errors import ConfigError, ParafrasiError
 from parafrasi_cat.dictionaries.dictionary import TermDictionary
 from parafrasi_cat.pipeline.builder import build_pipeline
-from parafrasi_cat.pipeline.config import PipelineConfig
+from parafrasi_cat.pipeline.config import FINGERPRINT_REQUIRED, PipelineConfig, SourceMode
 from parafrasi_cat.pipeline.modes import (
     LEVEL_LABELS,
     MODES,
@@ -57,6 +57,12 @@ INSTALLERS: dict[str, str] = {
 }
 DEFAULT_STYLE_PROFILE = "default"
 MAX_TEXT_CHARS = 20000
+
+#: Missatge quan algú intenta posar un esborrany generat amb LLM al corpus de l'autor.
+LLM_DRAFT_NOT_CORPUS = (
+    "Un esborrany generat amb LLM no pot formar part del corpus de l'autor: l'empremta "
+    "només es construeix amb textos propis."
+)
 
 JsonDict = dict[str, Any]
 """Càrrega JSON que la interfície rep tal qual: les claus són dinàmiques."""
@@ -121,12 +127,15 @@ class RewriteRequest:
     preferences: str = ""
     rule_set: str = DEFAULT_RULE_SET
     languagetool: bool = False
+    source_mode: SourceMode = SourceMode.OWN
+    """Origen del text segons l'usuari. Per defecte, text propi: res no canvia."""
 
     def __post_init__(self) -> None:
         if not self.text.strip():
             raise ConfigError("Cal un text per reescriure")
         if len(self.text) > MAX_TEXT_CHARS:
             raise ConfigError(f"El text supera els {MAX_TEXT_CHARS} caràcters")
+        object.__setattr__(self, "source_mode", SourceMode.parse(self.source_mode))
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, object]) -> RewriteRequest:
@@ -150,6 +159,7 @@ class RewriteRequest:
             preferences=str(data.get("preferences") or ""),
             rule_set=str(data.get("rule_set") or DEFAULT_RULE_SET),
             languagetool=bool(data.get("languagetool", False)),
+            source_mode=SourceMode.parse(str(data.get("source_mode") or SourceMode.OWN.value)),
         )
 
     def to_config(self, home: Path | None = None) -> PipelineConfig:
@@ -161,6 +171,7 @@ class RewriteRequest:
             dictionaries=self.dictionaries,
             preferences=self.preferences or None,
             languagetool=self.languagetool,
+            source_mode=self.source_mode,
         )
         return mode_settings(self.mode).apply(base, self.level)
 
@@ -174,12 +185,15 @@ class FeedbackRequest:
     text: str = ""
     source_text: str = ""
     preferences: str = ""
+    source_mode: SourceMode = SourceMode.OWN
+    """D'on venia el text valorat, per distingir-ho a l'historial local de feedback."""
 
     def __post_init__(self) -> None:
         if self.verdict not in VERDICTS:
             raise ConfigError(
                 f"Veredicte desconegut: «{self.verdict}» (vàlids: {', '.join(VERDICTS)})"
             )
+        object.__setattr__(self, "source_mode", SourceMode.parse(self.source_mode))
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, object]) -> FeedbackRequest:
@@ -189,6 +203,7 @@ class FeedbackRequest:
             text=str(data.get("text") or ""),
             source_text=str(data.get("source_text") or ""),
             preferences=str(data.get("preferences") or ""),
+            source_mode=SourceMode.parse(str(data.get("source_mode") or SourceMode.OWN.value)),
         )
 
 
@@ -255,7 +270,22 @@ class RewriteService:
             "resources": self.resources(),
             "installers": self.installers(),
             "fingerprints_directory": str(self._paths.fingerprints),
+            "source_modes": self.source_modes(),
+            "fingerprint_required": FINGERPRINT_REQUIRED,
         }
+
+    def source_modes(self) -> list[JsonDict]:
+        """Orígens del text que l'usuari pot indicar. El motor no els endevina mai."""
+        return [
+            {
+                "id": mode.value,
+                "label": mode.label,
+                "description": mode.description,
+                "requires_fingerprint": mode.adapts_to_author,
+                "default": mode is SourceMode.OWN,
+            }
+            for mode in SourceMode
+        ]
 
     def resources(self) -> JsonDict:
         """Estat dels recursos lingüístics opcionals i del mode fora de línia."""
@@ -349,11 +379,22 @@ class RewriteService:
         """Executa la canonada i retorna tot el que la interfície ha de mostrar."""
         settings = mode_settings(request.mode)
         config = request.to_config(self._paths.root)
-        result = self.pipeline_for(config).run(request.text)
+        pipeline = self.pipeline_for(config)
+        result = pipeline.run(request.text)
         effective = settings.level_for(request.level)
         requested = settings.max_level if request.level is None else request.level
+        adaptation = pipeline.adaptation
         return {
             "source_text": result.source_text,
+            "source_mode": {
+                "id": request.source_mode.value,
+                "label": request.source_mode.label,
+                "description": request.source_mode.description,
+            },
+            "author_adaptation": adaptation.describe() if adaptation is not None else "",
+            "author_adaptation_components": (
+                list(adaptation.active_components()) if adaptation is not None else []
+            ),
             "output_text": result.output_text,
             "changed": result.changed,
             "rule_set": result.rule_set_name,
@@ -513,6 +554,7 @@ class RewriteService:
         if not variants:
             return {
                 "verdict": request.verdict,
+                "source_mode": request.source_mode.value,
                 "path": str(path),
                 "recorded": [],
                 "message": (
@@ -536,6 +578,7 @@ class RewriteService:
         self._pipelines.clear()  # els pesos han canviat: cal reconstruir les canonades
         return {
             "verdict": request.verdict,
+            "source_mode": request.source_mode.value,
             "path": str(path),
             "recorded": recorded,
             "message": f"Registrat a {path}",
@@ -601,13 +644,20 @@ class RewriteService:
 
     # -- empremta de l'autor -----------------------------------------------------------------
 
-    def create_fingerprint(self, name: str, texts: Sequence[str]) -> JsonDict:
+    def create_fingerprint(
+        self, name: str, texts: Sequence[str], *, source_mode: str | SourceMode = SourceMode.OWN
+    ) -> JsonDict:
         """Construeix l'empremta d'un autor amb els textos que arriben de la interfície.
 
         Els textos són de l'usuari i no surten d'aquest ordinador: es processen
         en memòria i només se'n desa l'empremta, que és un JSON de recomptes i
         estadístics. No s'entrena cap model.
+
+        Només hi entren textos propis: un esborrany generat amb LLM no pot formar
+        part del corpus de l'autor, perquè contaminaria l'empremta.
         """
+        if SourceMode.parse(source_mode).adapts_to_author:
+            raise ConfigError(LLM_DRAFT_NOT_CORPUS)
         clean = " ".join(name.split()) or "autor"
         if not re.fullmatch(r"[\w .\-]{1,60}", clean):
             raise ConfigError(

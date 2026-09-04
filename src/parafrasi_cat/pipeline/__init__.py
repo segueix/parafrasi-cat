@@ -1,7 +1,7 @@
 """Canonada de processament: anàlisi → protecció → regles → candidats → validació → selecció."""
 
 from parafrasi_cat.pipeline.builder import build_pipeline
-from parafrasi_cat.pipeline.config import PipelineConfig
+from parafrasi_cat.pipeline.config import FINGERPRINT_REQUIRED, PipelineConfig, SourceMode
 from parafrasi_cat.pipeline.modes import (
     CONSERVATIVE,
     DEEP,
@@ -23,6 +23,7 @@ from parafrasi_cat.pipeline.result import (
 __all__ = [
     "CONSERVATIVE",
     "DEEP",
+    "FINGERPRINT_REQUIRED",
     "MODES",
     "EvaluatedCandidate",
     "ModeSettings",
@@ -32,6 +33,7 @@ __all__ = [
     "RejectedProposal",
     "RewriteMode",
     "SentenceResult",
+    "SourceMode",
     "apply_mode",
     "build_pipeline",
     "level_label",

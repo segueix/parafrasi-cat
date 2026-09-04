@@ -28,6 +28,13 @@
     </div>
 
     <fieldset>
+      <legend>Origen del text</legend>
+      <div id="origens" class="opcions"></div>
+      <p id="descripcio-origen" class="ajuda" hidden></p>
+      <p id="avis-empremta" class="ajuda avis" hidden></p>
+    </fieldset>
+
+    <fieldset>
       <legend>Mode</legend>
       <div id="modes" class="opcions"></div>
       <p id="descripcio-mode" class="ajuda"></p>
@@ -102,6 +109,7 @@
 
     <div id="resum" hidden>
       <dl class="resum">
+        <div><dt>Origen</dt><dd id="resum-origen"></dd></div>
         <div><dt>Mode</dt><dd id="resum-mode"></dd></div>
         <div><dt>Nivell</dt><dd id="resum-nivell"></dd></div>
         <div><dt>Estil</dt><dd id="resum-estil"></dd></div>
@@ -152,6 +160,7 @@
       <p class="text-candidat"></p>
     </div>
     <p class="motiu-rebuig" hidden></p>
+    <p class="afinitat ajuda" hidden></p>
     <div class="accions">
       <button type="button" class="usa">Fes servir aquest text</button>
       <span class="feedback">
@@ -170,6 +179,8 @@
         <ul class="regles"></ul>
         <h5>Puntuacions</h5>
         <ul class="puntuacions"></ul>
+        <h5 class="titol-afinitat" hidden>Afinitat amb l'estil de l'autor</h5>
+        <ul class="detall-afinitat" hidden></ul>
         <h5>Advertiments semàntics</h5>
         <ul class="advertiments"></ul>
       </div>

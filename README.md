@@ -155,6 +155,44 @@ parafrasi-cat rewrite text.txt --style style/autor.json \
 parafrasi-cat --rules parafrasi --explain "Gairebé sempre plou, tot i que avui no."
 ```
 
+## Origen del text
+
+A la interfície es pot indicar d'on ve el text:
+
+- **Text propi** (per defecte): el comportament de sempre.
+- **Esborrany generat amb LLM**: s'hi afegeix una capa d'**adaptació
+  autoral** basada en l'empremta real de l'autor. És obligatori tenir-ne una
+  seleccionada; si no, la interfície ho diu i deixa crear-la allà mateix.
+
+El mode d'esborrany LLM no intenta determinar ni ocultar l'origen del text.
+Utilitza l'empremta estilística de l'autor per prioritzar reformulacions més
+coherents amb la seva manera real d'escriure.
+
+No pregunta «això sembla humà?», sinó «aquest candidat s'assembla més a la
+manera d'escriure d'*aquest* autor?». Mesura, amb estadística descriptiva i
+de manera determinista, l'**afinitat amb l'estil** de cada candidat:
+
+| Component | Què compara |
+|---|---|
+| Longitud de frases | franja i mediana del candidat, i dispersió del document, amb la distribució de l'autor |
+| Connectors | sobreús respecte del corpus i familiaritat de cada connector |
+| Puntuació | comes, punts i coma, dos punts, parèntesis i incisos per frase |
+| Terminologia | si conserva els termes que l'autor i el document repeteixen |
+| Construccions | impersonals i passives per cent frases |
+
+L'afinitat suma o resta *respecte de l'original*, i sempre per sota dels
+invariants: cap estil no compensa la pèrdua d'un fet, una data, un nom, una
+negació, un augment de certesa ni un error gramatical. Cada candidat mostra la
+seva afinitat i per què («menys sobreús de connectors», «longitud de frases més
+propera a l'empremta», «substitueix terminologia que l'autor manté»).
+
+Els textos marcats com a esborrany **no entren mai** al corpus de l'autor: la
+interfície s'hi nega, perquè contaminarien l'empremta. No hi ha cap LLM, cap
+generació neuronal ni cap detector d'IA; el parser sintàctic, si hi és, només
+analitza; i tot funciona localment.
+
+Des del terminal: `parafrasi-cat rewrite text.txt --style style/autor.json --source-mode llm_draft`.
+
 ## Modes
 
 | | Conservador | Reredacció profunda |
@@ -379,6 +417,10 @@ make check       # tot
 - **En mode bàsic la comprovació és més fina.** Sense parser ni LanguageTool,
   el validador intern detecta contraccions incorrectes, signes desaparellats i
   defectes de puntuació, però no la concordança ni el règim verbal.
+- **L'adaptació autoral no mesura l'estructura sintàctica.** L'empremta
+  encara no registra coordinacions, subordinacions ni ordre de complements, i
+  tampoc l'alternança exacta entre frases curtes i llargues; quan ho faci, s'hi
+  podrà afegir sense tocar el motor.
 - **La concordança que es comprova és la de subjecte i verb.** No es comprova
   la de determinant i nom ni la dels participis, i els subjectes col·lectius
   («la majoria dels autors») queden fora expressament: hi són correctes totes

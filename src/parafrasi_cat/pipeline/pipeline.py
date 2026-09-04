@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from functools import partial
 
@@ -29,6 +29,7 @@ from parafrasi_cat.rules.base import ParagraphContext, RuleContext
 from parafrasi_cat.rules.ruleset import RuleSet, RuleSetConfig
 from parafrasi_cat.scoring.scorer import ScoreBreakdown, Scorer, ScoringContext
 from parafrasi_cat.scoring.selection import select_best
+from parafrasi_cat.style.adaptation import AuthorAdaptation, UnitStats
 from parafrasi_cat.style.profile import StyleProfile
 from parafrasi_cat.syntax.analysis import CachedSyntax, NullSyntax, SyntaxProvider
 from parafrasi_cat.validation.base import ValidationContext, Validator
@@ -91,6 +92,8 @@ class Pipeline:
         preferences_name: str = "",
         preferred_sentence_length: int | None = None,
         max_sentence_length: int | None = None,
+        adaptation: AuthorAdaptation | None = None,
+        source_mode: str = "own",
     ) -> None:
         self._analyzer = analyzer
         self._protector = protector
@@ -110,6 +113,8 @@ class Pipeline:
         self._repair = AgreementRepair(self._syntax, self._morphology)
         self._preferred_sentence_length = preferred_sentence_length
         self._max_sentence_length = max_sentence_length
+        self._adaptation = adaptation
+        self._source_mode = source_mode
         if lexicon is None and isinstance(analyzer, RuleBasedAnalyzer):
             lexicon = analyzer.lexicon
         self._lexicon = lexicon
@@ -162,6 +167,15 @@ class Pipeline:
         return self._repair
 
     @property
+    def adaptation(self) -> AuthorAdaptation | None:
+        """Adaptació autoral (només en mode d'esborrany generat amb LLM)."""
+        return self._adaptation
+
+    @property
+    def source_mode(self) -> str:
+        return self._source_mode
+
+    @property
     def dictionary_names(self) -> tuple[str, ...]:
         return self._dictionary_names
 
@@ -174,13 +188,24 @@ class Pipeline:
     def run(self, text: str) -> ParaphraseResult:
         analysis = self._analyzer.analyze(text)
         protected = self._protector.protect(text)
+        stats = self._unit_stats(analysis.sentences)
         sentence_results = tuple(
-            self._process_sentence(sentence, protected, text) for sentence in analysis.sentences
+            self._process_sentence(sentence, protected, text, _context(stats, {sentence.index}))
+            for sentence in analysis.sentences
         )
         paragraph_results: tuple[ParagraphResult, ...] = ()
         if self._rule_set.paragraph_rules and analysis.paragraphs:
             paragraph_results = tuple(
-                self._process_paragraph(paragraph, sentence_results, protected, text)
+                self._process_paragraph(
+                    paragraph,
+                    sentence_results,
+                    protected,
+                    text,
+                    _context(
+                        stats,
+                        {s.index for s in analysis.sentences if paragraph.span.contains(s.span)},
+                    ),
+                )
                 for paragraph in analysis.paragraphs
             )
             output = _reassemble(text, tuple((p.span, p.output_text) for p in paragraph_results))
@@ -197,7 +222,14 @@ class Pipeline:
             paragraphs=paragraph_results,
             dictionary_names=self._dictionary_names,
             preferences_name=self._preferences_name,
+            source_mode=self._source_mode,
         )
+
+    def _unit_stats(self, sentences: Sequence[Sentence]) -> dict[int, UnitStats]:
+        """Recomptes de cada frase original, per donar context a l'afinitat autoral."""
+        if self._adaptation is None:
+            return {}
+        return {s.index: self._adaptation.stats_of(s.text) for s in sentences}
 
     def propose(self, text: str, *, max_level: int | None = None) -> tuple[Transformation, ...]:
         """Transformacions que les regles de frase proposen per a ``text`` (una sola frase).
@@ -253,6 +285,7 @@ class Pipeline:
         sentence: Sentence,
         protected: tuple[ProtectedSpan, ...],
         document_text: str,
+        document: UnitStats | None = None,
     ) -> SentenceResult:
         ctx = self._sentence_context(sentence, protected, document_text)
         max_level = self._level_for(ctx)
@@ -265,7 +298,7 @@ class Pipeline:
         )
         candidates = self._repaired(candidates, ctx.protected_conflict)
         validation_ctx = ValidationContext(sentence.text, ctx.protected_spans)
-        evaluated, best = self._evaluate(candidates, validation_ctx)
+        evaluated, best = self._evaluate(candidates, validation_ctx, document)
         return SentenceResult(
             index=sentence.index,
             source_text=sentence.text,
@@ -320,6 +353,7 @@ class Pipeline:
         sentence_results: tuple[SentenceResult, ...],
         protected: tuple[ProtectedSpan, ...],
         document_text: str,
+        document: UnitStats | None = None,
     ) -> ParagraphResult:
         inner = tuple(r for r in sentence_results if paragraph.span.contains(r.span))
         intermediate = _reassemble(
@@ -350,7 +384,7 @@ class Pipeline:
                     rejected.append(RejectedProposal(transformation, reason))
         candidates = self._generator.generate(paragraph.index, intermediate, proposals)
         validation_ctx = ValidationContext(paragraph.text, original_protected)
-        evaluated, best = self._evaluate(candidates, validation_ctx)
+        evaluated, best = self._evaluate(candidates, validation_ctx, document)
         return ParagraphResult(
             index=paragraph.index,
             source_text=paragraph.text,
@@ -366,7 +400,10 @@ class Pipeline:
     # --- comú -------------------------------------------------------------------------------
 
     def _evaluate(
-        self, candidates: tuple[Candidate, ...], validation_ctx: ValidationContext
+        self,
+        candidates: tuple[Candidate, ...],
+        validation_ctx: ValidationContext,
+        document: UnitStats | None = None,
     ) -> tuple[tuple[EvaluatedCandidate, ...], EvaluatedCandidate]:
         evaluated: list[EvaluatedCandidate] = []
         for candidate in candidates:
@@ -374,7 +411,7 @@ class Pipeline:
                 validator.validate(candidate, validation_ctx) for validator in self._validators
             )
             score = self._scorer.score(
-                candidate, ScoringContext(validation, validation_ctx.source_text)
+                candidate, ScoringContext(validation, validation_ctx.source_text, document)
             )
             evaluated.append(EvaluatedCandidate(candidate, validation, score))
         accepted = [e for e in evaluated if e.accepted]
@@ -410,6 +447,13 @@ class Pipeline:
                 f"{self._min_confidence:.2f}"
             )
         return None
+
+
+def _context(stats: Mapping[int, UnitStats], own: set[int]) -> UnitStats | None:
+    """Recomptes de la resta del document, sense les frases de la unitat que es puntua."""
+    if not stats:
+        return None
+    return UnitStats.total(value for index, value in stats.items() if index not in own)
 
 
 def _score_of(evaluated: EvaluatedCandidate) -> ScoreBreakdown:

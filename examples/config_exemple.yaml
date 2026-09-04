@@ -19,7 +19,11 @@ scoring:
   transformation_gain: 1.0
   semantic_risk: 1.0
   style_distance: 0.5
+  author_affinity: 2.0           # pes de l'adaptació autoral (només amb source_mode: llm_draft)
   max_transformations: 3
+
+source_mode: own                 # own (text propi, per defecte) | llm_draft (esborrany generat
+                                 # amb LLM: s'adapta a l'empremta indicada a style_profile)
 
 max_transformations_per_sentence: 3
 max_candidates_per_sentence: 20

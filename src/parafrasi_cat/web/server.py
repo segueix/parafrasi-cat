@@ -181,6 +181,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self._service.create_fingerprint(
                     str(data.get("name", "autor")),
                     [str(t) for t in texts] if isinstance(texts, list) else [],
+                    source_mode=str(data.get("source_mode") or "own"),
                 )
             )
         else:

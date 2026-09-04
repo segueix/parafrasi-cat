@@ -81,6 +81,52 @@ function modeTriat() {
   return marcat ? marcat.value : "profund";
 }
 
+// --- origen del text ---------------------------------------------------------
+// L'origen el diu l'usuari; el motor no intenta endevinar-lo mai.
+
+function origenTriat() {
+  const marcat = document.querySelector('input[name="origen"]:checked');
+  return marcat ? marcat.value : "own";
+}
+
+function omplirOrigens(origens) {
+  const contenidor = $("origens");
+  contenidor.replaceChildren();
+  for (const origen of origens) {
+    const etiqueta = document.createElement("label");
+    etiqueta.className = "opcio";
+    const entrada = document.createElement("input");
+    entrada.type = "radio";
+    entrada.name = "origen";
+    entrada.value = origen.id;
+    entrada.checked = Boolean(origen.default);
+    entrada.addEventListener("change", actualitzarOrigen);
+    etiqueta.append(entrada, ` ${origen.label}`);
+    contenidor.append(etiqueta);
+  }
+}
+
+function estilEsEmpremta() {
+  const triat = estat.opcions.style_profiles.find((p) => p.id === $("estil").value);
+  return Boolean(triat && triat.kind === "fingerprint");
+}
+
+function actualitzarOrigen() {
+  const origen = estat.opcions.source_modes.find((o) => o.id === origenTriat());
+  const descripcio = $("descripcio-origen");
+  const avis = $("avis-empremta");
+  if (!origen || !origen.requires_fingerprint) {
+    descripcio.hidden = true;
+    avis.hidden = true;
+    return;
+  }
+  descripcio.hidden = false;
+  descripcio.textContent = origen.description;
+  const falta = !estilEsEmpremta();
+  avis.hidden = !falta;
+  avis.textContent = falta ? estat.opcions.fingerprint_required : "";
+}
+
 function mostrarDescripcioMode() {
   const mode = estat.opcions.modes.find((m) => m.id === modeTriat());
   if (!mode) return;
@@ -247,12 +293,14 @@ async function crearEmpremta() {
       body: JSON.stringify({
         name: $("nom-empremta").value || "autor",
         texts: estat.textosEmpremta,
+        source_mode: "own",
       }),
     });
     missatge($("estat-empremta"), `${resposta.message} ${resposta.n_words} paraules analitzades.`);
     estat.opcions = await api("/api/options");
     omplirSelect($("estil"), estat.opcions.style_profiles);
     $("estil").value = resposta.id;
+    actualitzarOrigen();
   } catch (error) {
     missatge($("estat-empremta"), error.message, true);
   } finally {
@@ -275,6 +323,9 @@ async function carregarOpcions() {
   omplirModes(estat.opcions.modes);
   omplirSelect($("estil"), estat.opcions.style_profiles);
   $("estil").value = "default";
+  $("estil").addEventListener("change", actualitzarOrigen);
+  omplirOrigens(estat.opcions.source_modes);
+  actualitzarOrigen();
   omplirDiccionaris(estat.opcions.dictionaries);
   omplirSelect($("preferencies"), estat.opcions.preferences, "cap");
   mostrarRecursos(estat.opcions.resources, estat.opcions.installers);
@@ -304,6 +355,7 @@ async function generar(esdeveniment) {
         dictionaries: diccionarisTriats(),
         preferences: $("preferencies").value,
         languagetool: $("languagetool").checked,
+        source_mode: origenTriat(),
       }),
     });
     estat.resultat = resultat;
@@ -320,6 +372,9 @@ async function generar(esdeveniment) {
 function mostrarResultat(resultat) {
   $("sense-resultat").hidden = true;
   $("resum").hidden = false;
+  $("resum-origen").textContent = resultat.author_adaptation
+    ? `${resultat.source_mode.label} · ${resultat.author_adaptation}`
+    : resultat.source_mode.label;
   $("resum-mode").textContent = resultat.mode.label;
   $("resum-nivell").textContent = resultat.level_capped
     ? `${resultat.level_label} (retallat des de ${resultat.requested_level})`
@@ -383,6 +438,23 @@ function dibuixaCandidat(unitat, candidat) {
     const motiu = node.querySelector(".motiu-rebuig");
     motiu.hidden = false;
     motiu.textContent = `Rebutjat: ${candidat.rejection_reason}`;
+  }
+
+  const afinitatValor = candidat.score ? candidat.score.dimensions.afinitat_autor : null;
+  if (afinitatValor !== null && afinitatValor !== undefined) {
+    const afinitat = node.querySelector(".afinitat");
+    afinitat.hidden = false;
+    afinitat.textContent = `Afinitat amb l'estil: ${afinitatValor.toFixed(2)}`;
+    const titol = node.querySelector(".titol-afinitat");
+    const detall = node.querySelector(".detall-afinitat");
+    titol.hidden = false;
+    detall.hidden = false;
+    detall.append(liText(`respecte de l'original: ${candidat.score.author_explanation}`));
+    const info = candidat.score.author_affinity || {};
+    for (const [nom, valor] of Object.entries(info.components || {})) {
+      const nota = info.notes && info.notes[nom] ? ` — ${info.notes[nom]}` : "";
+      detall.append(liText(`${nom}: ${Number(valor).toFixed(2)}${nota}`));
+    }
   }
 
   const usa = node.querySelector(".usa");
@@ -484,6 +556,7 @@ async function votar(verdicte, candidat, resposta) {
         verdict: verdicte,
         variants: candidat.variants,
         preferences: estat.resultat ? estat.resultat.preferences_id : "",
+        source_mode: estat.resultat ? estat.resultat.source_mode.id : "own",
       }),
     });
     estat.feedback.push({ candidate_id: candidat.candidate_id, verdict: verdicte, ...dades });
@@ -547,6 +620,7 @@ async function desarAlRegistre() {
           style_profile: resultat.style_profile_id,
           dictionaries: resultat.dictionaries,
           preferences: resultat.preferences_id,
+          source_mode: resultat.source_mode.id,
         },
         result: {
           output_text: resultat.output_text,

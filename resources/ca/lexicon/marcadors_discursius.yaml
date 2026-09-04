@@ -25,6 +25,8 @@ entries:
   - {form: respecte a, function: estructuració, register: neutre}
   - {form: en aquest sentit, function: estructuració, register: formal}
   - {form: en aquest punt, function: estructuració, register: neutre}
+  - {form: per la seva banda, function: estructuració, register: neutre}
+  - {form: per part seva, function: estructuració, register: neutre}
   # reformulació i exemplificació
   - {form: és a dir, function: reformulació, register: neutre}
   - {form: o sigui, function: reformulació, register: col·loquial}
@@ -38,6 +40,11 @@ entries:
   - {form: en concret, function: exemplificació, register: neutre}
   - {form: en particular, function: exemplificació, register: neutre}
   # èmfasi i confirmació
+  - {form: cal destacar que, function: èmfasi, register: formal}
+  - {form: cal assenyalar que, function: èmfasi, register: formal}
+  - {form: cal remarcar que, function: èmfasi, register: formal}
+  - {form: és important destacar, function: èmfasi, register: formal}
+  - {form: és important assenyalar, function: èmfasi, register: formal}
   - {form: de fet, function: èmfasi, register: neutre}
   - {form: en efecte, function: èmfasi, register: formal}
   - {form: efectivament, function: èmfasi, register: neutre}

@@ -251,6 +251,8 @@ class ParaphraseResult:
     paragraphs: tuple[ParagraphResult, ...] = ()
     dictionary_names: tuple[str, ...] = ()
     preferences_name: str = ""
+    source_mode: str = "own"
+    """Origen del text segons l'usuari: ``own`` o ``llm_draft``."""
 
     @property
     def notes(self) -> tuple[str, ...]:
@@ -366,6 +368,8 @@ class ParaphraseResult:
             lines.append("Diccionaris actius: " + ", ".join(self.dictionary_names))
         if self.preferences_name:
             lines.append(f"Preferències de l'autor: {self.preferences_name}")
+        if self.source_mode != "own":
+            lines.append("Origen del text: esborrany generat amb LLM (adaptació a l'empremta)")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -377,6 +381,7 @@ class ParaphraseResult:
             "style_profile": self.style_profile_name,
             "dictionaries": list(self.dictionary_names),
             "preferences": self.preferences_name,
+            "source_mode": self.source_mode,
             "transformations": [t.to_dict() for t in self.transformations],
             "protected_spans": [p.to_dict() for p in self.protected_spans],
             "notes": list(self.notes),
@@ -418,12 +423,16 @@ def _explain_unit(
 
 
 def _explain_preferences(lines: list[str], selected: EvaluatedCandidate) -> None:
-    """Per què les preferències explícites afavoreixen (o penalitzen) el candidat triat."""
+    """Per què les preferències i l'empremta afavoreixen (o penalitzen) el candidat triat."""
     score = selected.score
-    if score is None or not score.preference_explanation:
+    if score is None:
         return
-    bonus = score.components.get("preferencies", 0.0)
-    lines.append(f"  Preferències de l'autor ({bonus:+.3f}): {score.preference_explanation}")
+    if score.preference_explanation:
+        bonus = score.components.get("preferencies", 0.0)
+        lines.append(f"  Preferències de l'autor ({bonus:+.3f}): {score.preference_explanation}")
+    if score.author_explanation:
+        bonus = score.components.get("afinitat_autor", 0.0)
+        lines.append(f"  Afinitat amb l'estil ({bonus:+.3f}): {score.author_explanation}")
 
 
 def _report_unit(lines: list[str], unit: _UnitResult, max_discarded: int) -> None:
