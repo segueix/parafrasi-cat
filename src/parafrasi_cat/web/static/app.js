@@ -122,6 +122,16 @@ function diccionarisTriats() {
 }
 
 function mostrarRecursos(recursos, instal·ladors) {
+  const mode = recursos.mode;
+  const avis = $("mode-linguistic");
+  avis.className = mode.full ? "mode complet" : "mode basic";
+  avis.replaceChildren();
+  const titol = document.createElement("strong");
+  titol.textContent = mode.label;
+  const detall = document.createElement("span");
+  detall.textContent = ` ${mode.detail}`;
+  avis.append(titol, detall);
+
   const llista = $("recursos");
   llista.replaceChildren();
   for (const clau of CLAUS_RECURSOS) {
@@ -151,12 +161,8 @@ function mostrarRecursos(recursos, instal·ladors) {
 
   const botons = $("botons-instal-lacio");
   botons.replaceChildren();
-  const pendents = [
-    ["parser", recursos.syntax],
-    ["languagetool", recursos.languagetool],
-  ];
-  for (const [clau, recurs] of pendents) {
-    if (recurs.active) continue;
+  for (const clau of mode.installable) {
+    if (!instal·ladors[clau]) continue;
     const boto = document.createElement("button");
     boto.type = "button";
     boto.className = "secundari";

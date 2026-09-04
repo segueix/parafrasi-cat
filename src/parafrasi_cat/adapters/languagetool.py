@@ -36,6 +36,7 @@ import threading
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -70,16 +71,41 @@ SEARCH_PATHS: tuple[str, ...] = (
 LOOPBACK = "127.0.0.1"
 LOOPBACK_HOSTS: frozenset[str] = frozenset({LOOPBACK, "localhost", "::1"})
 
-#: Tipus de problema que invaliden un candidat. La resta només el penalitzen.
-DEFAULT_BLOCKING_ISSUE_TYPES: frozenset[str] = frozenset(
-    {"grammar", "misspelling", "typographical", "inflection", "agreement"}
+#: Categories gramaticals de LanguageTool en català. Un error nou d'aquestes,
+#: dins del fragment que ha canviat, invalida el candidat. Les regles catalanes
+#: de concordança («CONCORD_SUBJECTE_VERB», «CONCORDANCES_DET_NOM»...) sovint
+#: arriben sense tipus, però la categoria sí que les identifica.
+GRAMMAR_CATEGORIES: tuple[str, ...] = (
+    "CONCORDANCES",
+    "DIACRITICS",
+    "PREPOSITIONS",
+    "VERBS",
+    "PRONOMS",
+    "GRAMMAR",
+    "CONFUSIONS",
 )
 
-#: Categories que invaliden un candidat encara que el tipus sigui «uncategorized».
-#: Les regles catalanes de concordança («CONCORD_SUBJECTE_VERB»,
-#: «CONCORDANCES_DET_NOM»...) sovint no porten tipus, però la categoria sí que
-#: les identifica, i una falta de concordança no és mai acceptable.
-DEFAULT_BLOCKING_CATEGORIES: tuple[str, ...] = ("CONCORDANCES",)
+#: Tipus de problema que LanguageTool considera gramaticals.
+GRAMMAR_ISSUE_TYPES: frozenset[str] = frozenset({"grammar", "agreement", "inflection"})
+
+#: Noms històrics de la mateixa política: hi ha una sola llista de classes que
+#: poden invalidar un candidat, i és la gramatical.
+DEFAULT_BLOCKING_ISSUE_TYPES: frozenset[str] = GRAMMAR_ISSUE_TYPES
+DEFAULT_BLOCKING_CATEGORIES: tuple[str, ...] = GRAMMAR_CATEGORIES
+
+#: Categories de puntuació, majúscules i espais: penalització forta, mai bloqueig.
+STRUCTURE_CATEGORIES: tuple[str, ...] = ("TYPOGRAPHY", "PUNCTUATION", "CASING", "SPACES")
+
+#: Tipus de problema de puntuació i espaiat.
+STRUCTURE_ISSUE_TYPES: frozenset[str] = frozenset({"typographical", "whitespace"})
+
+#: Tipus de problema d'ortografia i de repetició. Donen falsos positius amb noms
+#: propis, de manera que fora del fragment canviat no passen d'advertiment.
+SPELLING_ISSUE_TYPES: frozenset[str] = frozenset({"misspelling", "duplication"})
+
+#: Pes de la penalització forta en la puntuació de gramaticalitat, respecte
+#: d'un advertiment normal.
+STRONG_PENALTY_WEIGHT = 3.0
 
 DEFAULT_STARTUP_TIMEOUT = 120.0
 DEFAULT_REQUEST_TIMEOUT = 60.0
@@ -123,10 +149,107 @@ def is_blocking(
     issue_types: Iterable[str] = DEFAULT_BLOCKING_ISSUE_TYPES,
     categories: Iterable[str] = DEFAULT_BLOCKING_CATEGORIES,
 ) -> bool:
-    """Cert si el problema ha d'invalidar el candidat en lloc de només penalitzar-lo."""
+    """Cert si el problema és d'una classe que pot invalidar un candidat.
+
+    Que ho faci o no depèn de :func:`classify`: només bloqueja de debò quan
+    l'error és **nou** i cau dins del fragment que el motor ha canviat.
+    """
     if match.issue_type in frozenset(issue_types):
         return True
     return any(match.category.startswith(prefix) for prefix in categories)
+
+
+class MatchSeverity(StrEnum):
+    """Què ha de fer el motor amb un problema que LanguageTool ha trobat."""
+
+    BLOCKING = "blocking"
+    """Error gramatical greu introduït pel motor dins del fragment transformat."""
+
+    STRONG_PENALTY = "strong_penalty"
+    """Error nou probable: el candidat continua viu, però molt penalitzat."""
+
+    WARNING = "warning"
+    """Estil, repeticions, preferències i qüestions discutibles."""
+
+    INFORMATIONAL = "informational"
+    """Avís que no implica incorrecció, o que ja era al text original."""
+
+    @property
+    def penalizes(self) -> bool:
+        return self is not MatchSeverity.INFORMATIONAL
+
+    @property
+    def weight(self) -> float:
+        """Pes de la penalització en la puntuació de gramaticalitat."""
+        return STRONG_PENALTY_WEIGHT if self is MatchSeverity.STRONG_PENALTY else 1.0
+
+
+def _in(match: LanguageToolMatch, categories: tuple[str, ...], types: frozenset[str]) -> bool:
+    return match.issue_type in types or any(match.category.startswith(c) for c in categories)
+
+
+def classify(
+    match: LanguageToolMatch,
+    *,
+    introduced: bool,
+    inside_change: bool,
+    grammar_issue_types: Iterable[str] = GRAMMAR_ISSUE_TYPES,
+    grammar_categories: Iterable[str] = GRAMMAR_CATEGORIES,
+) -> MatchSeverity:
+    """Gravetat d'un problema segons si és nou i on cau.
+
+    El criteri és el que separa un error del motor d'un del text de l'autor:
+
+    - un problema que **ja hi era** només és informatiu: el motor no castiga
+      el candidat per una cosa que no ha empitjorat;
+    - un error gramatical **nou** dins del fragment transformat (o a tocar)
+      invalida el candidat: l'ha fet una regla;
+    - el mateix error nou lluny del canvi és una penalització forta, no un
+      bloqueig: pot ser un fals positiu sobre text que el motor no ha tocat;
+    - la puntuació, les majúscules i l'ortografia penalitzen fort dins del
+      canvi i avisen fora;
+    - l'estil i les preferències no passen d'advertiment.
+
+    La negació, les xifres, els noms propis i la força epistemològica no es
+    deixen en mans de LanguageTool: els guarden els invariants del motor.
+    """
+    if not introduced:
+        return MatchSeverity.INFORMATIONAL
+    if _in(match, tuple(grammar_categories), frozenset(grammar_issue_types)):
+        return MatchSeverity.BLOCKING if inside_change else MatchSeverity.STRONG_PENALTY
+    if _in(match, STRUCTURE_CATEGORIES, STRUCTURE_ISSUE_TYPES | SPELLING_ISSUE_TYPES):
+        return MatchSeverity.STRONG_PENALTY if inside_change else MatchSeverity.WARNING
+    return MatchSeverity.WARNING if inside_change else MatchSeverity.INFORMATIONAL
+
+
+@dataclass(frozen=True, slots=True)
+class ClassifiedMatch:
+    """Un problema de LanguageTool situat respecte del que ha canviat el motor."""
+
+    match: LanguageToolMatch
+    severity: MatchSeverity
+    introduced: bool
+    inside_change: bool
+    rule_id: str = ""
+    """Regla del motor que ha escrit el fragment on cau el problema (buit si cap)."""
+
+    def describe(self) -> str:
+        if self.rule_id:
+            origin = f"la regla «{self.rule_id}» ha introduït"
+        elif self.introduced:
+            origin = "la transformació ha introduït"
+        else:
+            origin = "ja hi havia al text original"
+        return f"{origin}: {self.match.message} ({self.match.rule_id})"
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            **self.match.to_dict(),
+            "severity": self.severity.value,
+            "introduced": self.introduced,
+            "inside_change": self.inside_change,
+            "rule_id_engine": self.rule_id,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -548,10 +671,12 @@ def _sub_mapping(data: Mapping[str, object], key: str) -> Mapping[str, object]:
 class LanguageToolValidator:
     """Valida un candidat amb LanguageTool local, sense modificar-lo mai.
 
-    Només compten els problemes **nous**: els que ja hi havia al text original
-    no penalitzen el candidat, igual que fa el validador gramatical intern. Un
-    problema de gramàtica, concordança o ortografia invalida el candidat; la
-    resta queden com a advertiments que en baixen la puntuació.
+    Compara els problemes de l'original amb els del candidat i es fixa només
+    en els **nous**: un error que ja hi era no rebutja el candidat si no ha
+    empitjorat. Els errors nous es classifiquen segons on cauen: dins (o a
+    tocar) del fragment que una regla ha escrit, un error gramatical invalida
+    el candidat; lluny del canvi, només el penalitza fort, perquè allà és més
+    probable que sigui un fals positiu sobre text de l'autor.
 
     Si LanguageTool no està disponible, el validador no diu res i el motor
     continua amb els validadors interns.
@@ -580,30 +705,56 @@ class LanguageToolValidator:
     def available(self) -> bool:
         return self._client.available
 
-    def validate(self, candidate: Candidate, ctx: ValidationContext) -> ValidationResult:
+    def report(self, candidate: Candidate, source_text: str) -> tuple[ClassifiedMatch, ...]:
+        """Problemes del candidat, dits si són nous i on cauen respecte del canvi."""
         if not self._client.available or candidate.is_identity:
-            return ValidationResult.passed()
-        known = self._known_issues(ctx.source_text)
-        issues: list[ValidationIssue] = []
+            return ()
+        known = self._known(source_text)
+        regions = _changed_regions(candidate)
+        classified: list[ClassifiedMatch] = []
         for match in self._client.check(candidate.text):
-            if (match.rule_id, match.message) in known:
-                continue  # el problema ja hi era a l'original
+            introduced = (match.rule_id, match.message) not in known
+            region = _region_of(match, regions)
+            inside = region is not None
+            classified.append(
+                ClassifiedMatch(
+                    match=match,
+                    severity=classify(
+                        match,
+                        introduced=introduced,
+                        inside_change=inside,
+                        grammar_issue_types=self._blocking,
+                        grammar_categories=self._categories,
+                    ),
+                    introduced=introduced,
+                    inside_change=inside,
+                    rule_id=candidate.rule_at(match.offset) or (region.rule_id if region else ""),
+                )
+            )
+        return tuple(classified)
+
+    def validate(self, candidate: Candidate, ctx: ValidationContext) -> ValidationResult:
+        issues: list[ValidationIssue] = []
+        for found in self.report(candidate, ctx.source_text):
+            if not found.severity.penalizes:
+                continue
             severity = (
                 ValidationSeverity.ERROR
-                if is_blocking(match, issue_types=self._blocking, categories=self._categories)
+                if found.severity is MatchSeverity.BLOCKING
                 else ValidationSeverity.WARNING
             )
             issues.append(
                 ValidationIssue(
                     self.validator_id,
                     severity,
-                    f"LanguageTool: {match.message} ({match.rule_id})",
+                    f"LanguageTool: {found.describe()}",
                     self.dimension,
+                    found.severity.weight,
                 )
             )
         return ValidationResult(tuple(issues))
 
-    def _known_issues(self, source_text: str) -> frozenset[tuple[str, str]]:
+    def _known(self, source_text: str) -> frozenset[tuple[str, str]]:
         cached = self._source_cache.get(source_text)
         if cached is None:
             cached = frozenset(
@@ -611,6 +762,58 @@ class LanguageToolValidator:
             )
             self._source_cache[source_text] = cached
         return cached
+
+
+@dataclass(frozen=True, slots=True)
+class ChangedRegion:
+    """Tros del text del candidat que ha escrit una regla, amb un mot de marge."""
+
+    start: int
+    end: int
+    rule_id: str
+
+
+def _changed_regions(candidate: Candidate) -> tuple[ChangedRegion, ...]:
+    """Regions que ha escrit una regla, ampliades amb el mot del costat.
+
+    El marge serveix perquè un error de concordança amb el mot del costat («els
+    sarcòfags **presenta**») compti com a error del canvi. Si el candidat no
+    porta les seves transformacions —cosa que a la canonada no passa mai— no es
+    pot localitzar res i es considera tot el text canviat, que és la lectura
+    prudent.
+    """
+    spans = candidate.result_spans()
+    if not spans:
+        if candidate.text == candidate.source_text:
+            return ()
+        return (ChangedRegion(0, len(candidate.text), ""),)
+    regions: list[ChangedRegion] = []
+    for span, transformation in zip(spans, candidate.transformations, strict=True):
+        start, end = _with_margin(span.start, span.end, candidate.text)
+        regions.append(ChangedRegion(start, end, transformation.rule_id))
+    return tuple(regions)
+
+
+def _with_margin(start: int, end: int, text: str) -> tuple[int, int]:
+    """Interval ampliat fins a incloure el mot anterior i el següent."""
+    left = start
+    while left > 0 and not text[left - 1].isalnum():
+        left -= 1
+    while left > 0 and text[left - 1].isalnum():
+        left -= 1
+    right = end
+    while right < len(text) and not text[right].isalnum():
+        right += 1
+    while right < len(text) and text[right].isalnum():
+        right += 1
+    return left, right
+
+
+def _region_of(match: LanguageToolMatch, regions: Sequence[ChangedRegion]) -> ChangedRegion | None:
+    """Regió transformada on cau el problema, si n'hi ha cap."""
+    start = match.offset
+    end = match.offset + max(match.length, 1)
+    return next((r for r in regions if start < r.end and r.start < end), None)
 
 
 @dataclass(frozen=True, slots=True)

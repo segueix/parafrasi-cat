@@ -171,6 +171,30 @@ def test_options_list_every_selector(service: RewriteService) -> None:
     assert options["version"] and options["rule_set"] == "parafrasi"
 
 
+def test_options_report_the_linguistic_mode_and_its_installers(service: RewriteService) -> None:
+    """La interfície ha de poder dir en quin mode treballa i què li falta."""
+    options = service.options()
+    mode = options["resources"]["mode"]
+    assert mode["id"] in ("complet", "basic")
+    assert mode["full"] is (mode["id"] == "complet")
+    assert mode["label"].startswith("Mode lingüístic complet" if mode["full"] else "Mode bàsic")
+    installers = options["installers"]
+    assert {"morphology", "parser", "languagetool"} <= set(installers)
+    for component in mode["installable"]:
+        info = installers[component]
+        assert info["origin"] and info["license"] and info["approximate_size_mb"]
+        assert info["offline_after_install"] is True
+
+
+def test_nothing_is_downloaded_without_an_explicit_confirmation(
+    service: RewriteService,
+) -> None:
+    response = service.install_component("morphology", confirmed=False)
+    assert response["started"] is False
+    assert "confirmar" in response["message"]
+    assert response["origin"].startswith("https://github.com/Softcatala/")
+
+
 def test_rewrite_exposes_everything_the_interface_shows(service: RewriteService) -> None:
     result = service.rewrite(
         RewriteRequest(TEXT, mode=RewriteMode.DEEP, level=3, dictionaries=("historia",))

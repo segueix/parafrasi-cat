@@ -90,6 +90,8 @@ class _UnitResult:
 
     candidates: tuple[EvaluatedCandidate, ...]
     rejected_proposals: tuple[RejectedProposal, ...]
+    notes: tuple[str, ...]
+    """Explicacions del motor sobre el que no ha transformat, i per què."""
 
     @property
     def selected(self) -> EvaluatedCandidate:
@@ -171,6 +173,8 @@ class SentenceResult(_UnitResult):
     candidates: tuple[EvaluatedCandidate, ...]
     rejected_proposals: tuple[RejectedProposal, ...]
     protected_spans: tuple[ProtectedSpan, ...]
+    notes: tuple[str, ...] = ()
+    """Per què el motor no ha transformat (o ha limitat) aquesta frase."""
 
     @property
     def changed(self) -> bool:
@@ -183,6 +187,7 @@ class SentenceResult(_UnitResult):
             "span": self.span.to_dict(),
             "output_text": self.output_text,
             "changed": self.changed,
+            "notes": list(self.notes),
             "transformations": [t.to_dict() for t in self.transformations],
             "alternatives": list(self.alternatives),
             "summary": self.summary(),
@@ -208,6 +213,8 @@ class ParagraphResult(_UnitResult):
     candidates: tuple[EvaluatedCandidate, ...]
     rejected_proposals: tuple[RejectedProposal, ...]
     protected_spans: tuple[ProtectedSpan, ...]
+    notes: tuple[str, ...] = ()
+    """Per què no s'han fusionat frases del paràgraf, quan és rellevant."""
 
     @property
     def changed(self) -> bool:
@@ -221,6 +228,7 @@ class ParagraphResult(_UnitResult):
             "span": self.span.to_dict(),
             "output_text": self.output_text,
             "changed": self.changed,
+            "notes": list(self.notes),
             "transformations": [t.to_dict() for t in self.transformations],
             "alternatives": list(self.alternatives),
             "summary": self.summary(),
@@ -243,6 +251,14 @@ class ParaphraseResult:
     paragraphs: tuple[ParagraphResult, ...] = ()
     dictionary_names: tuple[str, ...] = ()
     preferences_name: str = ""
+
+    @property
+    def notes(self) -> tuple[str, ...]:
+        """Explicacions del motor sobre el que no ha transformat, sense repeticions."""
+        seen = dict.fromkeys(
+            note for unit in (*self.sentences, *self.paragraphs) for note in unit.notes
+        )
+        return tuple(seen)
 
     @property
     def transformations(self) -> tuple[Transformation, ...]:
@@ -294,17 +310,23 @@ class ParaphraseResult:
             lines.append("")
             lines.append(f"Frase {sentence.index + 1}: «{sentence.source_text}»")
             _explain_unit(lines, sentence.source_text, sentence.output_text, sentence.candidates)
+            lines.extend(f"  ℹ {note}" for note in sentence.notes)
             for rejected in sentence.rejected_proposals:
                 described = rejected.transformation.describe()
                 lines.append(f"  ✘ Proposta descartada {described} — {rejected.reason}")
         for paragraph in self.paragraphs:
-            if len(paragraph.candidates) <= 1 and not paragraph.rejected_proposals:
+            if (
+                len(paragraph.candidates) <= 1
+                and not paragraph.rejected_proposals
+                and not paragraph.notes
+            ):
                 continue
             lines.append("")
             lines.append(f"Paràgraf {paragraph.index + 1} (regles entre frases):")
             _explain_unit(
                 lines, paragraph.intermediate_text, paragraph.output_text, paragraph.candidates
             )
+            lines.extend(f"  ℹ {note}" for note in paragraph.notes)
             for rejected in paragraph.rejected_proposals:
                 described = rejected.transformation.describe()
                 lines.append(f"  ✘ Proposta descartada {described} — {rejected.reason}")
@@ -326,12 +348,14 @@ class ParaphraseResult:
             lines.append("")
             lines.append(f"Frase {sentence.index + 1}: «{sentence.source_text}»")
             _report_unit(lines, sentence, max_discarded)
+            lines.extend(f"  ℹ {note}" for note in sentence.notes)
         for paragraph in self.paragraphs:
-            if not paragraph.changed and len(paragraph.candidates) <= 1:
+            if not paragraph.changed and len(paragraph.candidates) <= 1 and not paragraph.notes:
                 continue
             lines.append("")
             lines.append(f"Paràgraf {paragraph.index + 1} (regles entre frases):")
             _report_unit(lines, paragraph, max_discarded)
+            lines.extend(f"  ℹ {note}" for note in paragraph.notes)
         lines.append("")
         lines.append("Text resultant:")
         lines.append(self.output_text)
@@ -355,6 +379,7 @@ class ParaphraseResult:
             "preferences": self.preferences_name,
             "transformations": [t.to_dict() for t in self.transformations],
             "protected_spans": [p.to_dict() for p in self.protected_spans],
+            "notes": list(self.notes),
             "sentences": [s.to_dict() for s in self.sentences],
             "paragraphs": [p.to_dict() for p in self.paragraphs],
         }

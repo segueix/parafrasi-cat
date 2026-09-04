@@ -7,10 +7,15 @@ determinista de candidats.
 
 És opcional: sense parser instal·lat, :class:`NullSyntax` no diu res i el
 motor continua amb les heurístiques de sempre.
+
+El parser tampoc no és infal·lible. :func:`assess_confidence` aplica un criteri
+explícit de fiabilitat sobre cada arbre; quan no el supera, l'anàlisi es marca
+com a poc fiable i el motor no hi autoritza cap transformació estructural.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
@@ -28,6 +33,18 @@ MODIFIER_DEPS = frozenset({"obl", "obl:tmod", "obl:mod", "advmod", "nmod"})
 
 #: Formes que neguen. Es comproven a part perquè perdre-les altera el sentit.
 NEGATIONS = frozenset({"no", "mai", "cap", "ni", "gens", "tampoc"})
+
+#: Modes que fan finit un verb. Un verb sense mode és infinitiu, gerundi o participi.
+FINITE_MOODS = frozenset({"ind", "subj", "imp", "cond"})
+
+#: Categories que poden ser nucli d'una oració (verb, o predicat nominal amb còpula).
+PREDICATE_POS = frozenset({"VERB", "AUX"})
+
+#: Etiquetes amb què el parser reconeix que no ha sabut classificar una relació.
+UNRESOLVED_DEPS = frozenset({"dep", ""})
+
+#: Relacions de còpula i d'auxiliar, per trobar el verb d'un predicat nominal.
+COPULA_DEPS = frozenset({"cop", "aux", "aux:pass"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +66,8 @@ class SyntaxToken:
     gender: str | None = None
     number: str | None = None
     person: str | None = None
+    mood: str | None = None
+    tense: str | None = None
 
     @property
     def is_root(self) -> bool:
@@ -66,6 +85,11 @@ class SyntaxToken:
     def is_negation(self) -> bool:
         return self.lemma.lower() in NEGATIONS or self.text.lower() in NEGATIONS
 
+    @property
+    def is_finite_verb(self) -> bool:
+        """Cert si és un verb conjugat (té mode); un infinitiu o un participi no ho és."""
+        return self.pos in PREDICATE_POS and self.mood in FINITE_MOODS
+
     def to_dict(self) -> dict[str, object]:
         return {
             "index": self.index,
@@ -77,24 +101,162 @@ class SyntaxToken:
             "gender": self.gender,
             "number": self.number,
             "person": self.person,
+            "mood": self.mood,
+            "tense": self.tense,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class SyntaxConfidence:
+    """Per què una anàlisi és, o no és, prou fiable per autoritzar transformacions.
+
+    ``reasons`` és buit quan l'anàlisi supera tots els criteris; si no, diu en
+    català què ha fallat, perquè el motor ho pugui explicar a qui escriu.
+    """
+
+    confident: bool
+    reasons: tuple[str, ...] = ()
+
+    def __bool__(self) -> bool:
+        return self.confident
+
+    def describe(self) -> str:
+        if self.confident:
+            return "anàlisi sintàctica fiable"
+        return "anàlisi sintàctica poc fiable: " + "; ".join(self.reasons)
+
+    def to_dict(self) -> dict[str, object]:
+        return {"confident": self.confident, "reasons": list(self.reasons)}
+
+
+#: Anàlisi que sempre és fiable, per als proveïdors que no en calculen cap.
+TRUSTED = SyntaxConfidence(True)
+
+
+def assess_confidence(
+    tokens: Sequence[SyntaxToken],
+    *,
+    numbers_of: Callable[[str], frozenset[str]] | None = None,
+) -> SyntaxConfidence:
+    """Criteri explícit de confiança sintàctica.
+
+    L'anàlisi es considera fiable quan la frase és sencera i l'arbre és
+    coherent:
+
+    1. hi ha mots analitzats;
+    2. hi ha exactament una arrel (dues arrels són dos fragments);
+    3. cap dependència no surt de la frase ni forma un cicle;
+    4. hi ha almenys un verb conjugat;
+    5. el nucli és un verb o un predicat amb còpula;
+    6. el parser ha sabut classificar totes les relacions;
+    7. la morfologia local no contradiu el parser en el nombre del subjecte
+       ni del verb principal (només si hi ha recurs morfològic).
+
+    Davant del dubte no s'inventa una anàlisi: es diu que no és fiable i el
+    motor recorre a les heurístiques conservadores.
+    """
+    if not tokens:
+        return SyntaxConfidence(False, ("l'analitzador no ha retornat cap mot",))
+    reasons: list[str] = []
+    roots = [t for t in tokens if t.is_root]
+    if len(roots) != 1:
+        reasons.append(f"l'oració té {len(roots)} arrels: probablement són fragments independents")
+    reasons.extend(_structure_problems(tokens))
+    if not any(t.is_finite_verb for t in tokens):
+        reasons.append("no hi ha cap verb conjugat: sembla un fragment nominal")
+    if len(roots) == 1 and not _is_predicate(roots[0], tokens):
+        reasons.append(f"el nucli «{roots[0].text}» no és un verb ni un predicat amb còpula")
+    unresolved = [t.text for t in tokens if t.dep in UNRESOLVED_DEPS and not t.is_root]
+    if unresolved:
+        reasons.append(
+            "l'analitzador no ha sabut classificar " + ", ".join(f"«{t}»" for t in unresolved[:3])
+        )
+    if numbers_of is not None:
+        reasons.extend(_morphology_contradictions(tokens, roots, numbers_of))
+    return SyntaxConfidence(not reasons, tuple(reasons))
+
+
+def _structure_problems(tokens: Sequence[SyntaxToken]) -> list[str]:
+    """Dependències que surten de la frase o que formen un cicle."""
+    problems: list[str] = []
+    size = len(tokens)
+    by_index = {t.index: t for t in tokens}
+    for token in tokens:
+        if token.head not in by_index:
+            problems.append(f"la dependència de «{token.text}» apunta fora de l'oració")
+            return problems
+    if len(by_index) != size:  # pragma: no cover - índexs repetits: mai amb spaCy
+        problems.append("hi ha índexs de mot repetits")
+        return problems
+    for token in tokens:
+        seen = {token.index}
+        current = token
+        while not current.is_root:
+            current = by_index[current.head]
+            if current.index in seen:
+                problems.append("l'arbre de dependències té un cicle")
+                return problems
+            seen.add(current.index)
+    return problems
+
+
+def _is_predicate(root: SyntaxToken, tokens: Sequence[SyntaxToken]) -> bool:
+    """Cert si el nucli és un verb conjugat o un predicat nominal amb còpula."""
+    if root.pos in PREDICATE_POS:
+        return True
+    return any(t.head == root.index and t.dep in COPULA_DEPS for t in tokens)
+
+
+def _morphology_contradictions(
+    tokens: Sequence[SyntaxToken],
+    roots: Sequence[SyntaxToken],
+    numbers_of: Callable[[str], frozenset[str]],
+) -> list[str]:
+    """Contradiccions de nombre entre el parser i el recurs morfològic local.
+
+    Només es miren el subjecte i el nucli: són els mots dels quals depenen les
+    condicions sintàctiques, i comparar-los tots dispararia falses alarmes amb
+    formes ambigües.
+    """
+    problems: list[str] = []
+    interesting = [t for t in tokens if t.is_subject or t in roots]
+    for token in interesting:
+        if token.number is None:
+            continue
+        known = numbers_of(token.text)
+        if known and token.number not in known:
+            problems.append(
+                f"la morfologia diu que «{token.text}» és {'/'.join(sorted(known))} "
+                f"i l'analitzador el marca com a {token.number}"
+            )
+    return problems
 
 
 @dataclass(frozen=True, slots=True)
 class SentenceSyntax:
     """Anàlisi sintàctica d'una frase.
 
-    ``confident`` és fals quan el parser no ha pogut analitzar prou bé la
-    frase; aleshores les regles han de recórrer a les heurístiques.
+    ``confidence`` diu si l'anàlisi és prou fiable per autoritzar
+    transformacions estructurals i, si no ho és, per què.
     """
 
     text: str
     tokens: tuple[SyntaxToken, ...] = ()
-    confident: bool = True
+    confidence: SyntaxConfidence = TRUSTED
     source: str = ""
 
     def __bool__(self) -> bool:
         return bool(self.tokens)
+
+    @property
+    def confident(self) -> bool:
+        """Cert si el criteri de confiança autoritza a fer servir aquesta anàlisi."""
+        return bool(self.tokens) and self.confidence.confident
+
+    @property
+    def reasons(self) -> tuple[str, ...]:
+        """Motius pels quals l'anàlisi no és fiable (buit si ho és)."""
+        return self.confidence.reasons
 
     @property
     def root(self) -> SyntaxToken | None:
@@ -124,7 +286,7 @@ class SentenceSyntax:
 
     @property
     def n_finite_verbs(self) -> int:
-        return sum(1 for t in self.tokens if t.pos in ("VERB", "AUX"))
+        return sum(1 for t in self.tokens if t.pos in PREDICATE_POS)
 
     def main_subject(self) -> SyntaxToken | None:
         """Subjecte de l'oració principal, si n'hi ha un de sol i clar."""
@@ -133,6 +295,20 @@ class SentenceSyntax:
             return None
         direct = [t for t in self.subjects if t.head == root.index]
         return direct[0] if len(direct) == 1 else None
+
+    def main_verb(self) -> SyntaxToken | None:
+        """Verb conjugat de l'oració principal: el nucli, o la seva còpula."""
+        root = self.root
+        if root is None:
+            return None
+        if root.is_finite_verb:
+            return root
+        copulas = [
+            t
+            for t in self.tokens
+            if t.head == root.index and t.dep in COPULA_DEPS and t.is_finite_verb
+        ]
+        return copulas[0] if len(copulas) == 1 else None
 
     def subject_number(self) -> str | None:
         """Nombre del subjecte principal («sg» o «pl»), si el parser n'està segur."""
@@ -181,12 +357,15 @@ class SentenceSyntax:
             parts.append(f"coordinacions: {len(self.coordinations)}")
         if self.negations:
             parts.append("negació: " + ", ".join(t.text for t in self.negations))
+        if not self.confident:
+            parts.append(self.confidence.describe())
         return " · ".join(parts)
 
     def to_dict(self) -> dict[str, object]:
         return {
             "text": self.text,
             "confident": self.confident,
+            "confidence": self.confidence.to_dict(),
             "source": self.source,
             "tokens": [t.to_dict() for t in self.tokens],
         }
@@ -212,7 +391,47 @@ class NullSyntax:
     available = False
 
     def parse(self, text: str) -> SentenceSyntax:
-        return SentenceSyntax(text, (), confident=False, source="null")
+        return empty(text)
+
+
+class CachedSyntax:
+    """Recorda les anàlisis d'una sessió per no analitzar dos cops el mateix text.
+
+    La memòria cau és només en memòria, mai a disc, i no afecta el
+    determinisme: la mateixa frase ja donava la mateixa anàlisi. Quan s'omple,
+    es buida sencera en lloc de créixer sense límit.
+    """
+
+    def __init__(self, provider: SyntaxProvider, *, max_entries: int = 2048) -> None:
+        self._provider = provider
+        self._max_entries = max_entries
+        self._cache: dict[str, SentenceSyntax] = {}
+        self._parses = 0
+        self._hits = 0
+
+    @property
+    def provider(self) -> SyntaxProvider:
+        return self._provider
+
+    @property
+    def available(self) -> bool:
+        return self._provider.available
+
+    @property
+    def statistics(self) -> dict[str, int]:
+        return {"parses": self._parses, "cache_hits": self._hits, "cached": len(self._cache)}
+
+    def parse(self, text: str) -> SentenceSyntax:
+        cached = self._cache.get(text)
+        if cached is not None:
+            self._hits += 1
+            return cached
+        analysis = self._provider.parse(text)
+        self._parses += 1
+        if len(self._cache) >= self._max_entries:
+            self._cache.clear()
+        self._cache[text] = analysis
+        return analysis
 
 
 def agree(
@@ -233,13 +452,13 @@ def merge(*analyses: SentenceSyntax) -> SentenceSyntax:  # pragma: no cover - ut
     for analysis in analyses:
         if analysis:
             return analysis
-    return SentenceSyntax(analyses[0].text if analyses else "", (), confident=False)
+    return empty(analyses[0].text if analyses else "")
 
 
 def token_features(token: SyntaxToken) -> dict[str, str]:
     """Trets del mot en el vocabulari que fan servir les condicions de les regles."""
     features: dict[str, str] = {"lemma": token.lemma, "pos": token.pos, "dep": token.dep}
-    for name in ("gender", "number", "person"):
+    for name in ("gender", "number", "person", "mood", "tense"):
         value = getattr(token, name)
         if value is not None:
             features[name] = value
@@ -248,25 +467,32 @@ def token_features(token: SyntaxToken) -> dict[str, str]:
 
 DEFAULT_FIELDS: tuple[str, ...] = ("lemma", "pos", "dep", "gender", "number", "person")
 
-_EMPTY: SentenceSyntax = SentenceSyntax("", (), confident=False, source="null")
+_NO_TOKENS = SyntaxConfidence(False, ("l'analitzador no ha retornat cap mot",))
+_EMPTY: SentenceSyntax = SentenceSyntax("", (), _NO_TOKENS, "null")
 
 
 def empty(text: str = "") -> SentenceSyntax:
-    return SentenceSyntax(text, (), confident=False, source="null") if text else _EMPTY
+    return SentenceSyntax(text, (), _NO_TOKENS, "null") if text else _EMPTY
 
 
 __all__ = [
     "CLAUSE_DEPS",
+    "COPULA_DEPS",
     "DEFAULT_FIELDS",
+    "FINITE_MOODS",
     "MODIFIER_DEPS",
     "NEGATIONS",
     "OBJECT_DEPS",
     "SUBJECT_DEPS",
+    "TRUSTED",
+    "CachedSyntax",
     "NullSyntax",
     "SentenceSyntax",
+    "SyntaxConfidence",
     "SyntaxProvider",
     "SyntaxToken",
     "agree",
+    "assess_confidence",
     "empty",
     "merge",
     "token_features",

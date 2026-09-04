@@ -233,7 +233,12 @@ def _binary(validation: ValidationResult, dimension: ValidationDimension) -> flo
 
 
 def _grammar_score(validation: ValidationResult) -> float:
+    """Gramaticalitat: 0 si hi ha errors, i si no, 1 menys el pes dels avisos.
+
+    Els avisos pesen: un error nou probable (una penalització forta) baixa la
+    puntuació molt més que una qüestió d'estil.
+    """
     if validation.errors_in(ValidationDimension.GRAMMAR):
         return 0.0
-    warnings = len(validation.warnings_in(ValidationDimension.GRAMMAR))
-    return round(max(0.0, 1.0 - WARNING_PENALTY * warnings), 4)
+    weight = sum(i.weight for i in validation.warnings_in(ValidationDimension.GRAMMAR))
+    return round(max(0.0, 1.0 - WARNING_PENALTY * weight), 4)

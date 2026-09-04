@@ -3,6 +3,63 @@
 El format segueix [Keep a Changelog](https://keepachangelog.com/ca/1.1.0/) i el
 projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
+## 1.1.0
+
+Endureix el motor davant de les limitacions conegudes de la 1.0. No hi ha cap
+regla nova ni cap ampliació de cobertura: el que canvia és què s'autoritza i
+com s'explica el que no.
+
+### Errors nous contra errors de l'original
+
+- Els avisos de LanguageTool es classifiquen en quatre gravetats
+  (`BLOCKING`, `STRONG_PENALTY`, `WARNING`, `INFORMATIONAL`) segons si són nous
+  i si cauen dins del fragment transformat, amb un mot de marge.
+- Un problema que ja hi havia al text original ja no penalitza cap candidat, de
+  manera que un nom propi que LanguageTool marca com a error d'ortografia no
+  descarta la reescriptura.
+- Un error gramatical nou dins del canvi invalida el candidat i el motiu diu
+  quina regla l'ha introduït; el mateix error lluny del canvi només penalitza.
+- Els avisos de validació porten pes: una penalització forta compta el triple
+  que un advertiment d'estil.
+
+### Confiança sintàctica
+
+- Criteri explícit de fiabilitat de cada arbre: una sola arrel, sense cicles ni
+  dependències fora de la frase, amb verb conjugat, amb nucli predicatiu, sense
+  relacions sense classificar i sense contradiccions amb la morfologia local.
+- Una frase que no el supera baixa a nivell 2: cap transformació estructural
+  sobre text fragmentari.
+- Els resultats porten notes en català que expliquen per què una frase no s'ha
+  transformat, o per què s'ha limitat.
+- Memòria cau d'anàlisis per sessió, només en memòria, que no afecta el
+  determinisme.
+
+### Concordança
+
+- Validador local de concordança de subjecte i verb amb el parser: només
+  compten les discordances que ha introduït el motor, i els subjectes
+  col·lectius en queden fora expressament.
+- Reparació determinista amb la morfologia local quan la forma correcta és
+  única, registrada com una transformació explícita `concordanca.reparacio`.
+  Amb més d'una forma possible, o cap, el candidat es descarta.
+
+### Nivell 5 i longitud de frase
+
+- Abans de fusionar dues frases es calcula la longitud resultant i es compara
+  amb el màxim de l'autor, la distribució de la seva empremta o la longitud que
+  ha declarat preferir; mana la més restrictiva.
+- Amb un autor de frase curta la fusió no es proposa i el motiu queda al
+  resultat; amb un autor de períodes llargs continua disponible.
+- La fusió tampoc no s'aplica si el parser no es refia de cap de les dues
+  frases.
+
+### Recursos i interfície
+
+- Mode lingüístic complet i mode bàsic, dits explícitament a la interfície,
+  amb botó per instal·lar els recursos que falten.
+- Nou `scripts/install_morphology.py`: baixa el diccionari de Softcatalà i en
+  genera el recurs local, amb informació i confirmació prèvies.
+
 ## 1.0.0
 
 Primera versió completa. `parafrasi-cat` reredacta text en català amb regles

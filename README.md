@@ -43,6 +43,10 @@ epistemològica. Els detectors marquen els fragments intocables abans d'aplicar
 cap regla i els validadors ho tornen a comprovar a cada candidat. Un candidat
 que en trenqui cap queda invalidat i mai no se selecciona.
 
+Parafrasi-cat utilitza morfologia, anàlisi sintàctica i validació gramatical
+local per augmentar la seguretat de les transformacions. Quan aquests recursos
+no ofereixen prou confiança, el motor prefereix conservar el text original.
+
 ## Instal·lació
 
 Requereix Python 3.11 o superior.
@@ -74,9 +78,26 @@ parafrasi-cat web --port 9000 --no-browser
 El servidor es lliga a l'amfitrió local i la pàgina no carrega cap recurs
 extern.
 
+## Mode lingüístic complet i mode bàsic
+
+El motor treballa en un de dos modes, segons el que hi hagi instal·lat:
+
+| | Mode lingüístic complet | Mode bàsic |
+|---|---|---|
+| Morfologia de Softcatalà | sí | reserva interna |
+| Parser sintàctic | sí | heurístiques |
+| LanguageTool local | sí | validadors interns |
+| Cobertura | més alta | més baixa |
+| Prudència | la de sempre | encara més alta |
+
+La interfície ho diu en una línia: **«Mode lingüístic complet actiu»** o **«Mode
+bàsic: instal·la els recursos lingüístics per obtenir més cobertura.»**
+Parafrasi-cat **no falla mai** perquè falti un recurs; simplement transforma
+menys i conserva l'original més sovint.
+
 ## Com instal·lar els recursos
 
-La interfície té una secció **Recursos lingüístics** amb l'estat de cada
+La secció **Recursos lingüístics** de la interfície mostra l'estat de cada
 component:
 
 ```
@@ -94,14 +115,13 @@ cal confirmar-ho explícitament. Després no cal connexió per a res.
 Des del terminal, si ho preferiu:
 
 ```bash
-python scripts/install_parser.py                                  # spaCy + model català
-python scripts/install_languagetool.py                            # LanguageTool (cal Java)
-git clone --depth 1 https://github.com/Softcatala/catalan-dict-tools
-python scripts/import_softcatala.py --source catalan-dict-tools   # morfologia
+python scripts/install_morphology.py     # diccionari de Softcatalà (cal git)
+python scripts/install_parser.py         # spaCy + model català
+python scripts/install_languagetool.py   # LanguageTool (cal Java)
 ```
 
-Cap dels tres és obligatori: sense ells, el motor funciona amb els seus
-components interns.
+Cap dels tres és obligatori: sense ells, el motor funciona en mode bàsic amb
+els seus components interns.
 
 ## Com crear una empremta d'autor
 
@@ -165,6 +185,21 @@ frases senceres (fusió amb represa anafòrica). El nivell 4 treballa dins de
 cada frase i no arriba a aquesta fase. Les proteccions són exactament les
 mateixes als dos nivells.
 
+Reestructurar en profunditat **no vol dir escriure més llarg**. Abans de
+fusionar res, el motor calcula la longitud de la frase resultant i la compara
+amb el que l'autor acostuma a escriure —el seu `max_sentence_length`, la
+distribució de la seva empremta o la longitud que ha declarat preferir— i mana
+la més restrictiva. Si se'n va, la fusió no es proposa i el resultat ho diu:
+
+```
+ℹ no s'han fusionat «La primera referència itàlica…» i «En aquest sarcòfag…»:
+  tindria 32 paraules i el límit és 25 segons el màxim de 25 de l'autor
+```
+
+Amb un autor de frase curta, la reestructuració del nivell 5 recau en la
+divisió i la reordenació; amb un autor de períodes llargs, la fusió continua
+disponible dins dels límits observats.
+
 ## Morfologia
 
 El diccionari de Softcatalà aporta lema, categoria, gènere, nombre, persona,
@@ -198,6 +233,39 @@ Si el parser no hi és i la regla l'exigeix, la regla no s'aplica: davant del
 dubte, no es transforma. Si el parser i els invariants de seguretat es
 contradiuen, manen els invariants.
 
+### Confiança sintàctica
+
+El parser **no es considera infal·lible**. Cada anàlisi passa un criteri
+explícit abans d'autoritzar res estructural:
+
+1. hi ha mots analitzats;
+2. hi ha exactament una arrel (dues arrels són dos fragments);
+3. cap dependència no surt de la frase ni forma un cicle;
+4. hi ha almenys un verb conjugat;
+5. el nucli és un verb o un predicat amb còpula;
+6. el parser ha sabut classificar totes les relacions;
+7. la morfologia local no el contradiu en el nombre del subjecte ni del verb.
+
+Si la frase no el supera —un fragment nominal, una estructura incompleta, una
+contradicció—, **no es força cap anàlisi**: les transformacions d'aquella frase
+es limiten al nivell 2 (lèxic i connectors) i el resultat diu per què:
+
+```
+ℹ anàlisi sintàctica poc fiable: no hi ha cap verb conjugat: sembla un
+  fragment nominal; només s'han provat transformacions fins al nivell 2
+```
+
+### Concordança
+
+Amb parser i morfologia, el motor comprova la concordança de subjecte i verb de
+cada candidat i **només compta les discordances que ha introduït ell**: les que
+ja eren al text de l'autor no descarten res i tampoc no s'esmenen sols.
+
+Si la discordança és seva i la morfologia local dona **una sola** forma
+possible, la corregeix i la correcció queda registrada com una transformació
+més (`concordanca.reparacio`), amb el seu perquè. Si hi ha més d'una forma
+possible, o cap, no s'inventa res: el candidat es descarta.
+
 ## LanguageTool
 
 Comprova gramàtica, concordança i puntuació de cada candidat. **Només valida**:
@@ -207,6 +275,30 @@ de candidats és qui decideix si un candidat es penalitza o es descarta.
 El servidor local s'arrenca **una sola vegada** per sessió i es reutilitza, amb
 comprovació d'estat, reinici si cau i tancament net. Mai no es fa servir l'API
 de languagetool.org.
+
+### Errors nous contra errors de l'original
+
+El motor compara els problemes de l'original amb els del candidat i es fixa
+només en els **nous**. Cada problema nou es classifica segons on cau:
+
+| Gravetat | Quan | Efecte |
+|---|---|---|
+| Bloquejant | error gramatical nou dins del fragment transformat | invalida el candidat |
+| Penalització forta | el mateix error lluny del canvi, o puntuació i ortografia dins del canvi | baixa molt la puntuació |
+| Advertiment | estil, repeticions, preferències | baixa la puntuació |
+| Informatiu | el problema ja hi era, o no implica incorrecció | cap |
+
+Així un avís de LanguageTool sobre un nom propi de l'autor, que el motor no ha
+tocat, ja no descarta la reescriptura sencera. I quan sí que descarta un
+candidat, ho diu amb noms i cognoms:
+
+```
+✘ Candidat rebutjat: LanguageTool: la regla «copula.es_a_constitueix» ha
+  introduït: Possible error de concordança. (CONCORD_SUBJECTE_VERB)
+```
+
+La negació, les xifres, els noms propis i la força epistemològica no es deixen
+en mans de LanguageTool: els guarden els invariants del motor.
 
 ## Diccionaris
 
@@ -284,9 +376,13 @@ make check       # tot
   servir exigeixen confiança i, quan no n'hi ha, no transformen.
 - **Les regles s'han desenvolupat sobre un corpus petit.** El rendiment sobre
   text arbitrari serà inferior al dels exemples del repositori.
-- **Sense LanguageTool no es comprova la concordança de la sortida.** El
-  validador intern detecta contraccions incorrectes, signes desaparellats i
-  defectes de puntuació, però no concordança ni règim verbal.
+- **En mode bàsic la comprovació és més fina.** Sense parser ni LanguageTool,
+  el validador intern detecta contraccions incorrectes, signes desaparellats i
+  defectes de puntuació, però no la concordança ni el règim verbal.
+- **La concordança que es comprova és la de subjecte i verb.** No es comprova
+  la de determinant i nom ni la dels participis, i els subjectes col·lectius
+  («la majoria dels autors») queden fora expressament: hi són correctes totes
+  dues concordances.
 - **La primera comprovació amb LanguageTool és lenta** (uns segons), perquè el
   servidor local hi carrega el model català. Les següents són immediates.
 

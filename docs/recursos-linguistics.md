@@ -18,6 +18,17 @@ per mida en el segon. Un cop instal·lats, tot funciona fora de línia.
 ### Importació
 
 ```bash
+python scripts/install_morphology.py            # informa, demana confirmació i ho fa tot
+python scripts/install_morphology.py --info     # només informa
+```
+
+O des de la interfície: **Recursos lingüístics → Instal·la la morfologia
+catalana**. En tots dos casos es mostra origen, versió, mida, llicència i
+atribució abans de baixar res.
+
+Si preferiu fer-ho pas a pas, o ja teniu el repositori:
+
+```bash
 git clone --depth 1 https://github.com/Softcatala/catalan-dict-tools
 python scripts/import_softcatala.py --source catalan-dict-tools
 ```
@@ -154,6 +165,57 @@ en té, o quan no està instal·lat, actuen les heurístiques de sempre. Si el
 parser i els invariants de seguretat es contradiuen, **manen els invariants i
 no es transforma**.
 
+### Criteri de confiança
+
+«Prou confiança» no és una impressió: és un criteri explícit
+(`syntax.assess_confidence`) que cada arbre ha de superar.
+
+| Criteri | Per què |
+|---|---|
+| Hi ha mots analitzats | sense anàlisi no hi ha res a dir |
+| Exactament una arrel | dues arrels són dos fragments enganxats |
+| Cap dependència fora de la frase ni cap cicle | l'arbre ha de ser coherent |
+| Almenys un verb conjugat | sense verb és un fragment nominal |
+| El nucli és un verb o un predicat amb còpula | si no, l'estructura és nominal |
+| Cap relació sense classificar | el parser mateix reconeix que no ho sap |
+| La morfologia local no el contradiu en el nombre | sintaxi i morfologia han de dir el mateix |
+
+L'últim criteri només s'aplica al subjecte i al nucli, i només si el recurs
+morfològic està instal·lat: comparar-ho tot dispararia falses alarmes amb les
+formes ambigües.
+
+Quan una frase no supera el criteri, **no es força cap anàlisi**: el nivell
+efectiu d'aquella frase baixa a 2 (lèxic i connectors), les regles estructurals
+no s'hi apliquen i el resultat en diu el motiu. En una oració completa amb el
+mateix contingut, en canvi, les regles de nivell 3 sí que actuen.
+
+### Concordança: detecció i reparació
+
+Amb el parser instal·lat, cada candidat passa pel validador `concordanca`, que
+compara el nombre del subjecte principal amb el del seu verb. Dues regles el
+fan prudent:
+
+- **Només compten les discordances noves.** Les que ja eren al text de l'autor
+  no descarten res i tampoc no s'esmenen: el motor no corregeix l'original.
+- **Els subjectes col·lectius queden fora.** «La majoria dels autors accepten»
+  i «el conjunt de làpides mostra» són tots dos correctes; la llista de nuclis
+  col·lectius és tancada i revisable, no s'endevina.
+
+Si la discordança és del motor i el recurs morfològic dona **una sola** forma
+possible, `candidates.repair` la corregeix i la deixa registrada com una
+transformació més:
+
+```
+concordanca.reparacio: «presenta» → «presenten»
+  Concordança: «prova.plural» ha deixat «presenta» sense concordar amb
+  «sarcòfags» (pl); la morfologia local només admet «presenten»
+```
+
+Amb més d'una forma possible, o cap, no s'inventa res: el candidat es descarta.
+Tampoc no es repara res dins del fragment que ha escrit una regla —allà la
+forma correcta és responsabilitat de la regla— ni amb LanguageTool, que no
+reescriu mai.
+
 ## LanguageTool local
 
 ### Instal·lació
@@ -189,14 +251,32 @@ decideix el contingut i no aplica cap correcció. El flux és:
 motor de regles → candidat → LanguageTool local → problemes? → puntuació o descart → selector
 ```
 
-Un problema de concordança, gramàtica o ortografia invalida el candidat; la
-resta el penalitzen. Els problemes que ja hi havia al text original no compten,
-igual que fa el validador gramatical intern.
+### Errors nous contra errors de l'original
+
+El motor compara els problemes de l'original amb els del candidat i classifica
+cada problema **nou** segons on cau respecte del fragment transformat (amb un
+mot de marge a cada banda):
+
+| Gravetat | Quan | Efecte |
+|---|---|---|
+| `BLOCKING` | error gramatical nou dins del canvi (`CONCORDANCES_*`, `DIACRITICS`, `PREPOSITIONS`, `issueType: grammar`…) | invalida el candidat |
+| `STRONG_PENALTY` | el mateix error lluny del canvi, o puntuació, majúscules i ortografia dins del canvi | pesa el triple que un advertiment |
+| `WARNING` | estil, repeticions, preferències, qüestions discutibles | baixa la puntuació |
+| `INFORMATIONAL` | el problema ja hi era, o no implica incorrecció | cap efecte |
+
+La distinció importa perquè LanguageTool marca com a error d'ortografia molts
+noms propis legítims («Oddo Altoviti», «Rovezzano»). Si el motor no els ha
+escrit, no han empitjorat res i no poden descartar la reescriptura sencera.
+A l'inrevés, «Els sarcòfags presenta dos cranis» sortint d'una regla que ha
+tocat el subjecte sí que la descarta, i l'informe diu quina regla ha estat.
 
 Les regles catalanes de concordança sovint arriben amb `issueType:
 uncategorized`, però amb la categoria `CONCORDANCES_*`. El motor mira totes
-dues coses, de manera que «Aquests sarcòfags presenta dos cranis» queda
-descartat i «Aquest sarcòfag presenta dos cranis» no.
+dues coses.
+
+Una discordança amb el verb lluny del canvi pot escapar-se d'aquest criteri de
+proximitat: la recull el validador de concordança del parser, que no depèn de
+la distància. Són dues capes, i cadascuna cobreix el que a l'altra se li escapa.
 
 ### Servidor persistent
 
@@ -220,9 +300,14 @@ repetides, immediates per la memòria cau.
 
 ## Estat dels recursos
 
-La interfície mostra l'estat de cada component:
+Segons el que hi hagi instal·lat, el motor treballa en **mode lingüístic
+complet** (morfologia, parser i LanguageTool) o en **mode bàsic** (només els
+components interns: menys cobertura i més prudència). La interfície ho diu en
+una línia i, si falta algun recurs, hi posa el botó per instal·lar-lo.
 
 ```
+Mode lingüístic complet actiu
+
 Morfologia catalana      ✓ activa
 Parser sintàctic català  ✓ activa
 LanguageTool local       ✓ actiu

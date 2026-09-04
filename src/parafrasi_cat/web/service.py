@@ -51,6 +51,7 @@ DEFAULT_RULE_SET = "parafrasi"
 #: Components opcionals que la interfície pot instal·lar, amb el seu script.
 #: Els scripts són fora del paquet: són l'única part que accedeix a Internet.
 INSTALLERS: dict[str, str] = {
+    "morphology": "scripts/install_morphology.py",
     "languagetool": "scripts/install_languagetool.py",
     "parser": "scripts/install_parser.py",
 }
@@ -663,6 +664,24 @@ class RewriteService:
 #: Descripció de cada component instal·lable. Es mostra sencera abans de
 #: baixar res, i la confirmació de l'usuari és obligatòria.
 _INSTALL_INFO: dict[str, JsonDict] = {
+    "morphology": {
+        "component": "Morfologia catalana",
+        "purpose": (
+            "Flexió i concordança fiables: lema, categoria, gènere, nombre, persona, "
+            "temps i mode de més d'un milió de formes catalanes."
+        ),
+        "origin": "https://github.com/Softcatala/catalan-dict-tools",
+        "version": "darrera revisió del repositori (es desa el commit exacte)",
+        "license": "GPL-2.0-or-later OR LGPL-2.1-or-later",
+        "approximate_size_mb": 90,
+        "requirement": "git",
+        "offline_after_install": True,
+        "note": (
+            "Les dades són de Softcatalà (Jaume Ortolà i Joan Moratinos), són copyleft i no "
+            "es distribueixen amb el programa: es baixen del repositori original i el recurs "
+            "es genera en aquest ordinador."
+        ),
+    },
     "languagetool": {
         "component": "LanguageTool",
         "purpose": "Validació avançada de gramàtica, concordança i puntuació en català.",

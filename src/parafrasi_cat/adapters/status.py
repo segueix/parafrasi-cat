@@ -13,11 +13,48 @@ component està actiu i, si no hi és, què cal fer.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 from parafrasi_cat.adapters.languagetool import find_installation, find_java
 from parafrasi_cat.morphology.catalan import RESOURCE_RELATIVE, CatalanMorphology
 from parafrasi_cat.syntax.spacy_parser import DEFAULT_MODEL, SpacySyntax
+
+
+class LinguisticMode(StrEnum):
+    """En quin mode treballa el motor segons els recursos que hi ha instal·lats."""
+
+    FULL = "complet"
+    """Morfologia de Softcatalà, parser sintàctic i LanguageTool local."""
+
+    BASIC = "basic"
+    """Només els components interns: menys cobertura i més prudència."""
+
+    @property
+    def label(self) -> str:
+        if self is LinguisticMode.FULL:
+            return "Mode lingüístic complet actiu"
+        return "Mode bàsic: instal·la els recursos lingüístics per obtenir més cobertura."
+
+    @property
+    def detail(self) -> str:
+        if self is LinguisticMode.FULL:
+            return (
+                "Morfologia de Softcatalà, analitzador sintàctic i validació gramatical "
+                "local, tots en aquest ordinador."
+            )
+        return (
+            "El motor funciona igualment, amb els components interns: transforma menys "
+            "i, quan no en té prou seguretat, conserva el text original."
+        )
+
+
+#: Component instal·lable de cada recurs, per al botó de la interfície.
+INSTALLERS: dict[str, str] = {
+    "Morfologia catalana": "morphology",
+    "Parser sintàctic català": "parser",
+    "LanguageTool local": "languagetool",
+}
 
 MORPHOLOGY_ACTIVE = "activa"
 MORPHOLOGY_FALLBACK = "reserva"
@@ -71,12 +108,35 @@ class LinguisticResources:
     def missing(self) -> tuple[str, ...]:
         return tuple(c.component for c in self.components if not c.active)
 
+    @property
+    def mode(self) -> LinguisticMode:
+        """Mode lingüístic complet si hi són els tres recursos; bàsic altrament."""
+        return LinguisticMode.FULL if self.offline_ready else LinguisticMode.BASIC
+
+    @property
+    def installable(self) -> tuple[str, ...]:
+        """Components que falten i que la interfície pot instal·lar."""
+        return tuple(
+            INSTALLERS[c.component]
+            for c in self.components
+            if not c.active and c.component in INSTALLERS
+        )
+
     def to_dict(self) -> dict[str, object]:
+        mode = self.mode
         return {
             "morphology": self.morphology.to_dict(),
             "syntax": self.syntax.to_dict(),
             "languagetool": self.languagetool.to_dict(),
             "java": self.java.to_dict(),
+            "mode": {
+                "id": mode.value,
+                "label": mode.label,
+                "detail": mode.detail,
+                "full": mode is LinguisticMode.FULL,
+                "missing": list(self.missing),
+                "installable": list(self.installable),
+            },
             "offline": {
                 "component": "Mode fora de línia",
                 "state": "disponible" if self.offline_ready else "parcial",
@@ -91,9 +151,11 @@ class LinguisticResources:
         }
 
     def summary(self) -> str:
-        return "\n".join(
+        lines = [self.mode.label, ""]
+        lines.extend(
             f"{status.component}: [{status.state}] {status.message}" for status in self.components
         )
+        return "\n".join(lines)
 
 
 def morphology_status(language_dir: str | Path) -> ComponentStatus:

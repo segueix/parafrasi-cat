@@ -7,25 +7,37 @@ seus components interns. Cap adaptador no envia text fora de l'ordinador.
 from parafrasi_cat.adapters.languagetool import (
     DEFAULT_BLOCKING_CATEGORIES,
     DEFAULT_BLOCKING_ISSUE_TYPES,
+    ClassifiedMatch,
     LanguageToolClient,
     LanguageToolInstallation,
     LanguageToolMatch,
     LanguageToolValidator,
+    MatchSeverity,
+    classify,
     find_installation,
     find_java,
     is_blocking,
 )
-from parafrasi_cat.adapters.status import ComponentStatus, LinguisticResources, resources_status
+from parafrasi_cat.adapters.status import (
+    ComponentStatus,
+    LinguisticMode,
+    LinguisticResources,
+    resources_status,
+)
 
 __all__ = [
     "DEFAULT_BLOCKING_CATEGORIES",
     "DEFAULT_BLOCKING_ISSUE_TYPES",
+    "ClassifiedMatch",
+    "ComponentStatus",
     "LanguageToolClient",
     "LanguageToolInstallation",
     "LanguageToolMatch",
     "LanguageToolValidator",
+    "LinguisticMode",
     "LinguisticResources",
-    "ComponentStatus",
+    "MatchSeverity",
+    "classify",
     "find_installation",
     "find_java",
     "is_blocking",

@@ -19,7 +19,7 @@ from parafrasi_cat.pipeline.pipeline import Pipeline
 from parafrasi_cat.pipeline.result import ParaphraseResult
 from parafrasi_cat.protected.spans import ProtectedSpan, ProtectionKind
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 __all__ = [
     "ParaphraseResult",

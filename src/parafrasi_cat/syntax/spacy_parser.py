@@ -15,9 +15,16 @@ Llicència: spaCy MIT; model ``ca_core_news_sm`` GPL-3.0. Vegeu
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
-from parafrasi_cat.syntax.analysis import SentenceSyntax, SyntaxToken, empty
+from parafrasi_cat.morphology.provider import MorphologyProvider
+from parafrasi_cat.syntax.analysis import (
+    SentenceSyntax,
+    SyntaxToken,
+    assess_confidence,
+    empty,
+)
 
 DEFAULT_MODEL = "ca_core_news_sm"
 SOURCE = "spacy"
@@ -28,13 +35,22 @@ DISABLED_COMPONENTS = ("ner",)
 
 _GENDER = {"Masc": "m", "Fem": "f"}
 _NUMBER = {"Sing": "sg", "Plur": "pl"}
+_MOOD = {"Ind": "ind", "Sub": "subj", "Imp": "imp", "Cnd": "cond"}
+_TENSE = {"Pres": "pres", "Past": "past", "Imp": "impf", "Fut": "fut"}
 
 
 class SpacySyntax:
     """Adaptador de spaCy. Carrega el model una sola vegada i el reutilitza."""
 
-    def __init__(self, model: str = DEFAULT_MODEL, *, eager: bool = False) -> None:
+    def __init__(
+        self,
+        model: str = DEFAULT_MODEL,
+        *,
+        eager: bool = False,
+        morphology: MorphologyProvider | None = None,
+    ) -> None:
         self._model_name = model
+        self._morphology = morphology
         self._nlp: Any = None
         self._loaded = False
         self._failure = ""
@@ -100,19 +116,39 @@ class SpacySyntax:
         if nlp is None or not text.strip():
             return empty(text)
         document = nlp(text)
-        tokens = tuple(_convert(token) for token in document if not token.is_space)
-        return SentenceSyntax(text, tokens, confident=bool(tokens), source=SOURCE)
+        return self._analysis(text, document)
 
     def parse_many(self, texts: list[str]) -> list[SentenceSyntax]:
         """Analitza diversos textos aprofitant el processament per lots de spaCy."""
         nlp = self._load()
         if nlp is None:
             return [empty(text) for text in texts]
-        results: list[SentenceSyntax] = []
-        for text, document in zip(texts, nlp.pipe(texts), strict=True):
-            tokens = tuple(_convert(token) for token in document if not token.is_space)
-            results.append(SentenceSyntax(text, tokens, confident=bool(tokens), source=SOURCE))
-        return results
+        return [
+            self._analysis(text, document)
+            for text, document in zip(texts, nlp.pipe(texts), strict=True)
+        ]
+
+    def _analysis(self, text: str, document: Any) -> SentenceSyntax:
+        """Converteix un document de spaCy i n'avalua la fiabilitat."""
+        tokens = tuple(_convert(token) for token in document if not token.is_space)
+        confidence = assess_confidence(tokens, numbers_of=self._numbers_of)
+        return SentenceSyntax(text, tokens, confidence, SOURCE)
+
+    @property
+    def _numbers_of(self) -> Callable[[str], frozenset[str]] | None:
+        """Nombres que el recurs morfològic local admet per a una forma."""
+        morphology = self._morphology
+        if morphology is None:
+            return None
+
+        def numbers(form: str) -> frozenset[str]:
+            return frozenset(
+                entry.features.number
+                for entry in morphology.analyze(form)
+                if entry.features.number is not None
+            )
+
+        return numbers
 
 
 def _convert(token: Any) -> SyntaxToken:
@@ -130,6 +166,8 @@ def _convert(token: Any) -> SyntaxToken:
         gender=_first(morph.get("Gender"), _GENDER),
         number=_first(morph.get("Number"), _NUMBER),
         person=_first(morph.get("Person"), None),
+        mood=_first(morph.get("Mood"), _MOOD),
+        tense=_first(morph.get("Tense"), _TENSE),
     )
 
 

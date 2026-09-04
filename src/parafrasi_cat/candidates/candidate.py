@@ -55,6 +55,30 @@ class Candidate:
             shift += len(transformation.text_after) - transformation.changed_span.length
         return tuple(spans)
 
+    def source_offset(self, offset: int) -> int | None:
+        """Posició equivalent al text original, o ``None`` si cau en un tros canviat.
+
+        Serveix per tornar a projectar sobre l'original una posició trobada al
+        text del candidat (p. ex. el verb que una reparació ha de flexionar).
+        """
+        shift = 0
+        for transformation in self.transformations:
+            start = transformation.changed_span.start + shift
+            end = start + len(transformation.text_after)
+            if offset < start:
+                return offset - shift
+            if offset < end:
+                return None
+            shift += len(transformation.text_after) - transformation.changed_span.length
+        return offset - shift
+
+    def rule_at(self, offset: int) -> str:
+        """Regla que ha escrit el fragment on cau la posició (buit si no n'hi ha cap)."""
+        for transformation, span in zip(self.transformations, self.result_spans(), strict=True):
+            if span.start <= offset < span.end:
+                return transformation.rule_id
+        return ""
+
     @classmethod
     def identity(cls, sentence_index: int, source_text: str) -> Candidate:
         return cls(sentence_index, source_text, source_text, ())
