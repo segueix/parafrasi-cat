@@ -2,6 +2,8 @@
 description: Divisió d'una frase llarga per «, i» / «, però» quan els dos costats tenen verb conjugat.
 language: ca
 rules:
+  # La condició «syntax» és opcional: sense parser instal·lat, la regla es
+  # comporta exactament com abans i només depèn del patró i de les heurístiques.
   - rule_id: divisio.coordinada_i
     engine: pattern
     category: divisio

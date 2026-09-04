@@ -90,6 +90,8 @@ class _UnitResult:
 
     candidates: tuple[EvaluatedCandidate, ...]
     rejected_proposals: tuple[RejectedProposal, ...]
+    notes: tuple[str, ...]
+    """Explicacions del motor sobre el que no ha transformat, i per què."""
 
     @property
     def selected(self) -> EvaluatedCandidate:
@@ -171,6 +173,8 @@ class SentenceResult(_UnitResult):
     candidates: tuple[EvaluatedCandidate, ...]
     rejected_proposals: tuple[RejectedProposal, ...]
     protected_spans: tuple[ProtectedSpan, ...]
+    notes: tuple[str, ...] = ()
+    """Per què el motor no ha transformat (o ha limitat) aquesta frase."""
 
     @property
     def changed(self) -> bool:
@@ -183,6 +187,7 @@ class SentenceResult(_UnitResult):
             "span": self.span.to_dict(),
             "output_text": self.output_text,
             "changed": self.changed,
+            "notes": list(self.notes),
             "transformations": [t.to_dict() for t in self.transformations],
             "alternatives": list(self.alternatives),
             "summary": self.summary(),
@@ -208,6 +213,8 @@ class ParagraphResult(_UnitResult):
     candidates: tuple[EvaluatedCandidate, ...]
     rejected_proposals: tuple[RejectedProposal, ...]
     protected_spans: tuple[ProtectedSpan, ...]
+    notes: tuple[str, ...] = ()
+    """Per què no s'han fusionat frases del paràgraf, quan és rellevant."""
 
     @property
     def changed(self) -> bool:
@@ -221,6 +228,7 @@ class ParagraphResult(_UnitResult):
             "span": self.span.to_dict(),
             "output_text": self.output_text,
             "changed": self.changed,
+            "notes": list(self.notes),
             "transformations": [t.to_dict() for t in self.transformations],
             "alternatives": list(self.alternatives),
             "summary": self.summary(),
@@ -243,6 +251,16 @@ class ParaphraseResult:
     paragraphs: tuple[ParagraphResult, ...] = ()
     dictionary_names: tuple[str, ...] = ()
     preferences_name: str = ""
+    source_mode: str = "own"
+    """Origen del text segons l'usuari: ``own`` o ``llm_draft``."""
+
+    @property
+    def notes(self) -> tuple[str, ...]:
+        """Explicacions del motor sobre el que no ha transformat, sense repeticions."""
+        seen = dict.fromkeys(
+            note for unit in (*self.sentences, *self.paragraphs) for note in unit.notes
+        )
+        return tuple(seen)
 
     @property
     def transformations(self) -> tuple[Transformation, ...]:
@@ -294,17 +312,23 @@ class ParaphraseResult:
             lines.append("")
             lines.append(f"Frase {sentence.index + 1}: «{sentence.source_text}»")
             _explain_unit(lines, sentence.source_text, sentence.output_text, sentence.candidates)
+            lines.extend(f"  ℹ {note}" for note in sentence.notes)
             for rejected in sentence.rejected_proposals:
                 described = rejected.transformation.describe()
                 lines.append(f"  ✘ Proposta descartada {described} — {rejected.reason}")
         for paragraph in self.paragraphs:
-            if len(paragraph.candidates) <= 1 and not paragraph.rejected_proposals:
+            if (
+                len(paragraph.candidates) <= 1
+                and not paragraph.rejected_proposals
+                and not paragraph.notes
+            ):
                 continue
             lines.append("")
             lines.append(f"Paràgraf {paragraph.index + 1} (regles entre frases):")
             _explain_unit(
                 lines, paragraph.intermediate_text, paragraph.output_text, paragraph.candidates
             )
+            lines.extend(f"  ℹ {note}" for note in paragraph.notes)
             for rejected in paragraph.rejected_proposals:
                 described = rejected.transformation.describe()
                 lines.append(f"  ✘ Proposta descartada {described} — {rejected.reason}")
@@ -326,12 +350,14 @@ class ParaphraseResult:
             lines.append("")
             lines.append(f"Frase {sentence.index + 1}: «{sentence.source_text}»")
             _report_unit(lines, sentence, max_discarded)
+            lines.extend(f"  ℹ {note}" for note in sentence.notes)
         for paragraph in self.paragraphs:
-            if not paragraph.changed and len(paragraph.candidates) <= 1:
+            if not paragraph.changed and len(paragraph.candidates) <= 1 and not paragraph.notes:
                 continue
             lines.append("")
             lines.append(f"Paràgraf {paragraph.index + 1} (regles entre frases):")
             _report_unit(lines, paragraph, max_discarded)
+            lines.extend(f"  ℹ {note}" for note in paragraph.notes)
         lines.append("")
         lines.append("Text resultant:")
         lines.append(self.output_text)
@@ -342,6 +368,8 @@ class ParaphraseResult:
             lines.append("Diccionaris actius: " + ", ".join(self.dictionary_names))
         if self.preferences_name:
             lines.append(f"Preferències de l'autor: {self.preferences_name}")
+        if self.source_mode != "own":
+            lines.append("Origen del text: esborrany generat amb LLM (adaptació a l'empremta)")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -353,8 +381,10 @@ class ParaphraseResult:
             "style_profile": self.style_profile_name,
             "dictionaries": list(self.dictionary_names),
             "preferences": self.preferences_name,
+            "source_mode": self.source_mode,
             "transformations": [t.to_dict() for t in self.transformations],
             "protected_spans": [p.to_dict() for p in self.protected_spans],
+            "notes": list(self.notes),
             "sentences": [s.to_dict() for s in self.sentences],
             "paragraphs": [p.to_dict() for p in self.paragraphs],
         }
@@ -393,12 +423,16 @@ def _explain_unit(
 
 
 def _explain_preferences(lines: list[str], selected: EvaluatedCandidate) -> None:
-    """Per què les preferències explícites afavoreixen (o penalitzen) el candidat triat."""
+    """Per què les preferències i l'empremta afavoreixen (o penalitzen) el candidat triat."""
     score = selected.score
-    if score is None or not score.preference_explanation:
+    if score is None:
         return
-    bonus = score.components.get("preferencies", 0.0)
-    lines.append(f"  Preferències de l'autor ({bonus:+.3f}): {score.preference_explanation}")
+    if score.preference_explanation:
+        bonus = score.components.get("preferencies", 0.0)
+        lines.append(f"  Preferències de l'autor ({bonus:+.3f}): {score.preference_explanation}")
+    if score.author_explanation:
+        bonus = score.components.get("afinitat_autor", 0.0)
+        lines.append(f"  Afinitat amb l'estil ({bonus:+.3f}): {score.author_explanation}")
 
 
 def _report_unit(lines: list[str], unit: _UnitResult, max_discarded: int) -> None:

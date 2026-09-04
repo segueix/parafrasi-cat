@@ -171,6 +171,30 @@ def test_options_list_every_selector(service: RewriteService) -> None:
     assert options["version"] and options["rule_set"] == "parafrasi"
 
 
+def test_options_report_the_linguistic_mode_and_its_installers(service: RewriteService) -> None:
+    """La interfície ha de poder dir en quin mode treballa i què li falta."""
+    options = service.options()
+    mode = options["resources"]["mode"]
+    assert mode["id"] in ("complet", "basic")
+    assert mode["full"] is (mode["id"] == "complet")
+    assert mode["label"].startswith("Mode lingüístic complet" if mode["full"] else "Mode bàsic")
+    installers = options["installers"]
+    assert {"morphology", "parser", "languagetool"} <= set(installers)
+    for component in mode["installable"]:
+        info = installers[component]
+        assert info["origin"] and info["license"] and info["approximate_size_mb"]
+        assert info["offline_after_install"] is True
+
+
+def test_nothing_is_downloaded_without_an_explicit_confirmation(
+    service: RewriteService,
+) -> None:
+    response = service.install_component("morphology", confirmed=False)
+    assert response["started"] is False
+    assert "confirmar" in response["message"]
+    assert response["origin"].startswith("https://github.com/Softcatala/")
+
+
 def test_rewrite_exposes_everything_the_interface_shows(service: RewriteService) -> None:
     result = service.rewrite(
         RewriteRequest(TEXT, mode=RewriteMode.DEEP, level=3, dictionaries=("historia",))
@@ -339,8 +363,12 @@ def test_history_reports_a_corrupt_file(tmp_path: Path) -> None:
 
 
 def test_service_history_round_trip(temporary_project: ProjectPaths, tmp_path: Path) -> None:
-    log = HistoryLog(tmp_path / "registre.jsonl")
+    file = tmp_path / "registre.jsonl"
+    log = HistoryLog(file)
     service = RewriteService(temporary_project, history=log)
+    # Un registre buit té longitud 0: el servei l'ha de conservar igualment.
+    assert service.history is log
+    assert service.options()["history"]["path"] == str(file)
     assert service.save_history({"source_text": "text"})["saved"] is False
     assert service.set_history_enabled(True)["enabled"] is True
     saved = service.save_history(
@@ -353,6 +381,8 @@ def test_service_history_round_trip(temporary_project: ProjectPaths, tmp_path: P
         }
     )
     assert saved["saved"] is True and saved["entry_id"]
+    assert file.is_file(), "el registre s'ha d'escriure al fitxer indicat"
+    assert not (temporary_project.root / "history").exists()
     listed = service.history_entries()
     assert listed["n_entries"] == 1
     assert listed["entries"][0]["mode"] == "profund"
@@ -366,8 +396,13 @@ def test_service_history_round_trip(temporary_project: ProjectPaths, tmp_path: P
 
 
 @pytest.fixture
-def server_url(temporary_project: ProjectPaths, tmp_path: Path) -> Iterator[str]:
-    service = RewriteService(temporary_project, history=HistoryLog(tmp_path / "registre.jsonl"))
+def history_file(tmp_path: Path) -> Path:
+    return tmp_path / "registre.jsonl"
+
+
+@pytest.fixture
+def server_url(temporary_project: ProjectPaths, history_file: Path) -> Iterator[str]:
+    service = RewriteService(temporary_project, history=HistoryLog(history_file))
     server = build_server(service, host="127.0.0.1", port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -429,7 +464,7 @@ def test_server_api(server_url: str) -> None:
     assert fetch(f"{server_url}/api/desconegut", {})[0] == HTTPStatus.NOT_FOUND
 
 
-def test_server_feedback_and_history(server_url: str) -> None:
+def test_server_feedback_and_history(server_url: str, history_file: Path) -> None:
     changed = TEXT.replace("fet per", "obra de")
     status, response = fetch(
         f"{server_url}/api/feedback",
@@ -441,8 +476,10 @@ def test_server_feedback_and_history(server_url: str) -> None:
 
     assert fetch(f"{server_url}/api/history")[1]["enabled"] is False
     assert fetch(f"{server_url}/api/history", {"source_text": TEXT})[1]["saved"] is False
+    assert not history_file.exists(), "amb el registre desactivat no s'ha d'escriure res"
     assert fetch(f"{server_url}/api/history/enabled", {"enabled": True})[1]["enabled"] is True
     assert fetch(f"{server_url}/api/history", {"source_text": TEXT})[1]["saved"] is True
+    assert history_file.is_file(), "el registre s'ha d'escriure al fitxer indicat"
     status, listed = fetch(f"{server_url}/api/history")
     assert listed["n_entries"] == 1
     status, exported = fetch(f"{server_url}/api/history/export")

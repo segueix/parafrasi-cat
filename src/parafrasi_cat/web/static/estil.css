@@ -95,6 +95,24 @@ legend { padding: 0 0.35rem; font-weight: 600; font-size: 0.85rem; }
 .linia { margin-top: 0.9rem; display: flex; gap: 0.4rem; align-items: baseline; }
 
 .ajuda { margin: 0.35rem 0 0; color: var(--suau); font-size: 0.82rem; }
+.ajuda.avis { color: var(--avis); }
+.afinitat { margin: 0.2rem 0 0; }
+.empremta-resum { margin: 0.6rem 0 0; padding: 0.6rem; border: 1px solid var(--vora, #ccc); border-radius: 5px; font-size: 0.82rem; }
+.empremta-resum h3 { margin: 0 0 0.4rem; font-size: 0.9rem; }
+.transicions { list-style: none; margin: 0.3rem 0; padding: 0; columns: 2; }
+.transicions li { margin: 0.1rem 0; }
+.detalls { max-height: 18rem; overflow: auto; font-size: 0.72rem; white-space: pre-wrap; }
+
+.mode { margin: 0 0 0.6rem; padding: 0.5rem 0.6rem; border-radius: 5px; font-size: 0.82rem; }
+.mode.complet { border: 1px solid var(--afegit); }
+.mode.basic { border: 1px solid var(--avis); }
+
+.recursos { list-style: none; margin: 0 0 0.5rem; padding: 0; font-size: 0.82rem; }
+.recursos li { margin: 0.25rem 0; }
+.recursos .estat-recurs { font-weight: 600; }
+.recursos li.actiu .estat-recurs { color: var(--afegit); }
+.recursos li.inactiu .estat-recurs { color: var(--avis); }
+.confirmacio { margin-top: 0.6rem; padding: 0.6rem; border: 1px solid var(--avis); border-radius: 5px; }
 .estat { margin: 0.6rem 0 0; font-size: 0.85rem; min-height: 1.2em; }
 .estat.error { color: var(--suprimit); }
 

@@ -7,12 +7,12 @@ test:
 	python -m pytest
 
 lint:
-	ruff check src tests examples
-	ruff format --check src tests examples
+	ruff check src tests examples scripts
+	ruff format --check src tests examples scripts
 
 format:
-	ruff format src tests examples
-	ruff check --fix src tests examples
+	ruff format src tests examples scripts
+	ruff check --fix src tests examples scripts
 
 typecheck:
 	python -m mypy

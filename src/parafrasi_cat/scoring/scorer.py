@@ -14,13 +14,16 @@ Cada candidat rep una puntuació separada per dimensió:
   del projecte, fitxer de preferències de l'autor, feedback manual): 1 si només
   introdueix formes preferides, 0 si n'introdueix d'evitades, ``None`` si cap
   preferència no hi intervé;
+- ``afinitat_autor``: afinitat amb l'empremta de l'autor, només quan el text és
+  un esborrany generat amb LLM (``None`` altrament);
 - ``grau_de_canvi``: proporció de caràcters canviats (0 = idèntic).
 
 Una puntuació global (``total``) combina el guany per transformacions amb
-les penalitzacions d'estil i gramaticalitat i amb el bonus (o la penalització)
-de les preferències explícites, però qualsevol error de
-preservació (factual, epistemològica, terminològica) o qualsevol error de
-validació **invalida** el candidat: ``valid`` és fals i ``total`` és −1.
+les penalitzacions d'estil i gramaticalitat, amb el bonus (o la penalització)
+de les preferències explícites i, en mode d'esborrany, amb l'afinitat autoral
+relativa a l'original; però qualsevol error de preservació (factual,
+epistemològica, terminològica) o qualsevol error de validació **invalida** el
+candidat: ``valid`` és fals i ``total`` és −1, i cap estil no ho compensa.
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ from typing import Protocol, runtime_checkable
 from parafrasi_cat.candidates.candidate import Candidate
 from parafrasi_cat.preferences.evaluator import PreferenceEvaluator
 from parafrasi_cat.scoring.weights import ScoringWeights
+from parafrasi_cat.style.adaptation import AdaptationContext, AuthorAdaptation
 from parafrasi_cat.style.evaluator import StyleEvaluator
 from parafrasi_cat.validation.grammar import WARNING_PENALTY
 from parafrasi_cat.validation.result import ValidationDimension, ValidationResult
@@ -42,6 +46,7 @@ DIMENSIONS: tuple[str, ...] = (
     "gramaticalitat",
     "semblanca_estil",
     "preferencies_autor",
+    "afinitat_autor",
     "grau_de_canvi",
 )
 
@@ -54,16 +59,23 @@ _DIMENSION_LABELS = {
     "gramaticalitat": "gramaticalitat",
     "semblanca_estil": "semblança amb l'estil",
     "preferencies_autor": "preferències de l'autor",
+    "afinitat_autor": "afinitat amb l'estil de l'autor",
     "grau_de_canvi": "grau de canvi",
 }
 
 
 @dataclass(frozen=True, slots=True)
 class ScoringContext:
-    """Resultat de la validació i text original, per puntuar per dimensions."""
+    """Resultat de la validació i text original, per puntuar per dimensions.
+
+    ``document`` és la resta del document, en ordre (abans i després de la
+    unitat que es puntua), perquè l'afinitat autoral mesuri el ritme i les
+    densitats sobre tot el text i no sobre una frase sola.
+    """
 
     validation: ValidationResult | None = None
     source_text: str = ""
+    document: AdaptationContext | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +91,10 @@ class ScoreBreakdown:
         invalidating: Motius que invaliden el candidat.
         preference_explanation: Per què les preferències explícites afavoreixen o
             penalitzen el candidat (buit si no hi intervenen).
+        author_explanation: Per què el candidat s'assembla més (o menys) a l'autor
+            que l'original (buit fora del mode d'esborrany).
+        author_affinity: Afinitat amb l'empremta, per components (buit fora del
+            mode d'esborrany).
     """
 
     total: float
@@ -88,6 +104,8 @@ class ScoreBreakdown:
     valid: bool = True
     invalidating: tuple[str, ...] = ()
     preference_explanation: str = ""
+    author_explanation: str = ""
+    author_affinity: dict[str, object] = field(default_factory=dict)
 
     def dimension(self, name: str) -> float | None:
         return self.dimensions.get(name)
@@ -110,6 +128,8 @@ class ScoreBreakdown:
             "invalidating": list(self.invalidating),
             "explanation": self.explanation,
             "preference_explanation": self.preference_explanation,
+            "author_explanation": self.author_explanation,
+            "author_affinity": dict(self.author_affinity),
         }
 
 
@@ -128,7 +148,9 @@ class CompositeScorer:
     preservació es dedueixen de la validació i poden invalidar el candidat.
     Amb un :class:`PreferenceEvaluator`, les preferències explícites de
     l'autor (diccionaris, fitxer de preferències, feedback) afegeixen un bonus
-    o una penalització explicats.
+    o una penalització explicats. Amb una :class:`AuthorAdaptation` (només en
+    mode d'esborrany generat amb LLM), l'afinitat amb l'empremta de l'autor,
+    relativa a l'original, també hi suma o hi resta.
     """
 
     def __init__(
@@ -136,10 +158,12 @@ class CompositeScorer:
         weights: ScoringWeights | None = None,
         style_evaluator: StyleEvaluator | None = None,
         preference_evaluator: PreferenceEvaluator | None = None,
+        adaptation: AuthorAdaptation | None = None,
     ) -> None:
         self._weights = weights or ScoringWeights()
         self._style = style_evaluator
         self._preferences = preference_evaluator
+        self._adaptation = adaptation
 
     @property
     def weights(self) -> ScoringWeights:
@@ -152,6 +176,11 @@ class CompositeScorer:
     @property
     def preference_evaluator(self) -> PreferenceEvaluator | None:
         return self._preferences
+
+    @property
+    def adaptation(self) -> AuthorAdaptation | None:
+        """Adaptació autoral activa (només en mode d'esborrany generat amb LLM)."""
+        return self._adaptation
 
     def score(self, candidate: Candidate, ctx: ScoringContext | None = None) -> ScoreBreakdown:
         w = self._weights
@@ -209,11 +238,32 @@ class CompositeScorer:
                 )
                 dimensions["preferencies_autor"] = round((assessment.score + 1.0) / 2.0, 4)
 
+        affinity_bonus = 0.0
+        author_explanation = ""
+        author_affinity: dict[str, object] = {}
+        if self._adaptation is not None:
+            document = ctx.document if ctx is not None else None
+            source = candidate.source_text
+            affinity = self._adaptation.assess(candidate.text, context=document, source_text=source)
+            baseline = self._adaptation.assess(source, context=document, source_text=source)
+            if affinity.available and baseline.available:
+                # Bonus o penalització relatius a l'original: l'identitat val zero, i
+                # un candidat només hi guanya si s'acosta més a l'autor que el text
+                # que substitueix.
+                affinity_bonus = w.author_affinity * (affinity.score - baseline.score)
+                author_explanation = self._adaptation.explain(affinity, baseline)
+                author_affinity = {**affinity.to_dict(), "baseline": baseline.score}
+                components["afinitat_autor"] = round(affinity_bonus, 4)
+                parts.append(f"afinitat amb l'autor {affinity_bonus:+.3f} ({author_explanation})")
+                dimensions["afinitat_autor"] = affinity.score
+
         dimensions["grau_de_canvi"] = round(candidate.change_ratio(), 4)
 
         valid = not invalidating
         total = (
-            gain - style_penalty - grammar_penalty + preference_bonus if valid else INVALID_TOTAL
+            gain - style_penalty - grammar_penalty + preference_bonus + affinity_bonus
+            if valid
+            else INVALID_TOTAL
         )
         if not valid:
             parts.append("candidat invalidat: " + "; ".join(invalidating))
@@ -225,6 +275,8 @@ class CompositeScorer:
             valid=valid,
             invalidating=tuple(invalidating),
             preference_explanation=preference_explanation,
+            author_explanation=author_explanation,
+            author_affinity=author_affinity,
         )
 
 
@@ -233,7 +285,12 @@ def _binary(validation: ValidationResult, dimension: ValidationDimension) -> flo
 
 
 def _grammar_score(validation: ValidationResult) -> float:
+    """Gramaticalitat: 0 si hi ha errors, i si no, 1 menys el pes dels avisos.
+
+    Els avisos pesen: un error nou probable (una penalització forta) baixa la
+    puntuació molt més que una qüestió d'estil.
+    """
     if validation.errors_in(ValidationDimension.GRAMMAR):
         return 0.0
-    warnings = len(validation.warnings_in(ValidationDimension.GRAMMAR))
-    return round(max(0.0, 1.0 - WARNING_PENALTY * warnings), 4)
+    weight = sum(i.weight for i in validation.warnings_in(ValidationDimension.GRAMMAR))
+    return round(max(0.0, 1.0 - WARNING_PENALTY * weight), 4)

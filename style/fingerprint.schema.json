@@ -20,7 +20,8 @@
         "version": {"type": "string"},
         "method": {"type": "string"},
         "deterministic": {"type": "boolean"},
-        "uses_models": {"type": "boolean", "const": false},
+        "uses_models": {"type": "boolean", "description": "Cert només si el parser local ha analitzat les frases; cap model no genera res."},
+        "parser": {"type": "string", "description": "Parser sintàctic local utilitzat per analitzar (buit si cap)."},
         "corpus_hash": {"type": "string", "description": "Prefix del SHA-256 dels resums de tots els documents."}
       }
     },
@@ -177,7 +178,9 @@
             "function_words_per_100_words": {"$ref": "#/$defs/stat"}
           }
         },
-        "variant_preferences": {"type": "object", "additionalProperties": {"$ref": "#/$defs/variant_group"}}
+        "variant_preferences": {"type": "object", "additionalProperties": {"$ref": "#/$defs/variant_group"}},
+        "rhythm_profile": {"type": "object", "description": "Ritme de frases (esquema 1.1): longitud, franges, transicions, trigrames, ratxes, alternança i paràgrafs. Només nombres."},
+        "syntactic_profile": {"type": "object", "description": "Perfil sintàctic (esquema 1.1) calculat amb el parser local, o {available: false, reason} si no hi era.", "required": ["available"], "properties": {"available": {"type": "boolean"}}}
       }
     },
     "validation": {

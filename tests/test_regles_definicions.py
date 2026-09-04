@@ -26,9 +26,12 @@ def rule_set(paths: ProjectPaths) -> RuleSet:
 def test_rule_set_covers_all_families(rule_set: RuleSet) -> None:
     assert 25 <= len(rule_set.rules) <= 45
     assert {d.category for d in rule_set.definitions} == REQUIRED_CATEGORIES
-    assert {d.level for d in rule_set.definitions} == {1, 2, 3, 4}
+    assert {d.level for d in rule_set.definitions} == {1, 2, 3, 4, 5}
     assert len(rule_set.paragraph_rules) == 1
     assert len(rule_set.sentence_rules) == len(rule_set.rules) - 1
+    # El nivell 5 és la reestructuració de paràgraf: és l'únic que hi arriba.
+    assert {d.rule_id for d in rule_set.definitions if d.level == 5} == {"fusio.frases_compatibles"}
+    assert {r.level for r in rule_set.paragraph_rules} == {5}
 
 
 def test_every_rule_has_complete_metadata(rule_set: RuleSet) -> None:

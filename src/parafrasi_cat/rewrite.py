@@ -25,7 +25,7 @@ from pathlib import Path
 from parafrasi_cat.core.errors import ParafrasiError
 from parafrasi_cat.core.transformation import SemanticRisk
 from parafrasi_cat.pipeline.builder import build_pipeline
-from parafrasi_cat.pipeline.config import PipelineConfig
+from parafrasi_cat.pipeline.config import PipelineConfig, SourceMode
 from parafrasi_cat.pipeline.result import ParaphraseResult
 
 EXIT_OK = 0
@@ -50,6 +50,8 @@ class RewriteOptions:
     preferences: str | None = None
     home: Path | None = None
     config: Path | None = None
+    source_mode: SourceMode | None = None
+    """Origen del text; ``None`` deixa el de la configuració (per defecte, text propi)."""
 
     def to_config(self) -> PipelineConfig:
         config = PipelineConfig.load(self.config) if self.config else PipelineConfig()
@@ -79,6 +81,8 @@ class RewriteOptions:
             overrides["dictionaries"] = (*config.dictionaries, *self.dictionaries)
         if self.preferences:
             overrides["preferences"] = self.preferences
+        if self.source_mode is not None:
+            overrides["source_mode"] = self.source_mode
         return config.with_overrides(**overrides)
 
 
@@ -171,6 +175,14 @@ def build_rewrite_parser() -> argparse.ArgumentParser:
         help="preferències explícites de l'autor (nom dins de preferences/ o ruta)",
     )
     parser.add_argument(
+        "--source-mode",
+        choices=[m.value for m in SourceMode],
+        help=(
+            "origen del text: «own» (propi, per defecte) o «llm_draft» (esborrany generat "
+            "amb LLM, que s'adapta a l'empremta indicada amb --style)"
+        ),
+    )
+    parser.add_argument(
         "-d",
         "--discarded",
         type=int,
@@ -208,6 +220,7 @@ def rewrite_main(argv: Sequence[str] | None = None) -> int:
         preferences=args.preferences,
         home=args.home,
         config=args.config,
+        source_mode=SourceMode.parse(args.source_mode) if args.source_mode else None,
     )
     try:
         text = sys.stdin.read() if args.input == "-" else Path(args.input).read_text("utf-8")

@@ -19,6 +19,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 from parafrasi_cat.core.errors import ParafrasiError
 from parafrasi_cat.web.service import FeedbackRequest, RewriteRequest, RewriteService
@@ -140,6 +141,15 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._send_json(self._service.options())
         elif path == "/api/feedback":
             self._send_json(self._service.feedback_summary())
+        elif path == "/api/resources":
+            self._send_json(self._service.resources())
+        elif path == "/api/fingerprint/summary":
+            query = parse_qs(urlsplit(self.path).query)
+            reference = (query.get("id") or [""])[0]
+            if not reference:
+                self._send_error_json("Cal indicar l'empremta («id»)", HTTPStatus.BAD_REQUEST)
+                return
+            self._send_json(self._service.fingerprint_summary(reference))
         elif path == "/api/history":
             self._send_json(self._service.history_entries())
         elif path == "/api/history/export":
@@ -167,6 +177,21 @@ class RequestHandler(BaseHTTPRequestHandler):
         elif path == "/api/history/enabled":
             enabled = bool(self._read_json().get("enabled", False))
             self._send_json(self._service.set_history_enabled(enabled))
+        elif path == "/api/resources/install":
+            data = self._read_json()
+            component = str(data.get("component", "languagetool"))
+            confirmed = bool(data.get("confirm", False))
+            self._send_json(self._service.install_component(component, confirmed))
+        elif path == "/api/fingerprint":
+            data = self._read_json()
+            texts = data.get("texts")
+            self._send_json(
+                self._service.create_fingerprint(
+                    str(data.get("name", "autor")),
+                    [str(t) for t in texts] if isinstance(texts, list) else [],
+                    source_mode=str(data.get("source_mode") or "own"),
+                )
+            )
         else:
             self._send_error_json(f"Ruta desconeguda: {path}", HTTPStatus.NOT_FOUND)
 

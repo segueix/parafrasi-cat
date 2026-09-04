@@ -42,16 +42,19 @@ class ValidationIssue:
     severity: ValidationSeverity
     message: str
     dimension: ValidationDimension = ValidationDimension.OTHER
+    weight: float = 1.0
+    """Quant pesa l'avís en la puntuació: 1 és un avís normal, més és més greu."""
 
     def describe(self) -> str:
         return f"[{self.validator_id}] {self.severity.value}: {self.message}"
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, str | float]:
         return {
             "validator_id": self.validator_id,
             "severity": self.severity.value,
             "message": self.message,
             "dimension": self.dimension.value,
+            "weight": self.weight,
         }
 
 

@@ -5,6 +5,16 @@ senyal declarat a les dades (connector, conjunció «però», anàfora
 demostrativa) o quan totes dues són molt curtes. La transformació substitueix
 el punt, l'espai i la primera paraula de la segona frase; el contingut de les
 dues frases queda intacte.
+
+Reestructurar en profunditat no vol dir escriure més llarg. Abans de fusionar
+res es calcula la longitud de la frase resultant i es compara amb el que
+l'autor acostuma a escriure: el seu màxim explícit, la distribució de la seva
+empremta o la longitud que ha declarat preferir. Si la fusió se'n va, no es
+proposa, i el motiu queda apuntat al resultat. Amb un autor de frase curta, la
+reestructuració del nivell 5 recau en la divisió i la reordenació.
+
+Quan hi ha parser instal·lat, tampoc no es fusiona res si l'anàlisi d'alguna
+de les dues frases no és fiable: un fragment no s'ha de tocar.
 """
 
 from __future__ import annotations
@@ -94,6 +104,16 @@ class SentenceFusionRule(ParagraphRule):
                     continue
                 if words_first + words_second > strategy.max_words:
                     continue
+                # Aquestes dues comprovacions no depenen de l'estratègia: si una
+                # volia fusionar i no pot, cap altra no ho arreglarà.
+                if not ctx.length_allows(words_first + words_second, _describe(first, second)):
+                    break
+                if not ctx.syntax_confident(first, second):
+                    ctx.note(
+                        f"no s'han fusionat {_describe(first, second)}: l'analitzador sintàctic "
+                        "no es refia de l'estructura d'alguna de les dues"
+                    )
+                    break
                 period = first.span.end - 1
                 span = Span(period, second.span.start + first_token.span.end)
                 before = span.slice(ctx.text)
@@ -134,6 +154,15 @@ class SentenceFusionRule(ParagraphRule):
         if ctx.lexicon is not None and ctx.lexicon.has(low):
             return True
         return self._hints.for_lexicon(ctx.lexicon).is_finite_verb(token)
+
+
+def _describe(first: Sentence, second: Sentence) -> str:
+    """Les dues frases, retallades, per als missatges del resultat."""
+    return f"«{_shorten(first.text)}» i «{_shorten(second.text)}»"
+
+
+def _shorten(text: str, limit: int = 40) -> str:
+    return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 def _fusable(first: Sentence, second: Sentence, text: str) -> bool:

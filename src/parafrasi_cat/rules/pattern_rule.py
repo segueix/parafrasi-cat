@@ -23,6 +23,7 @@ from parafrasi_cat.rules.patterns import (
     phrase_in,
     render_template,
 )
+from parafrasi_cat.syntax.analysis import empty
 
 _LEADING_PUNCT = ",;.:)»”"
 
@@ -76,10 +77,18 @@ class PatternRule(Rule):
         tokens = tuple(t for t in ctx.sentence.tokens if t.kind is not TokenKind.SPACE)
         if not tokens:
             return
-        state = MatchState(
-            ctx.text, tokens, ctx.protected_spans, self._hints.for_lexicon(ctx.lexicon)
-        )
         definition = self._definition
+        # L'anàlisi sintàctica només es demana si la regla la declara: la resta
+        # de regles no paguen el cost del parser ni en canvien el comportament.
+        syntax = ctx.parse() if definition.conditions.get("syntax") else empty(ctx.text)
+        state = MatchState(
+            ctx.text,
+            tokens,
+            ctx.protected_spans,
+            self._hints.for_lexicon(ctx.lexicon),
+            ctx.morphology,
+            syntax,
+        )
 
         def accept(match: Match) -> bool:
             return check_conditions(definition.conditions, definition.exceptions, match, state)
@@ -310,7 +319,42 @@ def check_conditions(
             return False
     if not _context_ok(as_mapping(conditions, "context"), match, state):
         return False
+    if not _syntax_ok(as_mapping(conditions, "syntax"), match, state):
+        return False
     return _sentence_ok(as_mapping(conditions, "sentence"), match, state)
+
+
+def _syntax_ok(spec: Mapping[str, object], match: Match, state: MatchState) -> bool:
+    """Condicions que consulten l'analitzador sintàctic.
+
+    Són **opt-in**: una regla que no declari un bloc ``syntax`` no les avalua
+    mai i es comporta exactament com abans. Si el parser no està instal·lat i
+    la regla n'exigeix un, la regla no s'aplica: davant del dubte, no es
+    transforma.
+    """
+    if not spec:
+        return True
+    syntax = state.syntax
+    if not syntax.confident:
+        # Sense parser fiable, només passen les regles que no l'exigeixen.
+        return spec.get("requires_parser") is not True
+    span = match.span(state)
+    if spec.get("no_clause_boundary") is True and syntax.crosses_clause_boundary(
+        span.start, span.end
+    ):
+        return False
+    wanted_number = spec.get("subject_number")
+    if isinstance(wanted_number, str) and syntax.subject_number() != wanted_number:
+        return False
+    if spec.get("requires_subject") is True and syntax.main_subject() is None:
+        return False
+    max_clauses = spec.get("max_clauses")
+    if isinstance(max_clauses, int) and len(syntax.clauses) > max_clauses:
+        return False
+    max_coordinations = spec.get("max_coordinations")
+    if isinstance(max_coordinations, int) and len(syntax.coordinations) > max_coordinations:
+        return False
+    return not (spec.get("no_negation") is True and syntax.negations)
 
 
 def _phrase_regex(phrase: str) -> str:

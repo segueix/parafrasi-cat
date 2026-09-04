@@ -11,6 +11,8 @@ pels components de la fase 6 i de ``web.history``.
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -19,11 +21,12 @@ from pathlib import Path
 from typing import Any
 
 from parafrasi_cat import __version__
+from parafrasi_cat.adapters.status import resources_status
 from parafrasi_cat.analyzer.analysis import RuleBasedAnalyzer
 from parafrasi_cat.core.errors import ConfigError, ParafrasiError
 from parafrasi_cat.dictionaries.dictionary import TermDictionary
 from parafrasi_cat.pipeline.builder import build_pipeline
-from parafrasi_cat.pipeline.config import PipelineConfig
+from parafrasi_cat.pipeline.config import FINGERPRINT_REQUIRED, PipelineConfig, SourceMode
 from parafrasi_cat.pipeline.modes import (
     LEVEL_LABELS,
     MODES,
@@ -37,13 +40,30 @@ from parafrasi_cat.preferences.author import AuthorPreferences
 from parafrasi_cat.preferences.feedback import DEFAULT_FEEDBACK_FILE, VERDICTS, FeedbackStore
 from parafrasi_cat.protected.spans import ProtectedSpan
 from parafrasi_cat.resources import ProjectPaths, load_mapping
+from parafrasi_cat.style.corpus import corpus_from_texts
 from parafrasi_cat.style.fingerprint import StyleFingerprint
 from parafrasi_cat.style.observations import DocumentObserver, StyleResources
+from parafrasi_cat.style.preferences import StylePreferences
+from parafrasi_cat.style.profiler import build_fingerprint
+from parafrasi_cat.syntax.spacy_parser import SpacySyntax
 from parafrasi_cat.web.history import DEFAULT_HISTORY_FILE, HistoryLog
 
 DEFAULT_RULE_SET = "parafrasi"
+#: Components opcionals que la interfície pot instal·lar, amb el seu script.
+#: Els scripts són fora del paquet: són l'única part que accedeix a Internet.
+INSTALLERS: dict[str, str] = {
+    "morphology": "scripts/install_morphology.py",
+    "languagetool": "scripts/install_languagetool.py",
+    "parser": "scripts/install_parser.py",
+}
 DEFAULT_STYLE_PROFILE = "default"
 MAX_TEXT_CHARS = 20000
+
+#: Missatge quan algú intenta posar un esborrany generat amb LLM al corpus de l'autor.
+LLM_DRAFT_NOT_CORPUS = (
+    "Un esborrany generat amb LLM no pot formar part del corpus de l'autor: l'empremta "
+    "només es construeix amb textos propis."
+)
 
 JsonDict = dict[str, Any]
 """Càrrega JSON que la interfície rep tal qual: les claus són dinàmiques."""
@@ -107,12 +127,16 @@ class RewriteRequest:
     dictionaries: tuple[str, ...] = ()
     preferences: str = ""
     rule_set: str = DEFAULT_RULE_SET
+    languagetool: bool = False
+    source_mode: SourceMode = SourceMode.OWN
+    """Origen del text segons l'usuari. Per defecte, text propi: res no canvia."""
 
     def __post_init__(self) -> None:
         if not self.text.strip():
             raise ConfigError("Cal un text per reescriure")
         if len(self.text) > MAX_TEXT_CHARS:
             raise ConfigError(f"El text supera els {MAX_TEXT_CHARS} caràcters")
+        object.__setattr__(self, "source_mode", SourceMode.parse(self.source_mode))
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, object]) -> RewriteRequest:
@@ -135,6 +159,8 @@ class RewriteRequest:
             dictionaries=_as_names(data.get("dictionaries")),
             preferences=str(data.get("preferences") or ""),
             rule_set=str(data.get("rule_set") or DEFAULT_RULE_SET),
+            languagetool=bool(data.get("languagetool", False)),
+            source_mode=SourceMode.parse(str(data.get("source_mode") or SourceMode.OWN.value)),
         )
 
     def to_config(self, home: Path | None = None) -> PipelineConfig:
@@ -145,6 +171,8 @@ class RewriteRequest:
             style_profile=self.style_profile,
             dictionaries=self.dictionaries,
             preferences=self.preferences or None,
+            languagetool=self.languagetool,
+            source_mode=self.source_mode,
         )
         return mode_settings(self.mode).apply(base, self.level)
 
@@ -158,12 +186,15 @@ class FeedbackRequest:
     text: str = ""
     source_text: str = ""
     preferences: str = ""
+    source_mode: SourceMode = SourceMode.OWN
+    """D'on venia el text valorat, per distingir-ho a l'historial local de feedback."""
 
     def __post_init__(self) -> None:
         if self.verdict not in VERDICTS:
             raise ConfigError(
                 f"Veredicte desconegut: «{self.verdict}» (vàlids: {', '.join(VERDICTS)})"
             )
+        object.__setattr__(self, "source_mode", SourceMode.parse(self.source_mode))
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, object]) -> FeedbackRequest:
@@ -173,6 +204,7 @@ class FeedbackRequest:
             text=str(data.get("text") or ""),
             source_text=str(data.get("source_text") or ""),
             preferences=str(data.get("preferences") or ""),
+            source_mode=SourceMode.parse(str(data.get("source_mode") or SourceMode.OWN.value)),
         )
 
 
@@ -206,10 +238,14 @@ class RewriteService:
     ) -> None:
         self._paths = paths or ProjectPaths.discover()
         self._rule_set = rule_set
-        self._history = history or HistoryLog(self._paths.root / DEFAULT_HISTORY_FILE)
+        # Comparació amb None, no «or»: un registre buit té longitud 0 i seria fals.
+        self._history = (
+            HistoryLog(self._paths.root / DEFAULT_HISTORY_FILE) if history is None else history
+        )
         self._pipelines: dict[PipelineConfig, Pipeline] = {}
         self._observer: DocumentObserver | None = None
         self._analyzer: RuleBasedAnalyzer | None = None
+        self._syntax: SpacySyntax | None = None
 
     @property
     def paths(self) -> ProjectPaths:
@@ -233,7 +269,33 @@ class RewriteService:
             "dictionaries": self.dictionaries(),
             "preferences": self.preferences(),
             "history": self._history.status(),
+            "resources": self.resources(),
+            "installers": self.installers(),
+            "fingerprints_directory": str(self._paths.fingerprints),
+            "source_modes": self.source_modes(),
+            "fingerprint_required": FINGERPRINT_REQUIRED,
         }
+
+    def source_modes(self) -> list[JsonDict]:
+        """Orígens del text que l'usuari pot indicar. El motor no els endevina mai."""
+        return [
+            {
+                "id": mode.value,
+                "label": mode.label,
+                "description": mode.description,
+                "requires_fingerprint": mode.adapts_to_author,
+                "default": mode is SourceMode.OWN,
+            }
+            for mode in SourceMode
+        ]
+
+    def resources(self) -> JsonDict:
+        """Estat dels recursos lingüístics opcionals i del mode fora de línia."""
+        return resources_status(self._paths.root).to_dict()
+
+    def installers(self) -> JsonDict:
+        """Informació de cada component instal·lable, per ensenyar-la abans de baixar res."""
+        return {name: install_info(name) for name in INSTALLERS}
 
     def style_profiles(self) -> list[JsonDict]:
         """Perfils d'estil (``resources/style/*.yaml``) i empremtes (``style/*.json``)."""
@@ -319,11 +381,22 @@ class RewriteService:
         """Executa la canonada i retorna tot el que la interfície ha de mostrar."""
         settings = mode_settings(request.mode)
         config = request.to_config(self._paths.root)
-        result = self.pipeline_for(config).run(request.text)
+        pipeline = self.pipeline_for(config)
+        result = pipeline.run(request.text)
         effective = settings.level_for(request.level)
         requested = settings.max_level if request.level is None else request.level
+        adaptation = pipeline.adaptation
         return {
             "source_text": result.source_text,
+            "source_mode": {
+                "id": request.source_mode.value,
+                "label": request.source_mode.label,
+                "description": request.source_mode.description,
+            },
+            "author_adaptation": adaptation.describe() if adaptation is not None else "",
+            "author_adaptation_components": (
+                list(adaptation.active_components()) if adaptation is not None else []
+            ),
             "output_text": result.output_text,
             "changed": result.changed,
             "rule_set": result.rule_set_name,
@@ -334,6 +407,7 @@ class RewriteService:
             "preferences": result.preferences_name,
             "preferences_id": request.preferences,
             "mode": settings.to_dict(),
+            "languagetool": self._languagetool_used(config),
             "level": effective,
             "requested_level": requested,
             "level_capped": effective < requested,
@@ -343,6 +417,12 @@ class RewriteService:
             "protected_spans": [_protected(span) for span in result.protected_spans],
             "units": self._units(result),
         }
+
+    def _languagetool_used(self, config: PipelineConfig) -> bool:
+        """Cert si la validació de LanguageTool ha intervingut realment."""
+        if not config.languagetool:
+            return False
+        return any(v.validator_id == "languagetool" for v in self.pipeline_for(config).validators)
 
     def _units(self, result: ParaphraseResult) -> list[JsonDict]:
         units: list[dict[str, object]] = []
@@ -428,6 +508,12 @@ class RewriteService:
             self._observer = DocumentObserver(StyleResources.load(self._paths))  # variants.yaml
         return self._observer
 
+    def _syntax_provider(self) -> SpacySyntax:
+        """Parser local per al perfil sintàctic de l'empremta (només analitza)."""
+        if self._syntax is None:
+            self._syntax = SpacySyntax()
+        return self._syntax
+
     def _text_analyzer(self) -> RuleBasedAnalyzer:
         if self._analyzer is None:
             self._analyzer = RuleBasedAnalyzer()
@@ -476,6 +562,7 @@ class RewriteService:
         if not variants:
             return {
                 "verdict": request.verdict,
+                "source_mode": request.source_mode.value,
                 "path": str(path),
                 "recorded": [],
                 "message": (
@@ -499,6 +586,7 @@ class RewriteService:
         self._pipelines.clear()  # els pesos han canviat: cal reconstruir les canonades
         return {
             "verdict": request.verdict,
+            "source_mode": request.source_mode.value,
             "path": str(path),
             "recorded": recorded,
             "message": f"Registrat a {path}",
@@ -519,6 +607,134 @@ class RewriteService:
                 for form, counts in ((f, store.counts_of(f)) for f in store.forms)
                 if counts is not None
             ],
+        }
+
+    # -- resum d'una empremta: estructura i ritme ------------------------------------------------
+
+    def fingerprint_summary(self, reference: str) -> JsonDict:
+        """«Estructura i ritme» d'una empremta, en termes entenedors i amb els detalls a part.
+
+        Amb una empremta antiga (esquema 1.0) les seccions noves surten com a no
+        disponibles i es proposa tornar-la a crear; no s'inventa cap dada.
+        """
+        # «style/<nom>.json» (l'identificador del selector) o un nom dins de style/.
+        fingerprint = StyleFingerprint.load(self._paths.resolve_fingerprint(reference))
+        rhythm = fingerprint.features.get("rhythm_profile")
+        syntax = fingerprint.features.get("syntactic_profile")
+        hints: list[str] = []
+        if not fingerprint.has_rhythm_profile:
+            hints.append("ritme de frases")
+        if not fingerprint.has_syntactic_profile:
+            hints.append("estructura sintàctica")
+        return {
+            "id": reference,
+            "name": fingerprint.name,
+            "schema_version": fingerprint.schema_version,
+            "n_documents": fingerprint.n_documents,
+            "n_words": fingerprint.n_words,
+            "parser": str(fingerprint.generator.get("parser", "")),
+            "rhythm": _rhythm_summary(rhythm) if isinstance(rhythm, Mapping) else _unavailable(),
+            "syntax": _syntax_summary(syntax) if isinstance(syntax, Mapping) else _unavailable(),
+            "regenerate_hint": (
+                "Aquesta empremta no té " + " ni ".join(hints) + ". Torna-la a crear amb els "
+                "teus textos"
+                + (" i el parser instal·lat" if "estructura sintàctica" in hints else "")
+                + " per obtenir-los."
+                if hints
+                else ""
+            ),
+            "details": {
+                "rhythm_profile": dict(rhythm) if isinstance(rhythm, Mapping) else None,
+                "syntactic_profile": dict(syntax) if isinstance(syntax, Mapping) else None,
+            },
+        }
+
+    # -- instal·lació de components opcionals ------------------------------------------------
+
+    def install_component(self, component: str, confirmed: bool) -> JsonDict:
+        """Instal·la un component opcional, però només amb confirmació explícita.
+
+        Sense confirmació no es baixa res: només es retorna la informació del
+        component perquè la interfície la pugui ensenyar. La descàrrega la fan
+        els scripts de ``scripts/``, que són fora del paquet.
+        """
+        relative = INSTALLERS.get(component)
+        if relative is None:
+            raise ConfigError(
+                f"Component desconegut: «{component}» (vàlids: {', '.join(INSTALLERS)})"
+            )
+        info = install_info(component)
+        if not confirmed:
+            return {**info, "started": False, "message": "Cal confirmar-ho abans de baixar res."}
+        script = self._paths.root / relative
+        if not script.is_file():
+            return {
+                **info,
+                "started": False,
+                "message": (
+                    "No s'ha trobat l'instal·lador en aquesta còpia. Executeu aquesta ordre "
+                    "en un terminal:"
+                ),
+                "command": f"python {relative} --yes",
+            }
+        process = subprocess.Popen(  # noqa: S603 - ruta pròpia del projecte, sense shell
+            [sys.executable, str(script), "--yes"],
+            cwd=self._paths.root,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return {
+            **info,
+            "started": True,
+            "pid": process.pid,
+            "message": "S'està instal·lant. Pot trigar uns minuts; l'estat s'actualitzarà sol.",
+        }
+
+    # -- empremta de l'autor -----------------------------------------------------------------
+
+    def create_fingerprint(
+        self, name: str, texts: Sequence[str], *, source_mode: str | SourceMode = SourceMode.OWN
+    ) -> JsonDict:
+        """Construeix l'empremta d'un autor amb els textos que arriben de la interfície.
+
+        Els textos són de l'usuari i no surten d'aquest ordinador: es processen
+        en memòria i només se'n desa l'empremta, que és un JSON de recomptes i
+        estadístics. No s'entrena cap model.
+
+        Només hi entren textos propis: un esborrany generat amb LLM no pot formar
+        part del corpus de l'autor, perquè contaminaria l'empremta.
+        """
+        if SourceMode.parse(source_mode).adapts_to_author:
+            raise ConfigError(LLM_DRAFT_NOT_CORPUS)
+        clean = " ".join(name.split()) or "autor"
+        if not re.fullmatch(r"[\w .\-]{1,60}", clean):
+            raise ConfigError(
+                "El nom de l'empremta només pot tenir lletres, xifres, espais i guions"
+            )
+        useful = [text for text in texts if text.strip()]
+        if not useful:
+            raise ConfigError("Cal almenys un text per construir l'empremta")
+        corpus = corpus_from_texts(useful)
+        resources = StyleResources.load(self._paths)
+        fingerprint = build_fingerprint(
+            corpus,
+            resources,
+            self._text_analyzer(),
+            name=clean,
+            description="Creada des de la interfície",
+            syntax=self._syntax_provider(),
+        )
+        target = self._paths.fingerprints / f"{clean}.json"
+        fingerprint.save(target)
+        self._pipelines.clear()  # hi ha una empremta nova disponible
+        return {
+            "name": clean,
+            "path": str(target),
+            "id": f"style/{target.name}",
+            "n_documents": fingerprint.n_documents,
+            "n_words": fingerprint.n_words,
+            "summary": StylePreferences(fingerprint).summary(),
+            "message": f"Empremta «{clean}» creada amb {len(useful)} textos.",
         }
 
     # -- historial ---------------------------------------------------------------------------
@@ -542,6 +758,194 @@ class RewriteService:
 
     def history_export(self) -> str:
         return self._history.export_json()
+
+
+#: Descripció de cada component instal·lable. Es mostra sencera abans de
+#: baixar res, i la confirmació de l'usuari és obligatòria.
+_INSTALL_INFO: dict[str, JsonDict] = {
+    "morphology": {
+        "component": "Morfologia catalana",
+        "purpose": (
+            "Flexió i concordança fiables: lema, categoria, gènere, nombre, persona, "
+            "temps i mode de més d'un milió de formes catalanes."
+        ),
+        "origin": "https://github.com/Softcatala/catalan-dict-tools",
+        "version": "darrera revisió del repositori (es desa el commit exacte)",
+        "license": "GPL-2.0-or-later OR LGPL-2.1-or-later",
+        "approximate_size_mb": 90,
+        "requirement": "git",
+        "offline_after_install": True,
+        "note": (
+            "Les dades són de Softcatalà (Jaume Ortolà i Joan Moratinos), són copyleft i no "
+            "es distribueixen amb el programa: es baixen del repositori original i el recurs "
+            "es genera en aquest ordinador."
+        ),
+    },
+    "languagetool": {
+        "component": "LanguageTool",
+        "purpose": "Validació avançada de gramàtica, concordança i puntuació en català.",
+        "origin": "https://languagetool.org/download/LanguageTool-stable.zip",
+        "version": "estable (provada: 6.6)",
+        "license": "LGPL-2.1-or-later",
+        "approximate_size_mb": 250,
+        "requirement": "Java",
+        "offline_after_install": True,
+        "note": (
+            "La descàrrega es fa una sola vegada. Després, LanguageTool s'executa en aquest "
+            "ordinador i no s'envia cap text enlloc."
+        ),
+    },
+    "parser": {
+        "component": "Parser sintàctic català",
+        "purpose": (
+            "Analitza dependències, subjecte, objecte, subordinades i coordinacions perquè "
+            "les transformacions estructurals es puguin fer amb seguretat."
+        ),
+        "origin": "https://pypi.org/project/spacy/ i https://github.com/explosion/spacy-models",
+        "version": "spaCy + ca_core_news_sm (UD Catalan AnCora)",
+        "license": "spaCy: MIT · model: GPL-3.0",
+        "approximate_size_mb": 120,
+        "requirement": "Python 3.11 o superior",
+        "offline_after_install": True,
+        "note": (
+            "El model només analitza: no genera text ni pren cap decisió. Un cop instal·lat, "
+            "no cal connexió per a res."
+        ),
+    },
+}
+
+
+_BUCKET_LABELS = {"short": "Curta", "medium": "Mitjana", "long": "Llarga"}
+_CONFIDENCE_LABELS = {"high": "alta", "medium": "mitjana", "low": "baixa"}
+
+
+def _unavailable() -> JsonDict:
+    return {"available": False}
+
+
+def _frequency_label(share: float) -> str:
+    if share >= 0.5:
+        return "molt freqüent"
+    if share >= 0.3:
+        return "freqüent"
+    if share >= 0.15:
+        return "ocasional"
+    return "poc freqüent"
+
+
+def _rhythm_summary(profile: Mapping[str, object]) -> JsonDict:
+    length = profile.get("length")
+    buckets = profile.get("buckets")
+    transitions = profile.get("transitions")
+    alternation = profile.get("alternation")
+    runs = profile.get("runs")
+    if not isinstance(length, Mapping) or not length:
+        return _unavailable()
+    shares = buckets.get("shares") if isinstance(buckets, Mapping) else None
+    thresholds = buckets.get("thresholds") if isinstance(buckets, Mapping) else None
+    row_shares = transitions.get("shares") if isinstance(transitions, Mapping) else None
+    lag = (
+        alternation.get("lag1_sentence_length_correlation")
+        if isinstance(alternation, Mapping)
+        else None
+    )
+    change = (
+        alternation.get("mean_absolute_sentence_length_change")
+        if isinstance(alternation, Mapping)
+        else None
+    )
+    if isinstance(lag, int | float) and not isinstance(lag, bool):
+        tendency = (
+            "alternança marcada"
+            if lag < -0.2
+            else "ritme força uniforme"
+            if lag > 0.2
+            else "alternança moderada"
+        )
+    else:
+        tendency = "no hi ha prou frases per mesurar l'alternança"
+    return {
+        "available": True,
+        "confidence": _CONFIDENCE_LABELS.get(str(profile.get("confidence")), "baixa"),
+        "sample_size_sentences": profile.get("sample_size_sentences", 0),
+        "typical_length": length.get("median"),
+        "mean_length": length.get("mean"),
+        "variation": length.get("cv"),
+        "shares": {
+            _BUCKET_LABELS[k]: float(v)
+            for k, v in (shares.items() if isinstance(shares, Mapping) else [])
+            if isinstance(v, int | float) and not isinstance(v, bool) and k in _BUCKET_LABELS
+        },
+        "thresholds": dict(thresholds) if isinstance(thresholds, Mapping) else {},
+        "tendency": tendency,
+        "lag1": lag,
+        "mean_change": change,
+        "transitions": [
+            {
+                "from": _BUCKET_LABELS[a],
+                "to": _BUCKET_LABELS[b],
+                "share": float(row_shares.get(f"{a}_to_{b}", 0.0)),
+                "label": _frequency_label(float(row_shares.get(f"{a}_to_{b}", 0.0))),
+            }
+            for a in ("short", "medium", "long")
+            for b in ("short", "medium", "long")
+            if isinstance(row_shares, Mapping)
+        ],
+        "runs": dict(runs) if isinstance(runs, Mapping) else {},
+    }
+
+
+def _syntax_summary(profile: Mapping[str, object]) -> JsonDict:
+    if profile.get("available") is not True:
+        return {"available": False, "reason": str(profile.get("reason", ""))}
+    coordination = profile.get("coordination")
+    subordination = profile.get("subordination")
+    order = profile.get("order")
+    complexity = profile.get("complexity")
+    distance = profile.get("dependency_distance")
+    patterns = profile.get("patterns")
+
+    def get(node: object, key: str) -> object:
+        return node.get(key) if isinstance(node, Mapping) else None
+
+    subject_before = get(order, "subject_before_verb_rate")
+    if isinstance(subject_before, int | float):
+        subject_order = (
+            "subjecte abans del verb"
+            if subject_before >= 0.6
+            else "subjecte després del verb"
+            if subject_before <= 0.4
+            else "subjecte abans i després del verb per igual"
+        )
+    else:
+        subject_order = "no hi ha prou subjectes per dir-ho"
+    top = get(patterns, "top")
+    return {
+        "available": True,
+        "confidence": _CONFIDENCE_LABELS.get(str(profile.get("confidence")), "baixa"),
+        "sample_size_sentences": profile.get("sample_size_sentences", 0),
+        "parser": str(profile.get("parser", "")),
+        "coordination_per_sentence": get(coordination, "per_sentence"),
+        "coordination_by_type": get(coordination, "by_type"),
+        "subordination_per_sentence": get(subordination, "per_sentence"),
+        "sentences_with_subordination_share": get(
+            subordination, "sentences_with_subordination_share"
+        ),
+        "subordination_by_type": get(subordination, "by_type"),
+        "subject_order": subject_order,
+        "subject_before_verb_rate": subject_before,
+        "preposed_complement_rate": get(order, "preposed_complement_rate"),
+        "clauses_per_sentence": get(complexity, "clauses_per_sentence"),
+        "simple_sentence_ratio": get(complexity, "simple_sentence_ratio"),
+        "mean_parse_depth": get(complexity, "mean_parse_depth"),
+        "mean_dependency_distance": get(distance, "mean_dependency_distance"),
+        "top_patterns": list(top[:5]) if isinstance(top, list) else [],
+    }
+
+
+def install_info(component: str = "languagetool") -> JsonDict:
+    """Descripció d'un component opcional, per ensenyar-la abans de baixar res."""
+    return dict(_INSTALL_INFO[component])
 
 
 def _protected(span: ProtectedSpan) -> JsonDict:

@@ -34,6 +34,8 @@ from parafrasi_cat.resources import (
     as_str_list,
     load_mapping,
 )
+from parafrasi_cat.style.syntax_profile import SentenceSyntaxStats, observe_sentence_syntax
+from parafrasi_cat.syntax.analysis import SyntaxProvider
 
 if TYPE_CHECKING:
     from parafrasi_cat.rules.patterns import GrammarHints
@@ -282,8 +284,16 @@ class DocumentObservations:
     n_sentences: int = 0
     n_paragraphs: int = 0
     sentence_lengths: list[int] = field(default_factory=list)
+    sentence_tokens: list[int] = field(default_factory=list)
+    """Tokens lingüístics per frase (paraules, clítics i xifres), per al ritme."""
     paragraph_sentences: list[int] = field(default_factory=list)
     paragraph_words: list[int] = field(default_factory=list)
+    paragraph_token_sequences: list[list[int]] = field(default_factory=list)
+    """Seqüència de tokens per frase de cada paràgraf, si el document en conserva."""
+    syntax: list[SentenceSyntaxStats] = field(default_factory=list)
+    """Recomptes sintàctics de les frases amb una anàlisi fiable (buit sense parser)."""
+    syntax_skipped: int = 0
+    """Frases que el parser no ha pogut analitzar amb prou fiabilitat."""
     punctuation: Counter[str] = field(default_factory=Counter)
     commas_per_sentence: list[int] = field(default_factory=list)
     sentence_endings: Counter[str] = field(default_factory=Counter)
@@ -372,7 +382,14 @@ class DocumentObserver:
 
     # -- entrada ----------------------------------------------------------------------
 
-    def observe(self, analysis: Analysis, name: str = "text") -> DocumentObservations:
+    def observe(
+        self,
+        analysis: Analysis,
+        name: str = "text",
+        *,
+        syntax: SyntaxProvider | None = None,
+    ) -> DocumentObservations:
+        """Observa un document; amb ``syntax`` també en recompta l'estructura sintàctica."""
         obs = DocumentObservations(name=name)
         obs.n_sentences = analysis.n_sentences
         obs.n_paragraphs = analysis.n_paragraphs
@@ -382,8 +399,17 @@ class DocumentObserver:
             obs.paragraph_words.append(
                 sum(1 for s in sentences for t in s.tokens if _is_countable_word(t))
             )
+            obs.paragraph_token_sequences.append(
+                [sum(1 for t in s.tokens if t.is_lexical) for s in sentences]
+            )
         for sentence in analysis.sentences:
             self._observe_sentence(sentence, obs)
+            if syntax is not None and syntax.available:
+                stats = observe_sentence_syntax(syntax.parse(sentence.text))
+                if stats is None:
+                    obs.syntax_skipped += 1
+                else:
+                    obs.syntax.append(stats)
         obs.n_words = sum(obs.sentence_lengths)
         return obs
 
@@ -391,6 +417,7 @@ class DocumentObserver:
         tokens = sentence.tokens
         n_words = sum(1 for t in tokens if _is_countable_word(t))
         obs.sentence_lengths.append(n_words)
+        obs.sentence_tokens.append(sum(1 for t in tokens if t.is_lexical))
         self._punctuation(sentence, obs)
         self._connectors(sentence, obs)
         self._ngrams_and_content(sentence, obs)

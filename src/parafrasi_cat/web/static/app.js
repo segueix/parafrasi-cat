@@ -8,7 +8,20 @@ const estat = {
   resultat: null,
   textUnitat: new Map(),
   feedback: [],
+  textosEmpremta: [],
+  componentPendent: "",
 };
+
+const CLAUS_RECURSOS = ["morphology", "syntax", "languagetool", "java", "offline"];
+
+function llegeixFitxer(fitxer) {
+  return new Promise((resol, rebutja) => {
+    const lector = new FileReader();
+    lector.onload = () => resol(String(lector.result));
+    lector.onerror = () => rebutja(new Error(`No s'ha pogut llegir ${fitxer.name}`));
+    lector.readAsText(fitxer, "utf-8");
+  });
+}
 
 const $ = (id) => document.getElementById(id);
 
@@ -68,6 +81,120 @@ function modeTriat() {
   return marcat ? marcat.value : "profund";
 }
 
+// --- origen del text ---------------------------------------------------------
+// L'origen el diu l'usuari; el motor no intenta endevinar-lo mai.
+
+function origenTriat() {
+  const marcat = document.querySelector('input[name="origen"]:checked');
+  return marcat ? marcat.value : "own";
+}
+
+function omplirOrigens(origens) {
+  const contenidor = $("origens");
+  contenidor.replaceChildren();
+  for (const origen of origens) {
+    const etiqueta = document.createElement("label");
+    etiqueta.className = "opcio";
+    const entrada = document.createElement("input");
+    entrada.type = "radio";
+    entrada.name = "origen";
+    entrada.value = origen.id;
+    entrada.checked = Boolean(origen.default);
+    entrada.addEventListener("change", actualitzarOrigen);
+    etiqueta.append(entrada, ` ${origen.label}`);
+    contenidor.append(etiqueta);
+  }
+}
+
+// --- estructura i ritme de l'empremta ------------------------------------------
+
+function fila(dl, terme, valor) {
+  const div = document.createElement("div");
+  const dt = document.createElement("dt");
+  dt.textContent = terme;
+  const dd = document.createElement("dd");
+  dd.textContent = valor;
+  div.append(dt, dd);
+  dl.append(div);
+}
+
+const percent = (x) => `${Math.round(Number(x) * 100)} %`;
+const num = (x, d = 1) => (x === null || x === undefined ? "—" : Number(x).toFixed(d));
+
+async function mostrarEstructuraRitme() {
+  const seccio = $("estructura-ritme");
+  if (!estilEsEmpremta()) {
+    seccio.hidden = true;
+    return;
+  }
+  try {
+    const resum = await api(`/api/fingerprint/summary?id=${encodeURIComponent($("estil").value)}`);
+    seccio.hidden = false;
+    const avis = $("empremta-avis");
+    avis.hidden = !resum.regenerate_hint;
+    avis.textContent = resum.regenerate_hint;
+
+    const ritme = $("empremta-ritme");
+    ritme.replaceChildren();
+    if (resum.rhythm.available) {
+      const r = resum.rhythm;
+      fila(ritme, "Longitud típica", `${num(r.typical_length, 0)} tokens per frase (mitjana ${num(r.mean_length)})`);
+      fila(ritme, "Variació de longitud", `coeficient ${num(r.variation, 2)} · canvi mitjà ${num(r.mean_change)} tokens`);
+      fila(ritme, "Curta / mitjana / llarga", Object.entries(r.shares).map(([k, v]) => `${k} ${percent(v)}`).join(" · ") +
+        ` (curta ≤ ${r.thresholds.short_max}, llarga ≥ ${r.thresholds.long_min})`);
+      fila(ritme, "Alternança", r.tendency);
+      fila(ritme, "Confiança de la mostra", `${r.confidence} (${r.sample_size_sentences} frases)`);
+    } else {
+      fila(ritme, "Ritme", "no disponible en aquesta empremta");
+    }
+
+    const transicions = $("empremta-transicions");
+    transicions.replaceChildren();
+    for (const t of resum.rhythm.available ? resum.rhythm.transitions : []) {
+      transicions.append(liText(`${t.from} → ${t.to}: ${t.label} (${percent(t.share)})`));
+    }
+
+    const sintaxi = $("empremta-sintaxi");
+    sintaxi.replaceChildren();
+    if (resum.syntax.available) {
+      const x = resum.syntax;
+      fila(sintaxi, "Coordinació", `${num(x.coordination_per_sentence, 2)} per frase`);
+      fila(sintaxi, "Subordinació", `${num(x.subordination_per_sentence, 2)} per frase · ${percent(x.sentences_with_subordination_share)} de frases amb subordinada`);
+      fila(sintaxi, "Ordre predominant", x.subject_order);
+      fila(sintaxi, "Complexitat", `${num(x.clauses_per_sentence, 1)} clàusules per frase · profunditat ${num(x.mean_parse_depth, 1)} · distància ${num(x.mean_dependency_distance, 1)}`);
+      fila(sintaxi, "Confiança de la mostra", `${x.confidence} (${x.sample_size_sentences} frases)`);
+    } else {
+      fila(sintaxi, "Estructura sintàctica", resum.syntax.reason || "no disponible en aquesta empremta");
+    }
+    $("empremta-detalls").textContent = JSON.stringify(resum.details, null, 1);
+  } catch (error) {
+    seccio.hidden = false;
+    missatge($("empremta-avis"), error.message, true);
+    $("empremta-avis").hidden = false;
+  }
+}
+
+function estilEsEmpremta() {
+  const triat = estat.opcions.style_profiles.find((p) => p.id === $("estil").value);
+  return Boolean(triat && triat.kind === "fingerprint");
+}
+
+function actualitzarOrigen() {
+  const origen = estat.opcions.source_modes.find((o) => o.id === origenTriat());
+  const descripcio = $("descripcio-origen");
+  const avis = $("avis-empremta");
+  if (!origen || !origen.requires_fingerprint) {
+    descripcio.hidden = true;
+    avis.hidden = true;
+    return;
+  }
+  descripcio.hidden = false;
+  descripcio.textContent = origen.description;
+  const falta = !estilEsEmpremta();
+  avis.hidden = !falta;
+  avis.textContent = falta ? estat.opcions.fingerprint_required : "";
+}
+
 function mostrarDescripcioMode() {
   const mode = estat.opcions.modes.find((m) => m.id === modeTriat());
   if (!mode) return;
@@ -108,6 +235,148 @@ function diccionarisTriats() {
   return Array.from(document.querySelectorAll("input.diccionari:checked")).map((c) => c.value);
 }
 
+function mostrarRecursos(recursos, instal·ladors) {
+  const mode = recursos.mode;
+  const avis = $("mode-linguistic");
+  avis.className = mode.full ? "mode complet" : "mode basic";
+  avis.replaceChildren();
+  const titol = document.createElement("strong");
+  titol.textContent = mode.label;
+  const detall = document.createElement("span");
+  detall.textContent = ` ${mode.detail}`;
+  avis.append(titol, detall);
+
+  const llista = $("recursos");
+  llista.replaceChildren();
+  for (const clau of CLAUS_RECURSOS) {
+    const recurs = recursos[clau];
+    if (!recurs) continue;
+    const element = document.createElement("li");
+    element.className = recurs.active ? "actiu" : "inactiu";
+    const nom = document.createElement("span");
+    nom.textContent = `${recurs.component}: `;
+    const marca = document.createElement("span");
+    marca.className = "estat-recurs";
+    marca.textContent = recurs.active ? "✓" : "○";
+    const text = document.createElement("span");
+    text.className = "estat-recurs";
+    text.textContent = ` ${recurs.state}`;
+    element.append(nom, marca, text, ` — ${recurs.message}`);
+    if (recurs.detail) element.title = recurs.detail;
+    llista.append(element);
+  }
+
+  const actiu = recursos.languagetool.active;
+  $("languagetool").disabled = !actiu;
+  if (!actiu) $("languagetool").checked = false;
+  $("ajuda-languagetool").textContent = actiu
+    ? "Comprova gramàtica, concordança i puntuació de cada candidat. Només valida: mai no reescriu el text."
+    : "No està instal·lada. El motor continua funcionant amb les seves comprovacions internes.";
+
+  const botons = $("botons-instal-lacio");
+  botons.replaceChildren();
+  for (const clau of mode.installable) {
+    if (!instal·ladors[clau]) continue;
+    const boto = document.createElement("button");
+    boto.type = "button";
+    boto.className = "secundari";
+    boto.textContent = `Instal·la ${instal·ladors[clau].component}`;
+    boto.addEventListener("click", () => demanarInstalacio(clau));
+    botons.append(boto);
+  }
+}
+
+async function refrescarRecursos() {
+  const recursos = await api("/api/resources");
+  mostrarRecursos(recursos, estat.opcions.installers);
+  return recursos;
+}
+
+function demanarInstalacio(component) {
+  const info = estat.opcions.installers[component];
+  estat.componentPendent = component;
+  $("detall-instal-lacio").textContent =
+    `Component: ${info.component}. Origen: ${info.origin}. Versió: ${info.version}. ` +
+    `Mida aproximada: ${info.approximate_size_mb} MB. Llicència: ${info.license}. ` +
+    `Requisit: ${info.requirement}. ${info.note}`;
+  $("confirma-instal-lacio").hidden = false;
+}
+
+async function confirmarInstalacio() {
+  $("confirma").disabled = true;
+  try {
+    const resposta = await api("/api/resources/install", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ component: estat.componentPendent, confirm: true }),
+    });
+    missatge($("estat"), resposta.message + (resposta.command ? ` ${resposta.command}` : ""));
+    $("confirma-instal-lacio").hidden = true;
+    if (resposta.started) {
+      const inici = Date.now();
+      const repeticio = setInterval(async () => {
+        const recursos = await refrescarRecursos();
+        if (recursos.offline.active || Date.now() - inici > 900000) {
+          clearInterval(repeticio);
+          if (recursos.offline.active) missatge($("estat"), "Recursos instal·lats.");
+        }
+      }, 15000);
+    }
+  } catch (error) {
+    missatge($("estat"), error.message, true);
+  } finally {
+    $("confirma").disabled = false;
+  }
+}
+
+async function carregarFitxerText(esdeveniment) {
+  const fitxer = esdeveniment.target.files[0];
+  if (!fitxer) return;
+  try {
+    $("text").value = await llegeixFitxer(fitxer);
+    missatge($("estat"), `Carregat ${fitxer.name}.`);
+  } catch (error) {
+    missatge($("estat"), error.message, true);
+  }
+}
+
+async function carregarTextosEmpremta(esdeveniment) {
+  const fitxers = Array.from(esdeveniment.target.files);
+  try {
+    estat.textosEmpremta = await Promise.all(fitxers.map(llegeixFitxer));
+    $("crea-empremta").disabled = estat.textosEmpremta.length === 0;
+    $("estat-empremta").textContent = `${estat.textosEmpremta.length} textos preparats.`;
+  } catch (error) {
+    missatge($("estat-empremta"), error.message, true);
+  }
+}
+
+async function crearEmpremta() {
+  $("crea-empremta").disabled = true;
+  missatge($("estat-empremta"), "Analitzant els textos…");
+  try {
+    const resposta = await api("/api/fingerprint", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: $("nom-empremta").value || "autor",
+        texts: estat.textosEmpremta,
+        source_mode: "own",
+      }),
+    });
+    missatge($("estat-empremta"), `${resposta.message} ${resposta.n_words} paraules analitzades.`);
+    estat.opcions = await api("/api/options");
+    omplirSelect($("estil"), estat.opcions.style_profiles);
+    $("estil").value = resposta.id;
+    actualitzarOrigen();
+    mostrarEstructuraRitme();
+  } catch (error) {
+    missatge($("estat-empremta"), error.message, true);
+  } finally {
+    $("crea-empremta").disabled = estat.textosEmpremta.length === 0;
+  }
+}
+
 function mostrarEstatHistorial(historial) {
   $("historial-actiu").checked = historial.enabled;
   $("estat-historial").textContent = historial.enabled
@@ -123,8 +392,14 @@ async function carregarOpcions() {
   omplirModes(estat.opcions.modes);
   omplirSelect($("estil"), estat.opcions.style_profiles);
   $("estil").value = "default";
+  $("estil").addEventListener("change", actualitzarOrigen);
+  $("estil").addEventListener("change", mostrarEstructuraRitme);
+  omplirOrigens(estat.opcions.source_modes);
+  actualitzarOrigen();
+  mostrarEstructuraRitme();
   omplirDiccionaris(estat.opcions.dictionaries);
   omplirSelect($("preferencies"), estat.opcions.preferences, "cap");
+  mostrarRecursos(estat.opcions.resources, estat.opcions.installers);
   mostrarEstatHistorial(estat.opcions.history);
 }
 
@@ -150,6 +425,8 @@ async function generar(esdeveniment) {
         style_profile: $("estil").value,
         dictionaries: diccionarisTriats(),
         preferences: $("preferencies").value,
+        languagetool: $("languagetool").checked,
+        source_mode: origenTriat(),
       }),
     });
     estat.resultat = resultat;
@@ -166,6 +443,9 @@ async function generar(esdeveniment) {
 function mostrarResultat(resultat) {
   $("sense-resultat").hidden = true;
   $("resum").hidden = false;
+  $("resum-origen").textContent = resultat.author_adaptation
+    ? `${resultat.source_mode.label} · ${resultat.author_adaptation}`
+    : resultat.source_mode.label;
   $("resum-mode").textContent = resultat.mode.label;
   $("resum-nivell").textContent = resultat.level_capped
     ? `${resultat.level_label} (retallat des de ${resultat.requested_level})`
@@ -175,6 +455,7 @@ function mostrarResultat(resultat) {
   $("resum-preferencies").textContent = resultat.preferences || "cap";
   $("resum-candidats").textContent =
     `${resultat.n_candidates} (${resultat.n_rejected_candidates} rebutjats)`;
+  $("resum-languagetool").textContent = resultat.languagetool ? "activa" : "no activa";
 
   $("text-original").textContent = resultat.source_text;
   $("millor-candidat").textContent = resultat.output_text;
@@ -228,6 +509,23 @@ function dibuixaCandidat(unitat, candidat) {
     const motiu = node.querySelector(".motiu-rebuig");
     motiu.hidden = false;
     motiu.textContent = `Rebutjat: ${candidat.rejection_reason}`;
+  }
+
+  const afinitatValor = candidat.score ? candidat.score.dimensions.afinitat_autor : null;
+  if (afinitatValor !== null && afinitatValor !== undefined) {
+    const afinitat = node.querySelector(".afinitat");
+    afinitat.hidden = false;
+    afinitat.textContent = `Afinitat amb l'estil: ${afinitatValor.toFixed(2)}`;
+    const titol = node.querySelector(".titol-afinitat");
+    const detall = node.querySelector(".detall-afinitat");
+    titol.hidden = false;
+    detall.hidden = false;
+    detall.append(liText(`respecte de l'original: ${candidat.score.author_explanation}`));
+    const info = candidat.score.author_affinity || {};
+    for (const [nom, valor] of Object.entries(info.components || {})) {
+      const nota = info.notes && info.notes[nom] ? ` — ${info.notes[nom]}` : "";
+      detall.append(liText(`${nom}: ${Number(valor).toFixed(2)}${nota}`));
+    }
   }
 
   const usa = node.querySelector(".usa");
@@ -329,6 +627,7 @@ async function votar(verdicte, candidat, resposta) {
         verdict: verdicte,
         variants: candidat.variants,
         preferences: estat.resultat ? estat.resultat.preferences_id : "",
+        source_mode: estat.resultat ? estat.resultat.source_mode.id : "own",
       }),
     });
     estat.feedback.push({ candidate_id: candidat.candidate_id, verdict: verdicte, ...dades });
@@ -392,6 +691,7 @@ async function desarAlRegistre() {
           style_profile: resultat.style_profile_id,
           dictionaries: resultat.dictionaries,
           preferences: resultat.preferences_id,
+          source_mode: resultat.source_mode.id,
         },
         result: {
           output_text: resultat.output_text,
@@ -439,6 +739,13 @@ async function iniciar() {
   $("exporta").addEventListener("click", exportar);
   $("desa").addEventListener("click", desarAlRegistre);
   $("historial-actiu").addEventListener("change", canviarHistorial);
+  $("confirma").addEventListener("click", confirmarInstalacio);
+  $("cancel-la").addEventListener("click", () => {
+    $("confirma-instal-lacio").hidden = true;
+  });
+  $("fitxer-text").addEventListener("change", carregarFitxerText);
+  $("fitxers-empremta").addEventListener("change", carregarTextosEmpremta);
+  $("crea-empremta").addEventListener("click", crearEmpremta);
   $("exporta-historial").addEventListener("click", () => {
     window.location.assign("/api/history/export");
   });

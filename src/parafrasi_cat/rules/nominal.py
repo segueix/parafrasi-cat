@@ -123,7 +123,7 @@ class NominalizationRule(Rule):
 
     def propose(self, ctx: RuleContext) -> Iterable[Transformation]:
         tokens = tuple(t for t in ctx.sentence.tokens if t.kind is not TokenKind.SPACE)
-        state = MatchState(ctx.text, tokens, ctx.protected_spans, self._hints)
+        state = MatchState(ctx.text, tokens, ctx.protected_spans, self._hints, ctx.morphology)
         if self._direction == "to_noun":
             yield from self._to_noun(ctx, state)
         else:

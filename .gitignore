@@ -27,6 +27,12 @@ corpus/excluded/*
 # Registre local opcional de la interfície (mai no s'ha de publicar)
 history/
 
+# Recursos lingüístics generats localment. No es versionen: les dades de
+# Softcatalà són copyleft (GPL-2.0+/LGPL-2.1+) i cada usuari se les genera amb
+# scripts/import_softcatala.py. Vegeu docs/recursos-linguistics.md.
+resources/ca/morphology/generated/
+vendor/
+
 # Editors
 .idea/
 .vscode/

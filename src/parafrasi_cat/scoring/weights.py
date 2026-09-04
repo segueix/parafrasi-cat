@@ -20,6 +20,11 @@ class ScoringWeights:
     - ``grammar``: penalització per defectes heurístics de gramaticalitat.
     - ``preferences``: pes de les preferències explícites (diccionaris del projecte,
       fitxer de preferències de l'autor i feedback manual).
+    - ``author_affinity``: pes de l'adaptació autoral quan el text és un esborrany
+      generat amb LLM: bonus o penalització segons si el candidat s'acosta a
+      l'empremta de l'autor més que l'original.
+    - ``author_affinity_own``: el mateix pes amb text propi i empremta: un
+      desempat lleu entre candidats segurs, no una pressió per imitar.
     - ``max_transformations``: nombre de transformacions que normalitza el guany.
 
     Les dimensions de preservació (factual, epistemològica, terminològica) no
@@ -31,6 +36,8 @@ class ScoringWeights:
     style_distance: float = 0.5
     grammar: float = 0.5
     preferences: float = 0.5
+    author_affinity: float = 2.0
+    author_affinity_own: float = 0.5
     max_transformations: int = 3
 
     def __post_init__(self) -> None:
@@ -42,6 +49,8 @@ class ScoringWeights:
             "style_distance",
             "grammar",
             "preferences",
+            "author_affinity",
+            "author_affinity_own",
         ):
             if getattr(self, name) < 0:
                 raise ConfigError(f"El pes «{name}» no pot ser negatiu")
@@ -55,6 +64,8 @@ class ScoringWeights:
             style_distance=as_float(data, "style_distance", defaults.style_distance),
             grammar=as_float(data, "grammar", defaults.grammar),
             preferences=as_float(data, "preferences", defaults.preferences),
+            author_affinity=as_float(data, "author_affinity", defaults.author_affinity),
+            author_affinity_own=as_float(data, "author_affinity_own", defaults.author_affinity_own),
             max_transformations=as_int(data, "max_transformations", defaults.max_transformations),
         )
 
@@ -65,5 +76,7 @@ class ScoringWeights:
             "style_distance": self.style_distance,
             "grammar": self.grammar,
             "preferences": self.preferences,
+            "author_affinity": self.author_affinity,
+            "author_affinity_own": self.author_affinity_own,
             "max_transformations": self.max_transformations,
         }

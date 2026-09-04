@@ -16,8 +16,10 @@ from parafrasi_cat.analyzer.lexicon import ClosedClassLexicon
 from parafrasi_cat.core.errors import ConfigError
 from parafrasi_cat.morphology.adapters.apertium import ApertiumMorphology
 from parafrasi_cat.morphology.adapters.freeling import FreeLingMorphology
+from parafrasi_cat.morphology.catalan import CatalanMorphology
 from parafrasi_cat.morphology.internal import InternalMorphology
 from parafrasi_cat.morphology.provider import (
+    ChainedMorphology,
     DictionaryMorphology,
     MorphologyProvider,
     NullMorphology,
@@ -40,6 +42,10 @@ class MorphologyContext:
 
     def load_lexicon(self) -> ClosedClassLexicon:
         return self.lexicon if self.lexicon is not None else ClosedClassLexicon.load(self.lang_dir)
+
+    def load_catalan(self) -> CatalanMorphology | None:
+        """Recurs de Softcatalà, si l'usuari l'ha importat; ``None`` altrament."""
+        return CatalanMorphology.discover(self.lang_dir)
 
 
 MorphologyFactory = Callable[[MorphologyContext], MorphologyProvider]
@@ -93,6 +99,13 @@ def _internal_factory(context: MorphologyContext) -> MorphologyProvider:
     return InternalMorphology(context.load_lexicon(), context.load_dictionary())
 
 
+def _catalan_factory(context: MorphologyContext) -> MorphologyProvider:
+    """Softcatalà davant de l'analitzador intern, o només l'intern si no s'ha importat."""
+    internal = InternalMorphology(context.load_lexicon(), context.load_dictionary())
+    catalan = context.load_catalan()
+    return internal if catalan is None else ChainedMorphology(catalan, internal)
+
+
 def _apertium_factory(context: MorphologyContext) -> MorphologyProvider:
     adapter = ApertiumMorphology.from_options(context.options)
     adapter.require()
@@ -117,6 +130,14 @@ def default_morphology_registry() -> MorphologyRegistry:
         "internal",
         _internal_factory,
         description="Analitzador intern: lexicó de classes tancades, diccionari i endevinador",
+    )
+    registry.register(
+        "catalan",
+        _catalan_factory,
+        description=(
+            "Morfologia catalana de Softcatalà (importada amb scripts/import_softcatala.py) "
+            "amb l'analitzador intern com a reserva"
+        ),
     )
     registry.register(
         "apertium",

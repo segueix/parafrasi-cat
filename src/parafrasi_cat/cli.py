@@ -25,7 +25,7 @@ from parafrasi_cat import __version__
 from parafrasi_cat.core.errors import ParafrasiError
 from parafrasi_cat.core.transformation import SemanticRisk
 from parafrasi_cat.pipeline.builder import build_pipeline
-from parafrasi_cat.pipeline.config import PipelineConfig
+from parafrasi_cat.pipeline.config import PipelineConfig, SourceMode
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -116,6 +116,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="preferències explícites de l'autor (nom dins de preferences/ o ruta)",
     )
     parser.add_argument(
+        "--source-mode",
+        choices=[m.value for m in SourceMode],
+        help=(
+            "origen del text: «own» (propi, per defecte) o «llm_draft» (esborrany generat "
+            "amb LLM, que s'adapta a l'empremta de l'autor indicada amb --style)"
+        ),
+    )
+    parser.add_argument(
         "--max-risk", choices=[r.value for r in SemanticRisk], help="risc semàntic màxim acceptat"
     )
     parser.add_argument(
@@ -155,6 +163,8 @@ def load_config(args: argparse.Namespace) -> PipelineConfig:
         overrides["dictionaries"] = (*config.dictionaries, *args.dictionary)
     if args.preferences:
         overrides["preferences"] = args.preferences
+    if args.source_mode:
+        overrides["source_mode"] = SourceMode.parse(args.source_mode)
     if args.max_risk:
         overrides["max_semantic_risk"] = SemanticRisk.parse(args.max_risk)
     if args.min_confidence is not None:

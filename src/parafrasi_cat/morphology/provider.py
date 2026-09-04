@@ -24,6 +24,26 @@ class MorphologyProvider(Protocol):
         ...
 
 
+def inflect_like(
+    provider: MorphologyProvider, form: str, lemma: str, *, pos: str | None = None
+) -> str | None:
+    """Forma de ``lemma`` amb els mateixos trets que ``form``, o ``None``.
+
+    És l'operació que fan servir les regles per canviar de verb conservant la
+    persona, el nombre i el gènere: «és» amb el lema «constituir» dona
+    «constitueix», i «feta» amb «realitzar» dona «realitzada». Funciona amb
+    qualsevol proveïdor; si no en coneix la forma d'origen o no té la
+    d'arribada, retorna ``None`` i la regla recorre al seu mapatge explícit.
+    """
+    for entry in provider.analyze(form):
+        if pos is not None and entry.features.pos != pos:
+            continue
+        generated = provider.generate(lemma, entry.features)
+        if generated:
+            return generated[0]
+    return None
+
+
 class NullMorphology:
     """Proveïdor que no coneix cap forma. Útil com a valor per defecte."""
 
@@ -31,6 +51,37 @@ class NullMorphology:
         return ()
 
     def generate(self, lemma: str, features: MorphFeatures) -> tuple[str, ...]:
+        return ()
+
+
+class ChainedMorphology:
+    """Consulta diversos proveïdors en ordre de fiabilitat.
+
+    El primer que conegui una forma o un lema respon. Serveix per posar el
+    recurs de Softcatalà davant de l'analitzador intern sense perdre'l: si el
+    recurs no s'ha importat, o no coneix una forma, actua el fallback de
+    sempre.
+    """
+
+    def __init__(self, *providers: MorphologyProvider) -> None:
+        self._providers = tuple(providers)
+
+    @property
+    def providers(self) -> tuple[MorphologyProvider, ...]:
+        return self._providers
+
+    def analyze(self, form: str) -> tuple[LexicalEntry, ...]:
+        for provider in self._providers:
+            entries = provider.analyze(form)
+            if entries:
+                return entries
+        return ()
+
+    def generate(self, lemma: str, features: MorphFeatures) -> tuple[str, ...]:
+        for provider in self._providers:
+            forms = provider.generate(lemma, features)
+            if forms:
+                return forms
         return ()
 
 

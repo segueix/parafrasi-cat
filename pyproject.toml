@@ -4,13 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "parafrasi-cat"
-version = "0.1.0"
+version = "1.2.0"
 description = "Motor local de reredacció i parafraseig en català basat en regles explícites, sense LLM ni serveis externs."
 readme = "README.md"
 requires-python = ">=3.11"
 keywords = ["català", "parafraseig", "reredacció", "PLN", "regles", "estilometria"]
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 5 - Production/Stable",
   "Environment :: Console",
   "Intended Audience :: Developers",
   "Natural Language :: Catalan",
@@ -44,6 +46,7 @@ include = [
   "rules",
   "dictionaries",
   "preferences",
+  "scripts",
   "style",
   "docs",
   "examples",
@@ -72,7 +75,7 @@ pythonpath = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["src", "tests"]
+src = ["src", "tests", "scripts"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "N", "SIM"]
@@ -84,7 +87,7 @@ known-first-party = ["parafrasi_cat"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["src/parafrasi_cat", "tests"]
+files = ["src/parafrasi_cat", "tests", "scripts"]
 warn_unreachable = true
 pretty = true
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,48 @@ from parafrasi_cat.resources import (
 from parafrasi_cat.scoring.weights import ScoringWeights
 
 
+class SourceMode(StrEnum):
+    """D'on ve el text que es reescriu. Ho diu l'usuari; el motor no ho endevina mai."""
+
+    OWN = "own"
+    """Text propi: el comportament de sempre."""
+
+    LLM_DRAFT = "llm_draft"
+    """Esborrany generat amb un LLM: s'hi afegeix l'adaptació a l'empremta de l'autor."""
+
+    @classmethod
+    def parse(cls, value: str | SourceMode) -> SourceMode:
+        if isinstance(value, SourceMode):
+            return value
+        try:
+            return cls(value.strip().lower())
+        except ValueError as exc:
+            valid = ", ".join(member.value for member in cls)
+            raise ConfigError(f"Origen del text desconegut: «{value}» (vàlids: {valid})") from exc
+
+    @property
+    def label(self) -> str:
+        return "Text propi" if self is SourceMode.OWN else "Esborrany generat amb LLM"
+
+    @property
+    def description(self) -> str:
+        if self is SourceMode.OWN:
+            return "Reescriptura amb les regles, els diccionaris i les preferències de sempre."
+        return "El text s'adaptarà als patrons estilístics de l'empremta de l'autor."
+
+    @property
+    def adapts_to_author(self) -> bool:
+        """Cert si el mode afegeix la capa d'adaptació autoral (i, per tant, exigeix empremta)."""
+        return self is SourceMode.LLM_DRAFT
+
+
+#: Missatge que veu l'usuari quan demana adaptar un esborrany sense cap empremta.
+FINGERPRINT_REQUIRED = (
+    "Per adaptar un esborrany a la teva manera d'escriure, selecciona o crea primer "
+    "una empremta d'autor."
+)
+
+
 @dataclass(frozen=True, slots=True)
 class PipelineConfig:
     """Paràmetres de construcció de la canonada.
@@ -31,8 +74,10 @@ class PipelineConfig:
         language: Codi de llengua dels recursos (només ``ca`` en aquesta fase).
         rule_set: Nom (``rules/<nom>.yaml``) o ruta del conjunt de regles.
         style_profile: Nom (``resources/style/<nom>.yaml``) o ruta del perfil d'estil.
-        morphology: Nom del proveïdor morfològic (``internal``, ``dictionary``, ``null``,
-            ``apertium``, ``freeling``); vegeu ``parafrasi_cat.morphology.registry``.
+        morphology: Nom del proveïdor morfològic (``catalan``, ``internal``, ``dictionary``,
+            ``null``, ``apertium``, ``freeling``); vegeu ``parafrasi_cat.morphology.registry``.
+            Per defecte ``catalan``: el recurs de Softcatalà si s'ha importat i, si no,
+            l'analitzador intern.
         protected_terms: Termes addicionals que cap regla pot tocar.
         protected_terms_files: Fitxers amb termes protegits (un per línia).
         max_semantic_risk: Risc màxim acceptat; ``None`` = el del conjunt de regles.
@@ -44,18 +89,26 @@ class PipelineConfig:
         level: Nivell màxim de les regles actives (1 lèxic … 5 paràgraf); ``None`` = totes.
         length_ratio: Marge de longitud (mínim, màxim) acceptat respecte de l'original.
         use_style: Si és fals, no es calcula la distància d'estil.
+        syntax: Analitzador sintàctic (``auto`` = el parser local si està instal·lat,
+            ``none`` = cap). El parser només analitza; mai no genera text.
+        languagetool: Si és cert, s'afegeix la validació local de LanguageTool quan
+            estigui instal·lada. Per defecte és fals: el motor no depèn de Java ni de
+            LanguageTool, i la interfície ofereix activar-lo si el detecta.
         dictionaries: Diccionaris terminològics actius (noms dins de ``dictionaries/`` o rutes).
         preferences: Fitxer de preferències explícites de l'autor (nom dins de
             ``preferences/`` o ruta); ``None`` = cap.
         feedback: Fitxer de feedback manual; ``None`` = el que indiqui el fitxer de
             preferències (clau ``feedback``), si en té.
+        source_mode: Origen del text, tal com l'ha indicat l'usuari: ``own`` (per
+            defecte, comportament de sempre) o ``llm_draft`` (esborrany generat amb un
+            LLM, que s'adapta a l'empremta de l'autor; l'empremta és obligatòria).
     """
 
     home: Path | None = None
     language: str = "ca"
     rule_set: str = "default"
     style_profile: str = "default"
-    morphology: str = "internal"
+    morphology: str = "catalan"
     protected_terms: tuple[str, ...] = ()
     protected_terms_files: tuple[Path, ...] = ()
     max_semantic_risk: SemanticRisk | None = None
@@ -70,6 +123,9 @@ class PipelineConfig:
     dictionaries: tuple[str, ...] = ()
     preferences: str | None = None
     feedback: Path | None = None
+    syntax: str = "auto"
+    languagetool: bool = False
+    source_mode: SourceMode = SourceMode.OWN
 
     def __post_init__(self) -> None:
         if self.level is not None and not 1 <= self.level <= 5:
@@ -83,6 +139,8 @@ class PipelineConfig:
         low, high = self.length_ratio
         if not 0.0 < low <= 1.0 <= high:
             raise ConfigError("length_ratio ha de complir 0 < mínim <= 1 <= màxim")
+        # S'admet el nom del mode com a text («llm_draft»); es normalitza sempre.
+        object.__setattr__(self, "source_mode", SourceMode.parse(self.source_mode))
 
     def with_overrides(self, **changes: Any) -> PipelineConfig:
         """Retorna una còpia amb els camps indicats modificats."""
@@ -141,6 +199,9 @@ class PipelineConfig:
                 as_float(ratio, "max", defaults.length_ratio[1]),
             ),
             use_style=as_bool(data, "use_style", defaults.use_style),
+            syntax=as_str(data, "syntax", defaults.syntax),
+            languagetool=as_bool(data, "languagetool", defaults.languagetool),
+            source_mode=SourceMode.parse(as_str(data, "source_mode", defaults.source_mode.value)),
             dictionaries=tuple(
                 _maybe_path(item, base_dir) for item in as_str_list(data, "dictionaries")
             ),
@@ -179,6 +240,9 @@ class PipelineConfig:
             "level": self.level,
             "length_ratio": {"min": self.length_ratio[0], "max": self.length_ratio[1]},
             "use_style": self.use_style,
+            "syntax": self.syntax,
+            "languagetool": self.languagetool,
+            "source_mode": self.source_mode.value,
             "dictionaries": list(self.dictionaries),
             "preferences": self.preferences,
             "feedback": None if self.feedback is None else str(self.feedback),

@@ -92,7 +92,14 @@ def test_guesser_rules() -> None:
 def test_registry_and_factory(project_root: Path, lexicon: ClosedClassLexicon) -> None:
     lang = project_root / "resources" / "ca"
     registry = default_morphology_registry()
-    assert registry.available() == ("apertium", "dictionary", "freeling", "internal", "null")
+    assert registry.available() == (
+        "apertium",
+        "catalan",
+        "dictionary",
+        "freeling",
+        "internal",
+        "null",
+    )
     assert "Apertium" in registry.describe("apertium")
     assert isinstance(create_morphology_provider("null", lang), NullMorphology)
     assert isinstance(create_morphology_provider("dictionary", lang), DictionaryMorphology)

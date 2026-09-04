@@ -5,13 +5,16 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+from parafrasi_cat.adapters.languagetool import LanguageToolClient, LanguageToolValidator
 from parafrasi_cat.analyzer.analysis import RuleBasedAnalyzer
 from parafrasi_cat.analyzer.lexicon import ClosedClassLexicon
 from parafrasi_cat.analyzer.sentences import DEFAULT_ABBREVIATIONS, SentenceSplitter
 from parafrasi_cat.candidates.generator import CandidateGenerator
+from parafrasi_cat.core.errors import ConfigError
 from parafrasi_cat.dictionaries.dictionary import DictionarySet
+from parafrasi_cat.morphology.provider import MorphologyProvider
 from parafrasi_cat.morphology.registry import create_morphology_provider
-from parafrasi_cat.pipeline.config import PipelineConfig
+from parafrasi_cat.pipeline.config import FINGERPRINT_REQUIRED, PipelineConfig
 from parafrasi_cat.pipeline.pipeline import Pipeline
 from parafrasi_cat.preferences.author import AuthorPreferences
 from parafrasi_cat.preferences.evaluator import PreferenceEvaluator
@@ -30,9 +33,13 @@ from parafrasi_cat.rules.dictionary import DictionaryPreferenceRule
 from parafrasi_cat.rules.registry import RuleRegistry, default_registry
 from parafrasi_cat.rules.ruleset import RuleSet, RuleSetConfig, build_rule_set
 from parafrasi_cat.scoring.scorer import CompositeScorer
+from parafrasi_cat.style.adaptation import AuthorAdaptation
 from parafrasi_cat.style.evaluator import StyleEvaluator
 from parafrasi_cat.style.observations import StyleResources
 from parafrasi_cat.style.profile import load_style_profile
+from parafrasi_cat.syntax.analysis import NullSyntax, SyntaxProvider
+from parafrasi_cat.syntax.spacy_parser import SpacySyntax
+from parafrasi_cat.validation.agreement import AgreementValidator
 from parafrasi_cat.validation.base import Validator
 from parafrasi_cat.validation.epistemic import (
     EPISTEMOLOGY_FILE,
@@ -99,7 +106,9 @@ def build_pipeline(
         rule_set = rule_set.with_extra_rules([DictionaryPreferenceRule(dictionaries)])
 
     all_terms = tuple(dict.fromkeys((*user_terms, *dictionary_terms)))
-    validators = build_validators(config, paths, analyzer, lexicon, rule_set, all_terms)
+    morphology = create_morphology_provider(config.morphology, lang, lexicon=lexicon)
+    syntax = build_syntax_provider(config, morphology)
+    validators = build_validators(config, paths, analyzer, lexicon, rule_set, all_terms, syntax)
 
     style_profile = load_style_profile(
         paths.resolve_style_profile(config.style_profile), paths=paths
@@ -141,7 +150,25 @@ def build_pipeline(
             max_sentence_length=author.max_sentence_length if author is not None else None,
             analyzer=analyzer,
         )
-    scorer = CompositeScorer(config.scoring, style_evaluator, preference_evaluator)
+    adaptation = None
+    weights = config.scoring
+    if config.source_mode.adapts_to_author and style_profile.preferences is None:
+        # Esborrany generat amb LLM: l'adaptació exigeix l'empremta real de l'autor.
+        # Sense empremta no s'executa cap pseudomode autoral: es diu clarament.
+        raise ConfigError(FINGERPRINT_REQUIRED)
+    if style_profile.preferences is not None:
+        # Amb empremta, l'afinitat amb l'autor entra a la puntuació: amb tot el pes
+        # per a un esborrany generat amb LLM, i com un desempat lleu amb text propi.
+        adaptation = AuthorAdaptation(
+            style_profile.preferences,
+            analyzer,
+            StyleResources.load(paths, config.language, lexicon=lexicon),
+            explicit_forms=resolver.explicit_forms(),
+            syntax=syntax,
+        )
+        if not config.source_mode.adapts_to_author:
+            weights = replace(weights, author_affinity=weights.author_affinity_own)
+    scorer = CompositeScorer(weights, style_evaluator, preference_evaluator, adaptation)
 
     return Pipeline(
         analyzer=analyzer,
@@ -157,11 +184,16 @@ def build_pipeline(
         max_semantic_risk=config.max_semantic_risk,
         min_confidence=config.min_confidence,
         style_profile=style_profile,
-        morphology=create_morphology_provider(config.morphology, lang, lexicon=lexicon),
+        morphology=morphology,
+        syntax=syntax,
         lexicon=lexicon,
         max_level=config.level,
         dictionary_names=dictionaries.names,
         preferences_name=author.name if author is not None else "",
+        preferred_sentence_length=author.preferred_sentence_length if author else None,
+        max_sentence_length=author.max_sentence_length if author else None,
+        adaptation=adaptation,
+        source_mode=config.source_mode.value,
     )
 
 
@@ -172,6 +204,7 @@ def build_validators(
     lexicon: ClosedClassLexicon,
     rule_set: RuleSet,
     user_terms: tuple[str, ...] = (),
+    syntax: SyntaxProvider | None = None,
 ) -> list[Validator]:
     """Validadors en ordre de prioritat: contingut, terminologia, epistemologia, gramàtica.
 
@@ -180,7 +213,8 @@ def build_validators(
     - terminologia protegida per l'usuari i pels diccionaris del projecte;
     - marcadors d'atenuació i certesa, i classificació epistemològica explícita
       (només les regles amb ``allows_epistemic_change`` poden canviar-la);
-    - gramaticalitat heurística i marge de longitud.
+    - gramaticalitat heurística, concordança subjecte-verb (amb parser) i
+      marge de longitud.
     """
     lang = paths.language(config.language)
     modality = load_mapping(lang / "lexicon" / "modalitat.yaml")
@@ -207,8 +241,49 @@ def build_validators(
             EpistemicValidator(EpistemicLexicon.load(epistemology), rule_set.epistemic_rule_ids)
         )
     validators.append(GrammarHeuristicValidator())
+    if syntax is not None and syntax.available:
+        # Concordança subjecte-verb amb el parser local: només les discordances
+        # que hagi introduït el motor descarten un candidat.
+        validators.append(AgreementValidator(syntax))
     validators.append(LengthRatioValidator(*config.length_ratio))
+    languagetool = build_languagetool_validator(config, paths)
+    if languagetool is not None:
+        validators.append(languagetool)
     return validators
+
+
+def build_syntax_provider(
+    config: PipelineConfig, morphology: MorphologyProvider | None = None
+) -> SyntaxProvider:
+    """Analitzador sintàctic local segons la configuració.
+
+    ``auto`` fa servir el parser si està instal·lat i, si no, no en fa servir
+    cap: el motor continua amb les heurístiques de sempre. El parser només
+    analitza; la generació continua sent exclusivament de les regles.
+
+    Si se li passa el proveïdor morfològic, el criteri de confiança també
+    comprova que morfologia i sintaxi no es contradiguin.
+    """
+    if config.syntax in ("none", "null", ""):
+        return NullSyntax()
+    if config.syntax in ("auto", "spacy"):
+        parser = SpacySyntax(morphology=morphology)
+        return parser if parser.available else NullSyntax()
+    raise ConfigError(f"Analitzador sintàctic desconegut: «{config.syntax}» (auto, spacy, none)")
+
+
+def build_languagetool_validator(
+    config: PipelineConfig, paths: ProjectPaths
+) -> LanguageToolValidator | None:
+    """Validador de LanguageTool si s'ha demanat i hi ha una instal·lació local.
+
+    Mai no és obligatori: sense Java o sense LanguageTool, es retorna ``None`` i
+    la canonada continua amb els validadors interns.
+    """
+    if not config.languagetool:
+        return None
+    client = LanguageToolClient.discover(paths.root)
+    return LanguageToolValidator(client) if client.available else None
 
 
 def load_dictionaries(config: PipelineConfig, paths: ProjectPaths) -> DictionarySet:
