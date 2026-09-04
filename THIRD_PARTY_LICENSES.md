@@ -4,6 +4,9 @@
 lingüístics opcionals els obté cada usuari al seu ordinador, i aquest fitxer
 documenta d'on surten, amb quina llicència i amb quina atribució.
 
+El codi propi es distribueix sota **GPL-3.0-or-later** (vegeu `LICENSE`), que és
+compatible amb tots els components amb què el programa s'executa.
+
 ## Softcatalà — catalan-dict-tools
 
 | | |
@@ -58,6 +61,35 @@ lloc. Ho diu el fitxer
 `scripts/install_languagetool.py`, amb confirmació explícita, a `vendor/`, que
 està a `.gitignore`. Mai no es fa servir l'API de languagetool.org: el programa
 s'executa com un procés local.
+
+## Analitzador sintàctic: spaCy i el model català
+
+| | |
+|---|---|
+| Codi | [spaCy](https://spacy.io) — **MIT** |
+| Model | `ca_core_news_sm` 3.8.0 — **GPL-3.0** |
+| Origen del model | https://github.com/explosion/spacy-models |
+| Dades d'entrenament | UD Catalan AnCora v2.8 |
+| Ús | Dependències, categories gramaticals, trets morfològics i lemes |
+
+Atribució de les dades d'entrenament, tal com consta a `LICENSES_SOURCES` del
+paquet del model:
+
+> **UD Catalan AnCora v2.8**
+> Autors: Martínez Alonso, Héctor; Pascual, Elena; Zeman, Daniel
+> URL: https://github.com/UniversalDependencies/UD_Catalan-AnCora
+> Llicència: GNU GPL 3.0
+>
+> **UD Catalan AnCora v2.8 + NER v3.2.9**
+> Autors: Carlos Rodríguez-Penagos i Carme Armentano-Oller
+> URL: https://github.com/TeMU-BSC/spacy/releases/tag/3.2.9
+> Llicència: CC BY 4.0
+
+El model **només analitza**: no genera text, no reescriu i no pren cap decisió.
+No és un model generatiu.
+
+**Aquest repositori no conté spaCy ni el model.** Els instal·la
+`scripts/install_parser.py`, amb confirmació explícita.
 
 ## Dependència de Python
 

@@ -4,14 +4,12 @@ Motor **local** de reredacció i parafraseig en català, amb una interfície web
 que s'executa al mateix ordinador.
 
 > **El motor no utilitza LLM ni serveis generatius. La reredacció es produeix
-> mitjançant regles lingüístiques explícites, recursos editables, anàlisi
-> estilomètrica i selecció determinista de candidats.**
+> mitjançant regles lingüístiques explícites, recursos locals, anàlisi
+> morfològica i sintàctica, validació gramatical i selecció determinista de
+> candidats.**
 
-**Estat: versió funcional.** Hi ha 40 regles declaratives repartides en 13
-famílies, protecció de contingut, validació semàntica i epistemològica,
-puntuació multidimensional, diccionaris per projecte, preferències d'autor,
-feedback manual i una interfície local. Amb la mateixa entrada i la mateixa
-configuració, el resultat és sempre idèntic.
+**Versió 1.0.0.** Un cop instal·lats els recursos, tot funciona sense connexió i
+cap text no surt mai de l'ordinador.
 
 ## Què és
 
@@ -19,44 +17,31 @@ configuració, el resultat és sempre idèntic.
   quina regla l'ha generada, quin risc té i per què s'ha triat o descartat.
 - Una eina **assistida**: mostra els candidats perquè una persona en triï un,
   l'editi i el validi.
-- Un projecte de **recursos editables**: les regles, els diccionaris, les
-  preferències i el feedback són fitxers YAML que podeu llegir, modificar i
-  versionar amb Git.
+- Un projecte de **recursos editables**: regles, diccionaris, preferències i
+  feedback són fitxers que podeu llegir, modificar i versionar amb Git.
 
 ## Què no és
 
-- **No és un LLM ni una API generativa.** No hi ha cap model neuronal, cap
-  crida a cap servei i cap dependència que en necessiti.
-- **No és un reescriptor autònom.** El resultat s'ha de revisar: el motor
-  garanteix que no altera dades, no que la frase resultant sigui sempre la
-  millor opció estilística.
+- **No és un LLM ni una API generativa.** No hi ha cap model generatiu ni cap
+  crida a cap servei.
+- **El parser sintàctic només analitza.** És un model estadístic d'anàlisi, no
+  generatiu: no escriu text, no completa frases i no decideix res. Tota la
+  generació surt de les regles.
+- **No és un reescriptor autònom.** El resultat s'ha de revisar.
 - **No inventa contingut.** No afegeix informació, no treu matisos i no
   resumeix.
-- **No aprèn.** El feedback són recomptes explícits en un YAML, no un model
-  entrenat.
-- **No envia res enlloc.** No hi ha telemetria ni connexions de sortida.
+- **No aprèn.** El feedback són recomptes explícits en un YAML.
+- **No envia res enlloc.** Les úniques descàrregues són les d'instal·lació dels
+  recursos, sempre amb confirmació.
 
 ## Principi fonamental
 
 **El contingut original és intocable.** El motor pot canviar la *forma* d'una
 frase, però no pot alterar noms propis, dates, xifres, números romans,
 citacions, text entre cometes, terminologia protegida, negacions ni la força
-epistemològica. Cada prohibició té un mecanisme concret: detectors de
-fragments protegits abans d'aplicar cap regla, i validadors que tornen a
-comprovar cada candidat. Un candidat que en trenqui cap queda invalidat i mai
-no se selecciona.
-
-Vegeu [`docs/principis-de-preservacio.md`](docs/principis-de-preservacio.md).
-
-## Garanties
-
-| Garantia | Com es compleix |
-|---|---|
-| Cap LLM ni model generatiu | Només regles, diccionaris i heurístiques deterministes. Un test comprova que el paquet no importa cap biblioteca de models. |
-| Cap connexió de sortida | L'únic paquet extern és PyYAML. Un test comprova que cap fitxer del paquet importa un client de xarxa, ni tan sols el servidor local. |
-| Cap telemetria | El registre de traçabilitat és local, opcional i desactivat per defecte. |
-| Explicabilitat | Cada transformació porta explicació, regla, risc i confiança; la interfície i `--explain` les mostren. |
-| Determinisme | Mateixa entrada i mateixa configuració donen sempre el mateix resultat. |
+epistemològica. Els detectors marquen els fragments intocables abans d'aplicar
+cap regla i els validadors ho tornen a comprovar a cada candidat. Un candidat
+que en trenqui cap queda invalidat i mai no se selecciona.
 
 ## Instal·lació
 
@@ -65,95 +50,92 @@ Requereix Python 3.11 o superior.
 ```bash
 git clone <url-del-repositori> parafrasi-cat
 cd parafrasi-cat
-pip install -e ".[dev]"
+pip install -e .
 ```
 
-## Interfície local
+### Sense escriure cap ordre
+
+| Sistema | Fitxer |
+|---|---|
+| Windows | `start_parafrasi.bat` |
+| macOS | `start_parafrasi.command` |
+| Linux | `start_parafrasi.sh` |
+
+Feu-hi doble clic: instal·la el que calgui la primera vegada i obre la
+interfície al navegador.
+
+## Com obrir la web
 
 ```bash
 parafrasi-cat web                       # obre http://127.0.0.1:8765/
 parafrasi-cat web --port 9000 --no-browser
-parafrasi-cat web --enable-history      # arrenca amb el registre actiu
 ```
 
 El servidor es lliga a l'amfitrió local i la pàgina no carrega cap recurs
-extern. Des de la interfície podeu:
+extern.
 
-- escriure o enganxar el text;
-- triar **nivell** (1-5), **empremta o perfil d'estil**, un o diversos
-  **diccionaris**, un fitxer de **preferències** i el **mode**;
-- generar candidats i veure, per a cada frase o paràgraf, el text original, el
-  millor candidat i la resta de candidats;
-- veure, de cada candidat, les **diferències** respecte de l'original, les
-  **regles aplicades**, les **puntuacions** per dimensió i els **advertiments**
-  de validació, amb el motiu del descart si no s'ha acceptat;
-- consultar els **fragments protegits** que s'han detectat;
-- marcar un candidat com a **preferit**, **acceptable** o **rebutjat**;
-- **editar** el resultat final a mà, **copiar-lo** o **exportar-lo**.
+## Com instal·lar els recursos
 
-## Ús per CLI
+La interfície té una secció **Recursos lingüístics** amb l'estat de cada
+component:
+
+```
+Morfologia catalana      ✓ activa
+Parser sintàctic català  ✓ activa
+LanguageTool local       ✓ actiu
+Java                     ✓ disponible
+Mode fora de línia       ✓ disponible
+```
+
+Si en falta algun, hi surt un botó per instal·lar-lo. **Abans de baixar res** es
+mostra el component, l'origen, la versió, la mida aproximada i la llicència, i
+cal confirmar-ho explícitament. Després no cal connexió per a res.
+
+Des del terminal, si ho preferiu:
 
 ```bash
-# Reescriptura amb informe de candidats, puntuacions i descartats
-parafrasi-cat rewrite text.txt --level 3
-parafrasi-cat rewrite text.txt --style style/author.json \
-  --dictionary dictionaries/historia.yml --preferences preferences/author.yml
-parafrasi-cat rewrite text.txt --max-risk low --min-confidence 0.75 --quiet
+python scripts/install_parser.py                                  # spaCy + model català
+python scripts/install_languagetool.py                            # LanguageTool (cal Java)
+git clone --depth 1 https://github.com/Softcatala/catalan-dict-tools
+python scripts/import_softcatala.py --source catalan-dict-tools   # morfologia
+```
 
-# Reescriptura curta, amb explicació o en JSON
-parafrasi-cat --rules parafrasi --explain "Gairebé sempre plou, tot i que avui no."
-parafrasi-cat --rules parafrasi --json --input text.txt
+Cap dels tres és obligatori: sense ells, el motor funciona amb els seus
+components interns.
 
-# Terminologia protegida des de la línia d'ordres
-parafrasi-cat --rules parafrasi --protect "capital circulant" --protect-file termes.txt "…"
+## Com crear una empremta d'autor
 
-# Empremtes estilístiques i feedback
+A la secció **Empremta de l'autor**: poseu-hi un nom, trieu els vostres textos
+`.txt` o `.md` i premeu **Crea l'empremta**. L'anàlisi es fa en aquest
+ordinador, els textos no en surten i **no s'entrena cap model**: només se'n
+desen recomptes i estadístics robustos a `style/<nom>.json`.
+
+També des del terminal:
+
+```bash
 parafrasi-cat style build corpus/author/ --profile resources/style/autor.yaml
-parafrasi-cat feedback preferred "obra de"
-parafrasi-cat feedback show
-
-# Configuració resolta i fitxer de configuració
-parafrasi-cat --info --rules parafrasi
-parafrasi-cat --config examples/config_exemple.yaml "…"
+parafrasi-cat style show style/autor.json
 ```
 
-També funciona amb `python -m parafrasi_cat` i llegint de l'entrada estàndard.
+## Com parafrasejar
 
-### Des de Python
+Des de la interfície: enganxeu o carregueu el text, trieu nivell, empremta,
+diccionaris, preferències i mode, i premeu **Genera candidats**. Per a cada
+frase i paràgraf veureu el text original, el millor candidat, la resta de
+candidats, les diferències, les regles aplicades, les puntuacions per dimensió
+i els advertiments de validació. Podeu marcar candidats, editar el resultat i
+copiar-lo o exportar-lo.
 
-```python
-from parafrasi_cat import PipelineConfig, build_pipeline
+Des del terminal:
 
-config = PipelineConfig(rule_set="parafrasi", level=3, dictionaries=("historia",))
-result = build_pipeline(config).run("Van trobar un fèretre de pedra a la cripta.")
-print(result.output_text)          # Trobaren un sarcòfag de pedra a la cripta.
-print(result.report())             # candidats, puntuacions i descartats
-for t in result.transformations:
-    print(t.rule_id, t.text_before, t.text_after, t.semantic_risk, t.explanation)
+```bash
+parafrasi-cat rewrite text.txt --level 5
+parafrasi-cat rewrite text.txt --style style/autor.json \
+  --dictionary dictionaries/historia.yml --preferences preferences/author.yml
+parafrasi-cat --rules parafrasi --explain "Gairebé sempre plou, tot i que avui no."
 ```
-
-## Nivells 1-5
-
-El nivell limita fins on poden arribar les regles. Un nivell més alt
-n'habilita més, però no relaxa cap protecció.
-
-| Nivell | Abast | Regles actuals |
-|---|---|---|
-| 1 | Lèxic: substitucions de paraules i locucions | 3 |
-| 2 | Connectors equivalents dins la mateixa funció discursiva | 7 |
-| 3 | Sintaxi: còpula, agent, presència, ordre, temporals, subordinades | 26 |
-| 4 | Entre frases: fusió, divisió i puntuació | 4 |
-| 5 | Paràgraf | cap encara |
-
-El nivell 5 està reservat per a regles de paràgraf que encara no existeixen:
-avui, triar 5 dona el mateix resultat que triar 4.
 
 ## Modes
-
-Un mode és un envoltant de seguretat sobre la configuració. **Cap dels dos
-modes no toca les proteccions**: els termes protegits, els diccionaris, les
-preferències i la llista de validadors són idèntics en tots dos, i un test ho
-comprova.
 
 | | Conservador | Reredacció profunda |
 |---|---|---|
@@ -162,54 +144,73 @@ comprova.
 | Transformacions per candidat | 1 | fins a 3 |
 | Reaplicació de regles | no | sí |
 | Nivell màxim | 3 | 5 |
-| Marge de longitud | 0,8-1,25 | 0,6-1,6 |
 
-El **mode conservador** només accepta canvis de risc baix i confiança alta,
-no en combina cap i no reestructura entre frases. Si cap alternativa no és
-clarament segura, la puntuació deixa guanyar el text original.
+El **conservador** només accepta canvis clarament segurs i, si no n'hi ha cap,
+conserva l'original. El **profund** arriba fins al nivell 5 i combina
+transformacions. Cap dels dos no pot tocar cap protecció: els termes protegits,
+els diccionaris, les preferències i la llista de validadors són idèntics.
 
-El **mode profund** arriba fins al nivell 5, combina transformacions i
-reaplica regles sobre els millors candidats. El que **no** pot fer, en cap
-cas, és alterar noms propis, dates, xifres, números romans, citacions, text
-protegit, terminologia protegida, negacions ni força epistemològica.
+## Nivells 1-5
 
-Els modes són un concepte de la interfície. Des del CLI s'obté l'equivalent
-amb `--level`, `--max-risk` i `--min-confidence`.
+| Nivell | Abast | Regles |
+|---|---|---|
+| 1 | Lèxic | 3 |
+| 2 | Connectors | 7 |
+| 3 | Sintaxi: còpula, agent, presència, ordre, temporals, subordinades | 26 |
+| 4 | Entre frases: divisió i puntuació | 3 |
+| 5 | **Reestructuració controlada de paràgraf** | 1 |
 
-## Corpus
+El **nivell 5 és diferent del 4**: activa una fase de paràgraf que reorganitza
+frases senceres (fusió amb represa anafòrica). El nivell 4 treballa dins de
+cada frase i no arriba a aquesta fase. Les proteccions són exactament les
+mateixes als dos nivells.
 
-```
-corpus/
-├── author/       # els vostres textos, per construir l'empremta (no es versiona)
-├── excluded/     # material que no ha d'entrar a l'anàlisi (no es versiona)
-├── exemples/     # tres estils d'exemple (academic, concis, narratiu) amb validació
-└── validation/   # frases de prova del motor
-```
+## Morfologia
 
-`corpus/author/` i `corpus/excluded/` estan al `.gitignore`: els textos
-privats no es publiquen mai.
+El diccionari de Softcatalà aporta lema, categoria, gènere, nombre, persona,
+temps i mode d'1.188.611 formes. Les regles hi conjuguen en lloc de fer servir
+parelles escrites a mà:
 
-## Empremta estilística
-
-L'anàlisi del corpus d'un autor produeix una empremta JSON explícita i
-editable (`style/<autor>.json`): longitud de frase, connectors, densitat de
-puntuació, variants equivalents preferides i altres característiques, cadascuna
-amb el nombre d'observacions, la confiança i la variabilitat.
-
-```bash
-parafrasi-cat style build corpus/author/ --validation corpus/validacio/
-parafrasi-cat style compare style/author.json style/altre.json
-parafrasi-cat style show style/author.json
+```yaml
+transformation: "{cop|inflect(constituir,és=constitueix,són=constitueixen)}"
 ```
 
-L'empremta es calcula amb recomptes i estadístics robustos, no amb cap model.
-El repositori no en porta cap: es genera a partir del vostre corpus. Fins
-llavors, la interfície ofereix els perfils de `resources/style/`.
+La prioritat és explícita: **recurs morfològic → mapatge declarat → heurística →
+no transformar**. Els mapatges es conserven com a reserva, de manera que sense
+el recurs el motor es comporta com abans.
+
+## Parser sintàctic
+
+spaCy amb `ca_core_news_sm` (UD Catalan AnCora) aporta dependències, subjecte,
+objecte, subordinades i coordinacions. Les regles el consulten **només si el
+demanen**:
+
+```yaml
+conditions:
+  syntax:
+    requires_parser: true
+    subject_number: pl
+    no_clause_boundary: true
+```
+
+Una regla sense bloc `syntax` no el consulta mai i no canvia de comportament.
+Si el parser no hi és i la regla l'exigeix, la regla no s'aplica: davant del
+dubte, no es transforma. Si el parser i els invariants de seguretat es
+contradiuen, manen els invariants.
+
+## LanguageTool
+
+Comprova gramàtica, concordança i puntuació de cada candidat. **Només valida**:
+no genera la paràfrasi, no reescriu el text i no aplica cap correcció. El motor
+de candidats és qui decideix si un candidat es penalitza o es descarta.
+
+El servidor local s'arrenca **una sola vegada** per sessió i es reutilitza, amb
+comprovació d'estat, reinici si cau i tancament net. Mai no es fa servir l'API
+de languagetool.org.
 
 ## Diccionaris
 
-Diccionaris terminològics per projecte, a `dictionaries/*.yml`, que s'activen
-sols o combinats.
+Diccionaris terminològics per projecte a `dictionaries/*.yml`, combinables:
 
 ```yaml
 entries:
@@ -218,200 +219,83 @@ entries:
     accepted: [sarcòfag funerari]
     avoid: [fèretre]
     protected: true
-    pos: nom
-    notes: "No substituir en contextos arqueològics."
 ```
 
-- `protected`: el terme i les seves formes preferides i acceptades passen a
-  ser fragments protegits. **Cap regla estilística no pot sobreescriure un
-  terme protegit.**
-- `avoid` a `preferred`: es proposa la substitució i es penalitza qualsevol
-  candidat que introdueixi una forma a evitar.
-- `accepted`: neutres.
-
-Amb diversos diccionaris actius, la protecció és acumulativa i, si dos
-diccionaris discrepen sobre una forma, mana el primer de la llista.
-
-Detalls a [`dictionaries/README.md`](dictionaries/README.md).
+Un terme `protected` passa a ser un fragment protegit: **cap regla estilística
+no el pot sobreescriure**.
 
 ## Preferències
 
-`preferences/author.yml` recull les preferències explícites de l'autor:
+`preferences/author.yml` recull les preferències explícites de l'autor: formes
+preferides i evitades, connectors, longituds de frase i pesos de variants.
 
-```yaml
-prefer: ["així com", "per tant"]
-avoid: ["a nivell de", "en base a"]
-preferred_connectors: [tanmateix, "així doncs"]
-preferred_sentence_length: 22
-max_sentence_length: 45
-preferred_variants:
-  "obra de": 1.0
-  "fet per": 0.4
-  "realitzat per": 0.7
-```
-
-### Jerarquia de prioritats
-
-1. fragments protegits explícitament;
-2. termes protegits dels diccionaris;
-3. formes preferides, acceptades o a evitar dels diccionaris;
-4. preferències explícites de l'autor i, després, el feedback;
-5. empremta estadística;
-6. preferències generals del motor.
-
-Una forma amb preferència explícita (nivells 1-4) no es torna a valorar amb
-l'empremta estadística.
+Jerarquia de prioritats: fragments protegits explícitament → termes protegits
+dels diccionaris → formes dels diccionaris → preferències de l'autor i feedback
+→ empremta estadística → preferències generals del motor.
 
 ## Feedback
 
-L'autor pot marcar una variant com a **preferida**, **acceptable** o
-**rebutjada**, des de la interfície o des del CLI. Els recomptes es desen en
-un YAML llegible:
-
-```yaml
-prior: 3
-variants:
-  obra de: {preferred: 4, acceptable: 2, rejected: 0}
-  fet per: {preferred: 0, acceptable: 1, rejected: 3}
-```
-
-El pes d'una variant és la mitjana d'aprovació suavitzada amb `prior`
-observacions neutres: `(preferred + 0,5·acceptable + 0,5·prior) / (total +
-prior)`. Amb `prior` 3, una sola decisió mou el pes de 0,50 a 0,625, de manera
-que cap tria aïllada no capgira les preferències. No s'hi entrena res: el pes
-es recalcula cada vegada a partir d'uns nombres que qualsevol pot llegir i
-editar.
-
-La decisió del selector és explicable: l'informe diu, per exemple, que un
-candidat guanya perquè introdueix «obra de», que l'autor ha marcat com a
-preferida 4 vegades, i elimina «fet per», rebutjada 3 vegades.
-
-Detalls a [`preferences/README.md`](preferences/README.md).
-
-## Protecció epistemològica
-
-Cada expressió del lèxic epistemològic
-(`resources/ca/lexicon/epistemologia.yaml`) té una **funció** (dubte,
-possibilitat, aparença, indici, demostració) i una **força** (0 a 4). El
-validador bloqueja qualsevol candidat que canviï el perfil epistemològic de
-la frase, si la regla que el proposa no hi està autoritzada explícitament.
-
-Dues classes de la mateixa força no són equivalents: «indica» no és
-«suggereix» i «demostra» no és «confirma». Una hipòtesi no pot esdevenir una
-afirmació, ni al mode profund. Per exemple, «Aquesta documentació permet
-plantejar que l'església podria haver existit abans del 1050, però no es pot
-demostrar» es pot dividir en dues frases, però cap candidat acceptat no en
-treu «podria» ni el converteix en una certesa.
+Marcar una variant com a **preferida**, **acceptable** o **rebutjada** suma un
+recompte a un YAML llegible. El pes és la mitjana d'aprovació suavitzada amb un
+prior, de manera que cap decisió aïllada no capgira les preferències. No
+s'entrena res.
 
 ## Traçabilitat
 
-El registre local és **opcional i està desactivat per defecte**. Quan està
-desactivat no s'escriu res: ni el text, ni la configuració, ni cap metadada.
+Registre local **opcional i desactivat per defecte**. Amb el registre
+desactivat no s'escriu res. Quan s'activa, cada reescriptura desa una línia JSON
+amb el text original, la data, la configuració, els candidats, les puntuacions,
+el candidat seleccionat, les regles, el feedback i l'edició final.
 
-Quan s'activa, cada reescriptura desa una línia JSON a
-`history/parafrasi-cat.jsonl` amb el text original, la data, la configuració,
-l'empremta, els diccionaris, les preferències, el nivell, els candidats amb
-les puntuacions, el candidat seleccionat, les regles aplicades, el feedback i
-l'edició manual final. El fitxer és local, llegible, exportable des de la
-interfície i està al `.gitignore`.
+## Fora de línia
+
+Cap component consulta Internet durant el parafraseig, l'anàlisi, la validació,
+la puntuació, la selecció, el feedback o l'exportació. Les úniques connexions
+possibles són amb aquest mateix ordinador: el navegador amb la interfície, i la
+interfície amb el servidor local de LanguageTool. Els tests ho comproven
+bloquejant tota connexió que no sigui de bucle local.
 
 ## Com afegir una regla
-
-Les regles es declaren com a dades, no com a codi:
 
 1. Afegiu la definició a `resources/ca/transformations/<família>.yaml` amb
    `rule_id`, `engine`, `category`, `level`, `semantic_risk`, `confidence`,
    `pattern`, `transformation`, `conditions`, `exceptions` i **exemples
    positius i negatius**.
 2. Si és una família nova, incloeu el fitxer a `rules/parafrasi.yaml`.
-3. Afegiu el `rule_id` a `RULE_IDS`, a
-   `tests/test_regles_definicions.py`: el test comprova que la regla compleix
-   tots els seus exemples i que té les metadades completes.
+3. Afegiu el `rule_id` a `RULE_IDS`, a `tests/test_regles_definicions.py`.
 4. Executeu `make check`.
-
-Per a un motor nou (no un patró de tokens), implementeu una subclasse de
-`Rule` i registreu-la a `rules/registry.py`.
-
-El format del motor de patrons és a
-[`docs/format-de-recursos.md`](docs/format-de-recursos.md) i el contracte de
-cada component, a [`docs/arquitectura.md`](docs/arquitectura.md).
-
-## Arquitectura
-
-```
-text ─► analyzer ─► protected ─► rules ─► candidates ─► validation ─► scoring ─► pipeline ─► resultat
-        (frases,    (fragments   (propostes  (identitat +  (invariants   (puntuació   (reconstrucció
-         tokens)     intocables)  explicades)  variants)     i epistemo-   i selecció)  del document)
-                                                             logia)
-```
-
-| Paquet (`src/parafrasi_cat/`) | Responsabilitat |
-|---|---|
-| `core/` | `Span`, `Transformation`, `SemanticRisk`, errors, utilitats de text. |
-| `analyzer/` | Frases, tokens, clítics, apòstrofs, numerals i lexicó de classes tancades. |
-| `morphology/` | Trets flexius: recurs de Softcatalà, analitzador intern i adaptadors opcionals. |
-| `adapters/` | Eines externes locals i opcionals (LanguageTool) i detecció de recursos. |
-| `protected/` | Detectors de dates, xifres, romans, cometes, citacions, noms propis i termes. |
-| `rules/` | Motor de patrons, regles declaratives, registre de motors i conjunts de regles. |
-| `candidates/` | `Candidate` i generació de variants, combinacions i reaplicacions. |
-| `validation/` | Invariants de contingut, terminologia, epistemologia i gramaticalitat. |
-| `style/` | Perfils, mètriques, empremta estilística i preferències derivades. |
-| `dictionaries/` | Diccionaris terminològics per projecte. |
-| `preferences/` | Preferències explícites, feedback i jerarquia de prioritats. |
-| `scoring/` | Pesos, puntuació multidimensional i selecció determinista. |
-| `pipeline/` | Configuració, modes, construcció de la canonada i resultats. |
-| `web/` | Servei, servidor local i pàgina de la interfície. |
-| `cli.py` | Línia d'ordres i subordres. |
 
 ## Desenvolupament
 
 ```bash
 make test        # pytest
-make lint        # ruff (estil i format)
+make lint        # ruff
 make typecheck   # mypy en mode estricte
 make check       # tot
 ```
 
-## Límits coneguts
+## Limitacions conegudes
 
-Perquè quedi clar què es pot esperar del motor:
-
-- **No hi ha analitzador sintàctic.** Amb el diccionari de Softcatalà importat,
-  el motor sap el lema i els trets de cada forma, però els límits dels
-  sintagmes es continuen deduint amb heurístiques. En català hi ha molta
-  homografia entre noms i verbs, i és on es concentren els errors.
-- **Sense LanguageTool, la gramaticalitat de la sortida no es comprova a fons.**
-  El validador intern detecta contraccions incorrectes, signes desaparellats i
-  defectes de puntuació, però no concordança ni règim verbal. Amb LanguageTool
-  local activat, la concordança sí que es comprova.
-- **La cobertura és limitada.** Amb 40 regles, moltes frases no encaixen amb
-  cap i es retornen sense canvis.
+- **La cobertura és limitada.** Amb 40 regles, moltes frases no encaixen amb cap
+  i es retornen sense canvis. La v1.0 prefereix no transformar abans que
+  arriscar el significat.
+- **El parser no és infal·lible.** És un model estadístic entrenat sobre AnCora:
+  encerta la majoria de casos, però no tots. Per això les regles que el fan
+  servir exigeixen confiança i, quan no n'hi ha, no transformen.
 - **Les regles s'han desenvolupat sobre un corpus petit.** El rendiment sobre
   text arbitrari serà inferior al dels exemples del repositori.
-
-Les proteccions de contingut, en canvi, són estructurals i es comproven a
-cada candidat.
-
-## Recursos lingüístics opcionals
-
-El motor funciona sense cap recurs extern. Dos components opcionals, tots dos
-locals i desactivats per defecte, en milloren la qualitat:
-
-| Component | Aporta | Instal·lació |
-|---|---|---|
-| Morfologia de Softcatalà | Lema, categoria, gènere, nombre, persona, temps i mode d'1,19 milions de formes catalanes | `python scripts/import_softcatala.py --source /ruta/a/catalan-dict-tools` |
-| LanguageTool local | Validació de gramàtica, concordança i puntuació de cada candidat | `python scripts/install_languagetool.py` (cal Java) |
-
-Cap dels dos no es versiona en aquest repositori. LanguageTool **només valida**:
-no genera la paràfrasi ni reescriu mai el text. Un cop instal·lats, tot
-funciona fora de línia.
-
-Detalls i llicències a
-[`docs/recursos-linguistics.md`](docs/recursos-linguistics.md),
-[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) i
-[`docs/eines-externes-opcionals.md`](docs/eines-externes-opcionals.md).
-No s'ha copiat codi de cap altre repositori.
+- **Sense LanguageTool no es comprova la concordança de la sortida.** El
+  validador intern detecta contraccions incorrectes, signes desaparellats i
+  defectes de puntuació, però no concordança ni règim verbal.
+- **La primera comprovació amb LanguageTool és lenta** (uns segons), perquè el
+  servidor local hi carrega el model català. Les següents són immediates.
 
 ## Llicència
 
-Pendent de definir pel propietari del projecte.
+GPL-3.0-or-later. Vegeu [`LICENSE`](LICENSE) i, per a les atribucions de cada
+component, [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
+
+Documentació addicional: [`docs/recursos-linguistics.md`](docs/recursos-linguistics.md),
+[`docs/arquitectura.md`](docs/arquitectura.md),
+[`docs/principis-de-preservacio.md`](docs/principis-de-preservacio.md),
+[`CHANGELOG.md`](CHANGELOG.md).

@@ -24,16 +24,24 @@ Llicència de LanguageTool: LGPL-2.1-or-later. Vegeu
 
 from __future__ import annotations
 
+import atexit
+import http.client
 import json
 import os
 import re
 import shutil
+import socket
 import subprocess
+import threading
+import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlencode
 
 from parafrasi_cat.candidates.candidate import Candidate
+from parafrasi_cat.core.errors import ConfigError
 from parafrasi_cat.validation.base import ValidationContext
 from parafrasi_cat.validation.result import (
     ValidationDimension,
@@ -45,8 +53,9 @@ from parafrasi_cat.validation.result import (
 #: Variable d'entorn que apunta al directori de LanguageTool.
 ENV_HOME = "PARAFRASI_CAT_LANGUAGETOOL"
 
-#: Noms del fitxer executable de la línia d'ordres dins de la distribució.
+#: Fitxers de la distribució que fa servir l'adaptador.
 COMMANDLINE_JAR = "languagetool-commandline.jar"
+SERVER_JAR = "languagetool-server.jar"
 
 #: Llocs on es busca la instal·lació, en ordre.
 SEARCH_PATHS: tuple[str, ...] = (
@@ -57,9 +66,9 @@ SEARCH_PATHS: tuple[str, ...] = (
     "/usr/local/share/languagetool",
 )
 
-#: Separador entre candidats en una comprovació per lots. És una línia en blanc:
-#: LanguageTool la tracta com a canvi de paràgraf i no hi busca errors.
-BATCH_SEPARATOR = "\n\n"
+#: Amfitrions de bucle local. El client no pot connectar-se enlloc més.
+LOOPBACK = "127.0.0.1"
+LOOPBACK_HOSTS: frozenset[str] = frozenset({LOOPBACK, "localhost", "::1"})
 
 #: Tipus de problema que invaliden un candidat. La resta només el penalitzen.
 DEFAULT_BLOCKING_ISSUE_TYPES: frozenset[str] = frozenset(
@@ -72,7 +81,8 @@ DEFAULT_BLOCKING_ISSUE_TYPES: frozenset[str] = frozenset(
 #: les identifica, i una falta de concordança no és mai acceptable.
 DEFAULT_BLOCKING_CATEGORIES: tuple[str, ...] = ("CONCORDANCES",)
 
-DEFAULT_TIMEOUT = 120.0
+DEFAULT_STARTUP_TIMEOUT = 120.0
+DEFAULT_REQUEST_TIMEOUT = 60.0
 LANGUAGE = "ca"
 
 
@@ -127,6 +137,11 @@ class LanguageToolInstallation:
     jar: Path
     java: Path
     version: str = ""
+
+    @property
+    def server_jar(self) -> Path:
+        """Jar del servidor local, al costat del de la línia d'ordres."""
+        return self.jar.with_name(SERVER_JAR)
 
     def describe(self) -> str:
         version = f" {self.version}" if self.version else ""
@@ -210,11 +225,187 @@ def _read_version(directory: Path) -> str:
     return directory.name
 
 
+class LanguageToolServer:
+    """Servidor local de LanguageTool: s'arrenca una vegada i es reutilitza.
+
+    Es lliga sempre a l'amfitrió local i comprova que la màquina d'arribada
+    és de bucle local abans de connectar-s'hi. No hi ha cap manera d'apuntar
+    aquest client a un servei remot.
+    """
+
+    def __init__(
+        self,
+        installation: LanguageToolInstallation,
+        *,
+        host: str = LOOPBACK,
+        port: int = 0,
+        startup_timeout: float = DEFAULT_STARTUP_TIMEOUT,
+        request_timeout: float = DEFAULT_REQUEST_TIMEOUT,
+    ) -> None:
+        if host not in LOOPBACK_HOSTS:
+            raise ConfigError(f"LanguageTool només es pot lligar a l'amfitrió local, no a «{host}»")
+        self._installation = installation
+        self._host = host
+        self._port = port
+        self._startup_timeout = startup_timeout
+        self._request_timeout = request_timeout
+        self._process: subprocess.Popen[bytes] | None = None
+        self._lock = threading.Lock()
+        self._closed = False
+
+    @property
+    def port(self) -> int:
+        return self._port
+
+    @property
+    def running(self) -> bool:
+        return self._process is not None and self._process.poll() is None
+
+    # -- cicle de vida ---------------------------------------------------------------------
+
+    def start(self) -> bool:
+        """Arrenca el servidor si no ho està. Retorna si ha quedat en marxa."""
+        with self._lock:
+            return self._start_locked()
+
+    def _start_locked(self) -> bool:
+        if self._closed:
+            return False
+        if self.running and self._healthy():
+            return True
+        self._stop_locked()
+        self._port = self._port or _free_port(self._host)
+        command = [
+            str(self._installation.java),
+            "-cp",
+            str(self._installation.server_jar),
+            "org.languagetool.server.HTTPServer",
+            "--port",
+            str(self._port),
+        ]
+        try:
+            self._process = subprocess.Popen(  # noqa: S603 - ruta detectada al sistema
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except OSError:
+            self._process = None
+            return False
+        atexit.register(self.close)
+        deadline = time.monotonic() + self._startup_timeout
+        while time.monotonic() < deadline:
+            if self._process.poll() is not None:
+                self._process = None
+                return False
+            if self._healthy():
+                return True
+            time.sleep(0.25)
+        self._stop_locked()
+        return False
+
+    def _healthy(self) -> bool:
+        try:
+            self._get("/v2/languages")
+        except (OSError, ValueError):
+            return False
+        return True
+
+    def stop(self) -> None:
+        with self._lock:
+            self._stop_locked()
+
+    def _stop_locked(self) -> None:
+        process = self._process
+        self._process = None
+        if process is None or process.poll() is not None:
+            return
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:  # pragma: no cover - només si la JVM es penja
+            process.kill()
+            process.wait(timeout=10)
+
+    def close(self) -> None:
+        """Atura el servidor i no en deixa cap procés orfe."""
+        self._closed = True
+        self.stop()
+
+    def __enter__(self) -> LanguageToolServer:
+        self.start()
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
+    # -- comunicació (només bucle local) -----------------------------------------------------
+
+    def _connection(self) -> http.client.HTTPConnection:
+        if self._host not in LOOPBACK_HOSTS:  # pragma: no cover - invariant
+            raise ConfigError("LanguageTool només accepta l'amfitrió local")
+        return http.client.HTTPConnection(self._host, self._port, timeout=self._request_timeout)
+
+    def _get(self, path: str) -> bytes:
+        connection = self._connection()
+        try:
+            connection.request("GET", path)
+            response = connection.getresponse()
+            body = response.read()
+            if response.status != 200:
+                raise ValueError(f"LanguageTool ha respost {response.status}")
+            return body
+        finally:
+            connection.close()
+
+    def check(self, text: str, language: str) -> tuple[LanguageToolMatch, ...]:
+        """Demana la comprovació d'un text al servidor local."""
+        with self._lock:
+            if not self._start_locked():
+                return ()
+        payload = urlencode({"text": text, "language": language, "enabledOnly": "false"})
+        headers = {"Content-Type": "application/x-www-form-urlencoded; charset=utf-8"}
+        for attempt in range(2):
+            connection = self._connection()
+            try:
+                connection.request(
+                    "POST", "/v2/check", body=payload.encode("utf-8"), headers=headers
+                )
+                response = connection.getresponse()
+                body = response.read()
+                if response.status != 200:
+                    raise ValueError(f"LanguageTool ha respost {response.status}")
+                return _parse_json(body.decode("utf-8"))
+            except (OSError, ValueError):
+                if attempt == 0:
+                    with self._lock:  # el servidor pot haver caigut: es torna a arrencar
+                        self._stop_locked()
+                        if not self._start_locked():
+                            return ()
+                    continue
+                return ()
+            finally:
+                connection.close()
+        return ()
+
+
+def _free_port(host: str) -> int:
+    """Port lliure de l'amfitrió local perquè el servidor no xoqui amb res."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind((host, 0))
+        return int(probe.getsockname()[1])
+
+
 class LanguageToolClient:
-    """Executa LanguageTool localment i retorna els problemes que troba.
+    """Comprova textos amb LanguageTool local, reutilitzant el mateix servidor.
 
     No modifica mai cap text: només informa. Les substitucions que LanguageTool
     proposa es transporten com a informació, però el motor no les aplica.
+
+    Manté una memòria cau per sessió, en memòria i mai a disc, amb clau
+    (text, configuració, llengua). No afecta el determinisme: la mateixa
+    pregunta ja donava la mateixa resposta.
     """
 
     def __init__(
@@ -222,82 +413,91 @@ class LanguageToolClient:
         installation: LanguageToolInstallation | None = None,
         *,
         language: str = LANGUAGE,
-        timeout: float = DEFAULT_TIMEOUT,
-        extra_arguments: Sequence[str] = (),
+        server: LanguageToolServer | None = None,
+        cache: bool = True,
     ) -> None:
         self._installation = installation
         self._language = language
-        self._timeout = timeout
-        self._extra = tuple(extra_arguments)
+        self._server = server
+        if server is None and installation is not None:
+            self._server = LanguageToolServer(installation)
+        self._cache: dict[tuple[str, str, str], tuple[LanguageToolMatch, ...]] = {}
+        self._use_cache = cache
+        self._checks = 0
+        self._hits = 0
 
     @classmethod
     def discover(
-        cls, root: str | Path | None = None, *, language: str = LANGUAGE, **kwargs: object
+        cls, root: str | Path | None = None, *, language: str = LANGUAGE, **kwargs: Any
     ) -> LanguageToolClient:
         """Client amb la instal·lació que es trobi; no disponible si no n'hi ha cap."""
-        return cls(find_installation(root), language=language, **kwargs)  # type: ignore[arg-type]
+        return cls(find_installation(root), language=language, **kwargs)
 
     @property
     def installation(self) -> LanguageToolInstallation | None:
         return self._installation
 
     @property
+    def server(self) -> LanguageToolServer | None:
+        return self._server
+
+    @property
     def available(self) -> bool:
         """Cert si hi ha Java i una instal·lació local de LanguageTool."""
-        return self._installation is not None
+        return self._installation is not None and self._server is not None
+
+    @property
+    def signature(self) -> str:
+        """Identificador de la configuració, per a la clau de la memòria cau."""
+        if self._installation is None:
+            return "cap"
+        return f"{self._installation.directory}:{self._installation.version}"
+
+    @property
+    def statistics(self) -> dict[str, int]:
+        """Comprovacions fetes i encerts de la memòria cau (per als informes)."""
+        return {"checks": self._checks, "cache_hits": self._hits, "cached": len(self._cache)}
 
     def describe(self) -> str:
         if self._installation is None:
             return "LanguageTool no instal·lat: s'utilitzen només els validadors interns"
         return self._installation.describe()
 
+    def start(self) -> bool:
+        """Arrenca el servidor local per avançat, per no pagar-ho a la primera petició."""
+        return self._server.start() if self._server is not None else False
+
+    def close(self) -> None:
+        """Atura el servidor local i buida la memòria cau."""
+        if self._server is not None:
+            self._server.close()
+        self._cache.clear()
+
+    def __enter__(self) -> LanguageToolClient:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
     # -- comprovació ---------------------------------------------------------------------
 
     def check(self, text: str) -> tuple[LanguageToolMatch, ...]:
-        """Problemes d'un sol text (buit si LanguageTool no està disponible)."""
-        return self.check_many([text])[0]
+        """Problemes d'un text (buit si LanguageTool no està disponible)."""
+        if self._server is None or not text.strip():
+            return ()
+        key = (text, self.signature, self._language)
+        if self._use_cache and key in self._cache:
+            self._hits += 1
+            return self._cache[key]
+        matches = self._server.check(text, self._language)
+        self._checks += 1
+        if self._use_cache:
+            self._cache[key] = matches
+        return matches
 
     def check_many(self, texts: Sequence[str]) -> tuple[tuple[LanguageToolMatch, ...], ...]:
-        """Comprova diversos textos amb una sola execució de LanguageTool.
-
-        Els textos s'envien separats per una línia en blanc i els problemes es
-        reparteixen segons la posició que LanguageTool en dona, de manera que
-        només cal arrencar la màquina virtual una vegada per reescriptura.
-        """
-        if not texts:
-            return ()
-        if self._installation is None:
-            return tuple(() for _ in texts)
-        payload = BATCH_SEPARATOR.join(texts)
-        matches = self._run(payload)
-        return _split_by_offset(matches, texts)
-
-    def _run(self, payload: str) -> tuple[LanguageToolMatch, ...]:
-        assert self._installation is not None
-        command = [
-            str(self._installation.java),
-            "-jar",
-            str(self._installation.jar),
-            "--language",
-            self._language,
-            "--json",
-            "--encoding",
-            "utf-8",
-            *self._extra,
-            "-",
-        ]
-        try:
-            completed = subprocess.run(
-                command,
-                input=payload,
-                capture_output=True,
-                text=True,
-                timeout=self._timeout,
-                check=False,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return ()
-        return _parse_json(completed.stdout)
+        """Comprova diversos textos reutilitzant el mateix servidor i la memòria cau."""
+        return tuple(self.check(text) for text in texts)
 
 
 def _parse_json(output: str) -> tuple[LanguageToolMatch, ...]:
@@ -343,34 +543,6 @@ def _sub_mapping(data: Mapping[str, object], key: str) -> Mapping[str, object]:
     """Subdiccionari d'una resposta JSON, o buit si no hi és o no ho és."""
     value = data.get(key)
     return value if isinstance(value, Mapping) else {}
-
-
-def _split_by_offset(
-    matches: Iterable[LanguageToolMatch], texts: Sequence[str]
-) -> tuple[tuple[LanguageToolMatch, ...], ...]:
-    """Reparteix els problemes entre els textos segons la seva posició al lot."""
-    bounds: list[tuple[int, int]] = []
-    cursor = 0
-    for text in texts:
-        bounds.append((cursor, cursor + len(text)))
-        cursor += len(text) + len(BATCH_SEPARATOR)
-    grouped: list[list[LanguageToolMatch]] = [[] for _ in texts]
-    for match in matches:
-        for index, (start, end) in enumerate(bounds):
-            if start <= match.offset < end or (match.offset == start == end):
-                grouped[index].append(
-                    LanguageToolMatch(
-                        rule_id=match.rule_id,
-                        message=match.message,
-                        offset=match.offset - start,
-                        length=match.length,
-                        issue_type=match.issue_type,
-                        category=match.category,
-                        replacements=match.replacements,
-                    )
-                )
-                break
-    return tuple(tuple(group) for group in grouped)
 
 
 class LanguageToolValidator:

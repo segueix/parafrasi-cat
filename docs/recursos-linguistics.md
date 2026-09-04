@@ -7,6 +7,7 @@ atribucions són a [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md).
 | Component | Aporta | Sense ell |
 |---|---|---|
 | Morfologia de Softcatalà | Lema, categoria, gènere, nombre, persona, temps i mode d'1,19 milions de formes | S'utilitza l'analitzador intern: lexicó de classes tancades i endevinador per sufixos |
+| Parser sintàctic (spaCy) | Dependències, subjecte, objecte, subordinades i coordinacions | S'utilitzen les heurístiques de sintagmes actuals |
 | LanguageTool local | Validació de gramàtica, concordança i puntuació de cada candidat | S'utilitzen els validadors interns del motor |
 
 Cap dels dos es versiona en aquest repositori, per llicència en el primer cas i
@@ -91,6 +92,68 @@ lema d'arribada. La prioritat és explícita:
 Els parells de reserva es conserven a propòsit: sense el recurs importat, el
 motor es comporta exactament com abans.
 
+## Parser sintàctic català
+
+### Per què spaCy
+
+Es van comparar les opcions disponibles per al català:
+
+| | spaCy `ca_core_news_sm` | Stanza |
+|---|---|---|
+| Dependències, morfologia i lemes | Sí | Sí |
+| Dependències obligatòries | 19 paquets, cap de PyTorch | Inclou `torch` i `requests` |
+| Mida al disc | 28 MB | Centenars de MB amb PyTorch |
+| Velocitat | ~6 ms per frase, CPU | Més lent en CPU |
+| Llicència | Codi MIT, model GPL-3.0 | Codi Apache-2.0, models variables |
+
+Per a una eina d'escriptori local que ha de funcionar en un ordinador
+qualsevol i sense connexió, spaCy és clarament la millor opció: analitza tot el
+que el motor necessita amb una fracció de la mida i sense arrossegar PyTorch.
+
+### Instal·lació
+
+```bash
+python scripts/install_parser.py          # informa i demana confirmació
+python scripts/install_parser.py --info   # només informa
+```
+
+O des de la interfície, a **Recursos lingüístics**.
+
+### Què aporta i què no
+
+El parser **només analitza**. No genera text, no completa frases, no reescriu i
+no decideix estil. La generació continua sent exclusivament de les regles, els
+diccionaris i la selecció determinista de candidats.
+
+Aporta: arrel de la frase, subjecte, objecte, complements, subordinades,
+coordinacions, negacions i els trets morfològics de cada mot.
+
+### Ús a les regles: opt-in
+
+Una regla només consulta el parser si declara un bloc `syntax`:
+
+```yaml
+conditions:
+  syntax:
+    requires_parser: true      # sense parser, la regla no s'aplica
+    subject_number: pl         # el subjecte principal ha de ser plural
+    no_clause_boundary: true   # l'encaix no pot partir una subordinada
+    max_clauses: 1
+    no_negation: true
+```
+
+Les regles que no el declaren **no canvien de comportament**, ni amb parser ni
+sense. La jerarquia és:
+
+```
+morfologia local  +  parser sintàctic local  +  heurístiques  +  regles explícites
+```
+
+Quan el parser té prou confiança, s'utilitza la informació sintàctica. Quan no
+en té, o quan no està instal·lat, actuen les heurístiques de sempre. Si el
+parser i els invariants de seguretat es contradiuen, **manen els invariants i
+no es transforma**.
+
 ## LanguageTool local
 
 ### Instal·lació
@@ -135,21 +198,36 @@ uncategorized`, però amb la categoria `CONCORDANCES_*`. El motor mira totes
 dues coses, de manera que «Aquests sarcòfags presenta dos cranis» queda
 descartat i «Aquest sarcòfag presenta dos cranis» no.
 
-### Comunicació
+### Servidor persistent
 
-L'adaptador executa LanguageTool com un procés a part que llegeix el text per
-l'entrada estàndard. No s'obre cap connexió, ni tan sols a l'amfitrió local, i
-no es fa servir mai l'API de languagetool.org. Tots els candidats d'una
-reescriptura es comproven amb una sola execució.
+L'adaptador arrenca el servidor local de LanguageTool **una sola vegada** per
+sessió i el reutilitza per a totes les reescriptures. Aporta:
+
+- arrencada mandrosa: no es paga fins que es demana la primera validació;
+- comprovació d'estat abans de cada petició;
+- reinici automàtic si el procés cau;
+- tancament net en sortir, sense deixar cap procés Java orfe;
+- memòria cau per sessió amb clau (text, configuració, llengua), només en
+  memòria i mai a disc, que no afecta el determinisme.
+
+La comunicació és **exclusivament de bucle local**: l'adaptador comprova
+l'adreça abans de connectar-s'hi i no té cap manera d'apuntar a un servei
+remot. Mai no es fa servir l'API de languagetool.org.
+
+Mesures en un ordinador de proves: arrencada del servidor 2,1 s; primera
+comprovació 4,4 s (LanguageTool hi carrega el model català); comprovacions
+repetides, immediates per la memòria cau.
 
 ## Estat dels recursos
 
 La interfície mostra l'estat de cada component:
 
 ```
-Morfologia catalana: [activa]  1188611 formes del diccionari de Softcatalà.
-LanguageTool local:  [actiu]   La validació avançada està activa i s'executa en aquest ordinador.
-Java:                [disponible]
+Morfologia catalana      ✓ activa
+Parser sintàctic català  ✓ activa
+LanguageTool local       ✓ actiu
+Java                     ✓ disponible
+Mode fora de línia       ✓ disponible
 ```
 
 Des de Python:

@@ -17,6 +17,7 @@ from pathlib import Path
 
 from parafrasi_cat.adapters.languagetool import find_installation, find_java
 from parafrasi_cat.morphology.catalan import RESOURCE_RELATIVE, CatalanMorphology
+from parafrasi_cat.syntax.spacy_parser import DEFAULT_MODEL, SpacySyntax
 
 MORPHOLOGY_ACTIVE = "activa"
 MORPHOLOGY_FALLBACK = "reserva"
@@ -49,20 +50,49 @@ class LinguisticResources:
     """Estat conjunt dels recursos lingüístics opcionals."""
 
     morphology: ComponentStatus
+    syntax: ComponentStatus
     languagetool: ComponentStatus
     java: ComponentStatus
+
+    @property
+    def components(self) -> tuple[ComponentStatus, ...]:
+        return (self.morphology, self.syntax, self.languagetool, self.java)
+
+    @property
+    def offline_ready(self) -> bool:
+        """Cert si tot el que cal per treballar sense connexió ja és a l'ordinador.
+
+        El motor sempre funciona sense connexió; això indica que a més hi són
+        tots els components opcionals.
+        """
+        return self.morphology.active and self.syntax.active and self.languagetool.active
+
+    @property
+    def missing(self) -> tuple[str, ...]:
+        return tuple(c.component for c in self.components if not c.active)
 
     def to_dict(self) -> dict[str, object]:
         return {
             "morphology": self.morphology.to_dict(),
+            "syntax": self.syntax.to_dict(),
             "languagetool": self.languagetool.to_dict(),
             "java": self.java.to_dict(),
+            "offline": {
+                "component": "Mode fora de línia",
+                "state": "disponible" if self.offline_ready else "parcial",
+                "active": self.offline_ready,
+                "message": (
+                    "Tots els recursos són en aquest ordinador: no cal connexió per a res."
+                    if self.offline_ready
+                    else "El motor ja funciona sense connexió; queden recursos opcionals per posar."
+                ),
+                "detail": ", ".join(self.missing),
+            },
         }
 
     def summary(self) -> str:
         return "\n".join(
-            f"{status.component}: [{status.state}] {status.message}"
-            for status in (self.morphology, self.languagetool, self.java)
+            f"{status.component}: [{status.state}] {status.message}" for status in self.components
         )
 
 
@@ -90,6 +120,29 @@ def morphology_status(language_dir: str | Path) -> ComponentStatus:
             f"{metadata.get('source_repository', '')} @ "
             f"{metadata.get('source_commit', '')[:12]} · {metadata.get('license', '')}"
         ),
+    )
+
+
+def syntax_status(model: str = DEFAULT_MODEL) -> ComponentStatus:
+    """Estat de l'analitzador sintàctic català local."""
+    parser = SpacySyntax(model)
+    if not parser.available:
+        return ComponentStatus(
+            component="Parser sintàctic català",
+            state=MORPHOLOGY_FALLBACK,
+            active=False,
+            message=(
+                "S'utilitzen les heurístiques internes. El parser millora les "
+                "transformacions estructurals; només analitza, no escriu mai res."
+            ),
+            detail=parser.failure,
+        )
+    return ComponentStatus(
+        component="Parser sintàctic català",
+        state=MORPHOLOGY_ACTIVE,
+        active=True,
+        message="Analitza dependències, subjecte, objecte, subordinades i coordinacions.",
+        detail=f"{parser.describe()} · {parser.license()}",
     )
 
 
@@ -143,6 +196,7 @@ def resources_status(
     language_dir = Path(root) / "resources" / language
     return LinguisticResources(
         morphology=morphology_status(language_dir),
+        syntax=syntax_status(),
         languagetool=languagetool_status(root, java=java),
         java=java_status(java),
     )

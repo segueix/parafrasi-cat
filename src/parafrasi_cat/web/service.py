@@ -40,12 +40,20 @@ from parafrasi_cat.preferences.author import AuthorPreferences
 from parafrasi_cat.preferences.feedback import DEFAULT_FEEDBACK_FILE, VERDICTS, FeedbackStore
 from parafrasi_cat.protected.spans import ProtectedSpan
 from parafrasi_cat.resources import ProjectPaths, load_mapping
+from parafrasi_cat.style.corpus import corpus_from_texts
 from parafrasi_cat.style.fingerprint import StyleFingerprint
 from parafrasi_cat.style.observations import DocumentObserver, StyleResources
+from parafrasi_cat.style.preferences import StylePreferences
+from parafrasi_cat.style.profiler import build_fingerprint
 from parafrasi_cat.web.history import DEFAULT_HISTORY_FILE, HistoryLog
 
 DEFAULT_RULE_SET = "parafrasi"
-INSTALLER_SCRIPT = "scripts/install_languagetool.py"
+#: Components opcionals que la interfície pot instal·lar, amb el seu script.
+#: Els scripts són fora del paquet: són l'única part que accedeix a Internet.
+INSTALLERS: dict[str, str] = {
+    "languagetool": "scripts/install_languagetool.py",
+    "parser": "scripts/install_parser.py",
+}
 DEFAULT_STYLE_PROFILE = "default"
 MAX_TEXT_CHARS = 20000
 
@@ -244,12 +252,17 @@ class RewriteService:
             "preferences": self.preferences(),
             "history": self._history.status(),
             "resources": self.resources(),
-            "languagetool_install": install_info(),
+            "installers": self.installers(),
+            "fingerprints_directory": str(self._paths.fingerprints),
         }
 
     def resources(self) -> JsonDict:
-        """Estat dels recursos lingüístics opcionals (morfologia, LanguageTool, Java)."""
+        """Estat dels recursos lingüístics opcionals i del mode fora de línia."""
         return resources_status(self._paths.root).to_dict()
+
+    def installers(self) -> JsonDict:
+        """Informació de cada component instal·lable, per ensenyar-la abans de baixar res."""
+        return {name: install_info(name) for name in INSTALLERS}
 
     def style_profiles(self) -> list[JsonDict]:
         """Perfils d'estil (``resources/style/*.yaml``) i empremtes (``style/*.json``)."""
@@ -546,17 +559,22 @@ class RewriteService:
 
     # -- instal·lació de components opcionals ------------------------------------------------
 
-    def install_languagetool(self, confirmed: bool) -> JsonDict:
-        """Instal·la LanguageTool, però només amb confirmació explícita.
+    def install_component(self, component: str, confirmed: bool) -> JsonDict:
+        """Instal·la un component opcional, però només amb confirmació explícita.
 
         Sense confirmació no es baixa res: només es retorna la informació del
-        component perquè la interfície la pugui ensenyar. La descàrrega la fa
-        ``scripts/install_languagetool.py``, que és fora del paquet.
+        component perquè la interfície la pugui ensenyar. La descàrrega la fan
+        els scripts de ``scripts/``, que són fora del paquet.
         """
-        info = install_info()
+        relative = INSTALLERS.get(component)
+        if relative is None:
+            raise ConfigError(
+                f"Component desconegut: «{component}» (vàlids: {', '.join(INSTALLERS)})"
+            )
+        info = install_info(component)
         if not confirmed:
             return {**info, "started": False, "message": "Cal confirmar-ho abans de baixar res."}
-        script = self._paths.root / INSTALLER_SCRIPT
+        script = self._paths.root / relative
         if not script.is_file():
             return {
                 **info,
@@ -565,16 +583,10 @@ class RewriteService:
                     "No s'ha trobat l'instal·lador en aquesta còpia. Executeu aquesta ordre "
                     "en un terminal:"
                 ),
-                "command": f"python {INSTALLER_SCRIPT} --yes",
+                "command": f"python {relative} --yes",
             }
         process = subprocess.Popen(  # noqa: S603 - ruta pròpia del projecte, sense shell
-            [
-                sys.executable,
-                str(script),
-                "--yes",
-                "--target",
-                str(self._paths.root / "vendor/languagetool"),
-            ],
+            [sys.executable, str(script), "--yes"],
             cwd=self._paths.root,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -583,9 +595,46 @@ class RewriteService:
             **info,
             "started": True,
             "pid": process.pid,
-            "message": (
-                "S'està baixant. Pot trigar uns minuts; l'estat s'actualitzarà quan acabi."
-            ),
+            "message": "S'està instal·lant. Pot trigar uns minuts; l'estat s'actualitzarà sol.",
+        }
+
+    # -- empremta de l'autor -----------------------------------------------------------------
+
+    def create_fingerprint(self, name: str, texts: Sequence[str]) -> JsonDict:
+        """Construeix l'empremta d'un autor amb els textos que arriben de la interfície.
+
+        Els textos són de l'usuari i no surten d'aquest ordinador: es processen
+        en memòria i només se'n desa l'empremta, que és un JSON de recomptes i
+        estadístics. No s'entrena cap model.
+        """
+        clean = " ".join(name.split()) or "autor"
+        if not re.fullmatch(r"[\w .\-]{1,60}", clean):
+            raise ConfigError(
+                "El nom de l'empremta només pot tenir lletres, xifres, espais i guions"
+            )
+        useful = [text for text in texts if text.strip()]
+        if not useful:
+            raise ConfigError("Cal almenys un text per construir l'empremta")
+        corpus = corpus_from_texts(useful)
+        resources = StyleResources.load(self._paths)
+        fingerprint = build_fingerprint(
+            corpus,
+            resources,
+            self._text_analyzer(),
+            name=clean,
+            description="Creada des de la interfície",
+        )
+        target = self._paths.fingerprints / f"{clean}.json"
+        fingerprint.save(target)
+        self._pipelines.clear()  # hi ha una empremta nova disponible
+        return {
+            "name": clean,
+            "path": str(target),
+            "id": f"style/{target.name}",
+            "n_documents": fingerprint.n_documents,
+            "n_words": fingerprint.n_words,
+            "summary": StylePreferences(fingerprint).summary(),
+            "message": f"Empremta «{clean}» creada amb {len(useful)} textos.",
         }
 
     # -- historial ---------------------------------------------------------------------------
@@ -611,12 +660,14 @@ class RewriteService:
         return self._history.export_json()
 
 
-def install_info() -> JsonDict:
-    """Descripció del component opcional, per ensenyar-la abans de baixar res."""
-    return {
+#: Descripció de cada component instal·lable. Es mostra sencera abans de
+#: baixar res, i la confirmació de l'usuari és obligatòria.
+_INSTALL_INFO: dict[str, JsonDict] = {
+    "languagetool": {
         "component": "LanguageTool",
         "purpose": "Validació avançada de gramàtica, concordança i puntuació en català.",
         "origin": "https://languagetool.org/download/LanguageTool-stable.zip",
+        "version": "estable (provada: 6.6)",
         "license": "LGPL-2.1-or-later",
         "approximate_size_mb": 250,
         "requirement": "Java",
@@ -625,7 +676,30 @@ def install_info() -> JsonDict:
             "La descàrrega es fa una sola vegada. Després, LanguageTool s'executa en aquest "
             "ordinador i no s'envia cap text enlloc."
         ),
-    }
+    },
+    "parser": {
+        "component": "Parser sintàctic català",
+        "purpose": (
+            "Analitza dependències, subjecte, objecte, subordinades i coordinacions perquè "
+            "les transformacions estructurals es puguin fer amb seguretat."
+        ),
+        "origin": "https://pypi.org/project/spacy/ i https://github.com/explosion/spacy-models",
+        "version": "spaCy + ca_core_news_sm (UD Catalan AnCora)",
+        "license": "spaCy: MIT · model: GPL-3.0",
+        "approximate_size_mb": 120,
+        "requirement": "Python 3.11 o superior",
+        "offline_after_install": True,
+        "note": (
+            "El model només analitza: no genera text ni pren cap decisió. Un cop instal·lat, "
+            "no cal connexió per a res."
+        ),
+    },
+}
+
+
+def install_info(component: str = "languagetool") -> JsonDict:
+    """Descripció d'un component opcional, per ensenyar-la abans de baixar res."""
+    return dict(_INSTALL_INFO[component])
 
 
 def _protected(span: ProtectedSpan) -> JsonDict:

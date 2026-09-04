@@ -23,6 +23,7 @@ from parafrasi_cat.core.transformation import Transformation, TransformationType
 from parafrasi_cat.morphology.provider import MorphologyProvider, NullMorphology
 from parafrasi_cat.protected.spans import ProtectedSpan
 from parafrasi_cat.style.profile import StyleProfile
+from parafrasi_cat.syntax.analysis import NullSyntax, SentenceSyntax, SyntaxProvider
 
 
 def protected_conflict(
@@ -59,10 +60,16 @@ class RuleContext:
     style_profile: StyleProfile | None = None
     morphology: MorphologyProvider = field(default_factory=NullMorphology)
     lexicon: ClosedClassLexicon | None = None
+    syntax: SyntaxProvider = field(default_factory=NullSyntax)
+    """Analitzador sintàctic local. Només l'usen les regles que el demanen."""
 
     @property
     def text(self) -> str:
         return self.sentence.text
+
+    def parse(self) -> SentenceSyntax:
+        """Anàlisi sintàctica de la frase (buida si no hi ha parser instal·lat)."""
+        return self.syntax.parse(self.text)
 
     def overlapping_protected(self, span: Span) -> tuple[ProtectedSpan, ...]:
         return tuple(p for p in self.protected_spans if p.overlaps(span))
@@ -93,6 +100,11 @@ class ParagraphContext:
     protected_spans: tuple[ProtectedSpan, ...] = ()
     source_text: str = ""
     lexicon: ClosedClassLexicon | None = None
+    syntax: SyntaxProvider = field(default_factory=NullSyntax)
+
+    def parse(self) -> SentenceSyntax:
+        """Anàlisi sintàctica del paràgraf (buida si no hi ha parser instal·lat)."""
+        return self.syntax.parse(self.text)
 
     def overlapping_protected(self, span: Span) -> tuple[ProtectedSpan, ...]:
         return tuple(p for p in self.protected_spans if p.overlaps(span))

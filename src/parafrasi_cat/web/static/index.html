@@ -22,6 +22,10 @@
     <label for="text">Text a reredactar</label>
     <textarea id="text" name="text" rows="9" spellcheck="false"
       placeholder="Enganxeu o escriviu el text aquí."></textarea>
+    <div class="linia">
+      <input type="file" id="fitxer-text" accept=".txt,.md,text/plain,text/markdown">
+      <label for="fitxer-text" class="en-linia">o obriu un fitxer .txt o .md</label>
+    </div>
 
     <fieldset>
       <legend>Mode</legend>
@@ -52,9 +56,7 @@
         <label for="languagetool" class="en-linia">Validació avançada de català</label>
       </div>
       <p id="ajuda-languagetool" class="ajuda"></p>
-      <button type="button" id="instal-la" class="secundari" hidden>
-        Instal·la la validació avançada de català
-      </button>
+      <div class="botons" id="botons-instal-lacio"></div>
       <div id="confirma-instal-lacio" class="confirmacio" hidden>
         <p class="ajuda" id="detall-instal-lacio"></p>
         <div class="botons">
@@ -62,6 +64,22 @@
           <button type="button" id="cancel-la" class="secundari">Cancel·la</button>
         </div>
       </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Empremta de l'autor</legend>
+      <p class="ajuda">
+        Analitza textos vostres per aprendre'n l'estil. Els textos no surten d'aquest
+        ordinador i no s'entrena cap model: només se'n desen recomptes i estadístics.
+      </p>
+      <label for="nom-empremta">Nom</label>
+      <input type="text" id="nom-empremta" placeholder="autor">
+      <div class="linia">
+        <input type="file" id="fitxers-empremta" accept=".txt,.md,text/plain,text/markdown" multiple>
+        <label for="fitxers-empremta" class="en-linia">textos de l'autor (.txt o .md)</label>
+      </div>
+      <p id="estat-empremta" class="ajuda"></p>
+      <button type="button" id="crea-empremta" class="secundari" disabled>Crea l'empremta</button>
     </fieldset>
 
     <div class="linia">

@@ -28,6 +28,7 @@ from parafrasi_cat.rules.ruleset import RuleSet, RuleSetConfig
 from parafrasi_cat.scoring.scorer import ScoreBreakdown, Scorer, ScoringContext
 from parafrasi_cat.scoring.selection import select_best
 from parafrasi_cat.style.profile import StyleProfile
+from parafrasi_cat.syntax.analysis import NullSyntax, SyntaxProvider
 from parafrasi_cat.validation.base import ValidationContext, Validator
 from parafrasi_cat.validation.result import ValidationResult
 
@@ -71,6 +72,7 @@ class Pipeline:
         min_confidence: float | None = None,
         style_profile: StyleProfile | None = None,
         morphology: MorphologyProvider | None = None,
+        syntax: SyntaxProvider | None = None,
         lexicon: ClosedClassLexicon | None = None,
         max_level: int | None = None,
         dictionary_names: Sequence[str] = (),
@@ -89,6 +91,7 @@ class Pipeline:
         )
         self._style_profile = style_profile
         self._morphology: MorphologyProvider = morphology or NullMorphology()
+        self._syntax: SyntaxProvider = NullSyntax() if syntax is None else syntax
         if lexicon is None and isinstance(analyzer, RuleBasedAnalyzer):
             lexicon = analyzer.lexicon
         self._lexicon = lexicon
@@ -122,6 +125,10 @@ class Pipeline:
     @property
     def min_confidence(self) -> float:
         return self._min_confidence
+
+    @property
+    def syntax(self) -> SyntaxProvider:
+        return self._syntax
 
     @property
     def lexicon(self) -> ClosedClassLexicon | None:
@@ -195,6 +202,7 @@ class Pipeline:
             style_profile=self._style_profile,
             morphology=self._morphology,
             lexicon=self._lexicon,
+            syntax=self._syntax,
         )
 
     def _process_sentence(
@@ -256,6 +264,7 @@ class Pipeline:
             protected_spans=self._protector.protect(intermediate),
             source_text=paragraph.text,
             lexicon=self._lexicon,
+            syntax=self._syntax,
         )
         proposals: list[Transformation] = []
         rejected: list[RejectedProposal] = []

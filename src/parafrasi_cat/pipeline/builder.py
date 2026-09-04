@@ -10,6 +10,7 @@ from parafrasi_cat.analyzer.analysis import RuleBasedAnalyzer
 from parafrasi_cat.analyzer.lexicon import ClosedClassLexicon
 from parafrasi_cat.analyzer.sentences import DEFAULT_ABBREVIATIONS, SentenceSplitter
 from parafrasi_cat.candidates.generator import CandidateGenerator
+from parafrasi_cat.core.errors import ConfigError
 from parafrasi_cat.dictionaries.dictionary import DictionarySet
 from parafrasi_cat.morphology.registry import create_morphology_provider
 from parafrasi_cat.pipeline.config import PipelineConfig
@@ -34,6 +35,8 @@ from parafrasi_cat.scoring.scorer import CompositeScorer
 from parafrasi_cat.style.evaluator import StyleEvaluator
 from parafrasi_cat.style.observations import StyleResources
 from parafrasi_cat.style.profile import load_style_profile
+from parafrasi_cat.syntax.analysis import NullSyntax, SyntaxProvider
+from parafrasi_cat.syntax.spacy_parser import SpacySyntax
 from parafrasi_cat.validation.base import Validator
 from parafrasi_cat.validation.epistemic import (
     EPISTEMOLOGY_FILE,
@@ -159,6 +162,7 @@ def build_pipeline(
         min_confidence=config.min_confidence,
         style_profile=style_profile,
         morphology=create_morphology_provider(config.morphology, lang, lexicon=lexicon),
+        syntax=build_syntax_provider(config),
         lexicon=lexicon,
         max_level=config.level,
         dictionary_names=dictionaries.names,
@@ -213,6 +217,21 @@ def build_validators(
     if languagetool is not None:
         validators.append(languagetool)
     return validators
+
+
+def build_syntax_provider(config: PipelineConfig) -> SyntaxProvider:
+    """Analitzador sintàctic local segons la configuració.
+
+    ``auto`` fa servir el parser si està instal·lat i, si no, no en fa servir
+    cap: el motor continua amb les heurístiques de sempre. El parser només
+    analitza; la generació continua sent exclusivament de les regles.
+    """
+    if config.syntax in ("none", "null", ""):
+        return NullSyntax()
+    if config.syntax in ("auto", "spacy"):
+        parser = SpacySyntax()
+        return parser if parser.available else NullSyntax()
+    raise ConfigError(f"Analitzador sintàctic desconegut: «{config.syntax}» (auto, spacy, none)")
 
 
 def build_languagetool_validator(

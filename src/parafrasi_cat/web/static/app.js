@@ -8,7 +8,20 @@ const estat = {
   resultat: null,
   textUnitat: new Map(),
   feedback: [],
+  textosEmpremta: [],
+  componentPendent: "",
 };
+
+const CLAUS_RECURSOS = ["morphology", "syntax", "languagetool", "java", "offline"];
+
+function llegeixFitxer(fitxer) {
+  return new Promise((resol, rebutja) => {
+    const lector = new FileReader();
+    lector.onload = () => resol(String(lector.result));
+    lector.onerror = () => rebutja(new Error(`No s'ha pogut llegir ${fitxer.name}`));
+    lector.readAsText(fitxer, "utf-8");
+  });
+}
 
 const $ = (id) => document.getElementById(id);
 
@@ -108,53 +121,74 @@ function diccionarisTriats() {
   return Array.from(document.querySelectorAll("input.diccionari:checked")).map((c) => c.value);
 }
 
-function mostrarRecursos(recursos, instal) {
+function mostrarRecursos(recursos, instal·ladors) {
   const llista = $("recursos");
   llista.replaceChildren();
-  for (const clau of ["morphology", "languagetool", "java"]) {
+  for (const clau of CLAUS_RECURSOS) {
     const recurs = recursos[clau];
+    if (!recurs) continue;
     const element = document.createElement("li");
     element.className = recurs.active ? "actiu" : "inactiu";
     const nom = document.createElement("span");
     nom.textContent = `${recurs.component}: `;
-    const estat = document.createElement("span");
-    estat.className = "estat-recurs";
-    estat.textContent = `[${recurs.state}]`;
-    element.append(nom, estat, ` ${recurs.message}`);
+    const marca = document.createElement("span");
+    marca.className = "estat-recurs";
+    marca.textContent = recurs.active ? "✓" : "○";
+    const text = document.createElement("span");
+    text.className = "estat-recurs";
+    text.textContent = ` ${recurs.state}`;
+    element.append(nom, marca, text, ` — ${recurs.message}`);
     if (recurs.detail) element.title = recurs.detail;
     llista.append(element);
   }
+
   const actiu = recursos.languagetool.active;
   $("languagetool").disabled = !actiu;
   if (!actiu) $("languagetool").checked = false;
   $("ajuda-languagetool").textContent = actiu
     ? "Comprova gramàtica, concordança i puntuació de cada candidat. Només valida: mai no reescriu el text."
     : "No està instal·lada. El motor continua funcionant amb les seves comprovacions internes.";
-  $("instal-la").hidden = actiu;
-  $("detall-instal-lacio").textContent =
-    `Component: ${instal.component}. Origen: ${instal.origin}. ` +
-    `Mida aproximada: ${instal.approximate_size_mb} MB. Llicència: ${instal.license}. ` +
-    `Requisit: ${instal.requirement}. ${instal.note}`;
+
+  const botons = $("botons-instal-lacio");
+  botons.replaceChildren();
+  const pendents = [
+    ["parser", recursos.syntax],
+    ["languagetool", recursos.languagetool],
+  ];
+  for (const [clau, recurs] of pendents) {
+    if (recurs.active) continue;
+    const boto = document.createElement("button");
+    boto.type = "button";
+    boto.className = "secundari";
+    boto.textContent = `Instal·la ${instal·ladors[clau].component}`;
+    boto.addEventListener("click", () => demanarInstalacio(clau));
+    botons.append(boto);
+  }
 }
 
 async function refrescarRecursos() {
   const recursos = await api("/api/resources");
-  mostrarRecursos(recursos, estat.opcions.languagetool_install);
+  mostrarRecursos(recursos, estat.opcions.installers);
   return recursos;
 }
 
-async function demanarInstal·lacio() {
+function demanarInstalacio(component) {
+  const info = estat.opcions.installers[component];
+  estat.componentPendent = component;
+  $("detall-instal-lacio").textContent =
+    `Component: ${info.component}. Origen: ${info.origin}. Versió: ${info.version}. ` +
+    `Mida aproximada: ${info.approximate_size_mb} MB. Llicència: ${info.license}. ` +
+    `Requisit: ${info.requirement}. ${info.note}`;
   $("confirma-instal-lacio").hidden = false;
-  $("instal-la").hidden = true;
 }
 
-async function confirmarInstal·lacio() {
+async function confirmarInstalacio() {
   $("confirma").disabled = true;
   try {
-    const resposta = await api("/api/resources/languagetool", {
+    const resposta = await api("/api/resources/install", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ confirm: true }),
+      body: JSON.stringify({ component: estat.componentPendent, confirm: true }),
     });
     missatge($("estat"), resposta.message + (resposta.command ? ` ${resposta.command}` : ""));
     $("confirma-instal-lacio").hidden = true;
@@ -162,9 +196,9 @@ async function confirmarInstal·lacio() {
       const inici = Date.now();
       const repeticio = setInterval(async () => {
         const recursos = await refrescarRecursos();
-        if (recursos.languagetool.active || Date.now() - inici > 900000) {
+        if (recursos.offline.active || Date.now() - inici > 900000) {
           clearInterval(repeticio);
-          if (recursos.languagetool.active) missatge($("estat"), "Validació avançada instal·lada.");
+          if (recursos.offline.active) missatge($("estat"), "Recursos instal·lats.");
         }
       }, 15000);
     }
@@ -172,6 +206,51 @@ async function confirmarInstal·lacio() {
     missatge($("estat"), error.message, true);
   } finally {
     $("confirma").disabled = false;
+  }
+}
+
+async function carregarFitxerText(esdeveniment) {
+  const fitxer = esdeveniment.target.files[0];
+  if (!fitxer) return;
+  try {
+    $("text").value = await llegeixFitxer(fitxer);
+    missatge($("estat"), `Carregat ${fitxer.name}.`);
+  } catch (error) {
+    missatge($("estat"), error.message, true);
+  }
+}
+
+async function carregarTextosEmpremta(esdeveniment) {
+  const fitxers = Array.from(esdeveniment.target.files);
+  try {
+    estat.textosEmpremta = await Promise.all(fitxers.map(llegeixFitxer));
+    $("crea-empremta").disabled = estat.textosEmpremta.length === 0;
+    $("estat-empremta").textContent = `${estat.textosEmpremta.length} textos preparats.`;
+  } catch (error) {
+    missatge($("estat-empremta"), error.message, true);
+  }
+}
+
+async function crearEmpremta() {
+  $("crea-empremta").disabled = true;
+  missatge($("estat-empremta"), "Analitzant els textos…");
+  try {
+    const resposta = await api("/api/fingerprint", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: $("nom-empremta").value || "autor",
+        texts: estat.textosEmpremta,
+      }),
+    });
+    missatge($("estat-empremta"), `${resposta.message} ${resposta.n_words} paraules analitzades.`);
+    estat.opcions = await api("/api/options");
+    omplirSelect($("estil"), estat.opcions.style_profiles);
+    $("estil").value = resposta.id;
+  } catch (error) {
+    missatge($("estat-empremta"), error.message, true);
+  } finally {
+    $("crea-empremta").disabled = estat.textosEmpremta.length === 0;
   }
 }
 
@@ -192,7 +271,7 @@ async function carregarOpcions() {
   $("estil").value = "default";
   omplirDiccionaris(estat.opcions.dictionaries);
   omplirSelect($("preferencies"), estat.opcions.preferences, "cap");
-  mostrarRecursos(estat.opcions.resources, estat.opcions.languagetool_install);
+  mostrarRecursos(estat.opcions.resources, estat.opcions.installers);
   mostrarEstatHistorial(estat.opcions.history);
 }
 
@@ -509,12 +588,13 @@ async function iniciar() {
   $("exporta").addEventListener("click", exportar);
   $("desa").addEventListener("click", desarAlRegistre);
   $("historial-actiu").addEventListener("change", canviarHistorial);
-  $("instal-la").addEventListener("click", demanarInstal·lacio);
-  $("confirma").addEventListener("click", confirmarInstal·lacio);
+  $("confirma").addEventListener("click", confirmarInstalacio);
   $("cancel-la").addEventListener("click", () => {
     $("confirma-instal-lacio").hidden = true;
-    $("instal-la").hidden = false;
   });
+  $("fitxer-text").addEventListener("change", carregarFitxerText);
+  $("fitxers-empremta").addEventListener("change", carregarTextosEmpremta);
+  $("crea-empremta").addEventListener("click", crearEmpremta);
   $("exporta-historial").addEventListener("click", () => {
     window.location.assign("/api/history/export");
   });

@@ -40,6 +40,7 @@ from parafrasi_cat.core.text import LETTER, match_casing, phrase_pattern
 from parafrasi_cat.morphology.guesser import guess
 from parafrasi_cat.morphology.provider import MorphologyProvider, NullMorphology, inflect_like
 from parafrasi_cat.protected.spans import ProtectedSpan
+from parafrasi_cat.syntax.analysis import SentenceSyntax, empty
 
 # --- Coneixement gramatical mínim -----------------------------------------------
 
@@ -253,6 +254,9 @@ class MatchState:
     hints: GrammarHints
     morphology: MorphologyProvider = field(default_factory=NullMorphology)
     """Recurs morfològic per a les plantilles. Sense recurs, els mapatges manen."""
+
+    syntax: SentenceSyntax = field(default_factory=empty)
+    """Anàlisi sintàctica de la frase. Només la consulten les regles que la demanen."""
 
     def is_protected_token(self, index: int) -> bool:
         span = self.tokens[index].span

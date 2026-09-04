@@ -1,11 +1,14 @@
-# Família 11: fusió de frases compatibles (regla de paràgraf, nivell 4).
+# Família 11: fusió de frases compatibles (regla de paràgraf, nivell 5).
+# Nivell 5: reestructuració controlada de paràgraf. A diferència del nivell 4,
+# que treballa dins d'una frase, aquesta fase reorganitza frases senceres i
+# només s'activa quan el nivell demanat arriba a 5.
 description: Fusió de dues frases consecutives segons el senyal inicial de la segona.
 language: ca
 rules:
   - rule_id: fusio.frases_compatibles
     engine: fusion
     category: fusio
-    level: 4
+    level: 5
     transformation_type: sentence_merge
     semantic_risk: low
     confidence: 0.6

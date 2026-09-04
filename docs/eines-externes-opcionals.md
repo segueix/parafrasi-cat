@@ -10,7 +10,8 @@ defecte i sense enviar mai text a cap servidor.
 | Eina | Estat | Documentació |
 |---|---|---|
 | Diccionari de Softcatalà (`catalan-dict-tools`) | **Integrat** com a proveïdor morfològic opcional. Doble GPL-2.0+/LGPL-2.1+, commit `138828448433`. El recurs el genera l'usuari amb `scripts/import_softcatala.py` i no es versiona. | [`recursos-linguistics.md`](recursos-linguistics.md) |
-| LanguageTool | **Integrat** com a validador local opcional. LGPL-2.1+, versió provada 6.6. S'executa com a procés local; mai l'API remota. Cal Java. | [`recursos-linguistics.md`](recursos-linguistics.md) |
+| LanguageTool | **Integrat** com a validador local opcional. LGPL-2.1+, versió provada 6.6. Servidor local persistent; mai l'API remota. Cal Java. | [`recursos-linguistics.md`](recursos-linguistics.md) |
+| spaCy i `ca_core_news_sm` | **Integrat** com a analitzador sintàctic local opcional. Codi MIT, model GPL-3.0 (UD Catalan AnCora). Només analitza; no és generatiu. | [`recursos-linguistics.md`](recursos-linguistics.md) |
 
 Les llicències verificades i l'atribució són a
 [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md).
@@ -25,8 +26,7 @@ la llicència de la versió concreta** que vulgueu fer servir.
 |---|---|---|---|
 | [Apertium](https://www.apertium.org/) (apertium-cat) | Analitzador i generador morfològic, tokenització, desambiguació superficial | Motor i dades lingüístiques: GPL-2.0 o posterior | Copyleft fort: un adaptador que l'invoqui com a procés extern evita problemes d'enllaç; distribuir-lo integrat obliga a GPL. |
 | [FreeLing](https://nlp.lsi.upc.edu/freeling/) | Anàlisi morfològica, etiquetatge, reconeixement d'entitats, anàlisi sintàctica per al català | AGPL-3.0 (hi ha llicència comercial) | Copyleft molt fort (inclou ús en xarxa). Executar-lo com a procés local separat és l'opció més segura. |
-| [Stanza](https://stanfordnlp.github.io/stanza/) | Tokenització, lematització, etiquetatge i anàlisi de dependències neuronals per al català | Codi: Apache-2.0; models: consulteu la llicència de cada model i dels treebanks d'origen | És un model neuronal **d'anàlisi**, no generatiu. Requereix PyTorch i descarregar models (només un cop). Contradiu l'objectiu de mantenir el motor lleuger; només com a adaptador experimental. |
-| [spaCy](https://spacy.io/) (models `ca_core_news_*`) | Anàlisi similar a Stanza | Codi: MIT; models: consulteu la llicència de cada model | Mateixes consideracions que Stanza. |
+| [Stanza](https://stanfordnlp.github.io/stanza/) | Tokenització, lematització, etiquetatge i anàlisi de dependències per al català | Codi: Apache-2.0; models: variables | Descartat a favor de spaCy: arrossega PyTorch com a dependència obligatòria i ocupa centenars de megabytes per a la mateixa funció. |
 | Diccionaris de Softcatalà: sinònims i tesaurus | Sinònims | Tesaurus: LGPL-3.0+/GPL-3.0+ | Encara no s'utilitzen. La part morfològica sí que està integrada (vegeu més amunt). |
 
 ## Condicions per integrar una eina

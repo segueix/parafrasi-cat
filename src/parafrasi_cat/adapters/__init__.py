@@ -15,7 +15,7 @@ from parafrasi_cat.adapters.languagetool import (
     find_java,
     is_blocking,
 )
-from parafrasi_cat.adapters.status import LinguisticResources, resources_status
+from parafrasi_cat.adapters.status import ComponentStatus, LinguisticResources, resources_status
 
 __all__ = [
     "DEFAULT_BLOCKING_CATEGORIES",
@@ -25,6 +25,7 @@ __all__ = [
     "LanguageToolMatch",
     "LanguageToolValidator",
     "LinguisticResources",
+    "ComponentStatus",
     "find_installation",
     "find_java",
     "is_blocking",

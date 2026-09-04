@@ -169,9 +169,20 @@ class RequestHandler(BaseHTTPRequestHandler):
         elif path == "/api/history/enabled":
             enabled = bool(self._read_json().get("enabled", False))
             self._send_json(self._service.set_history_enabled(enabled))
-        elif path == "/api/resources/languagetool":
-            confirmed = bool(self._read_json().get("confirm", False))
-            self._send_json(self._service.install_languagetool(confirmed))
+        elif path == "/api/resources/install":
+            data = self._read_json()
+            component = str(data.get("component", "languagetool"))
+            confirmed = bool(data.get("confirm", False))
+            self._send_json(self._service.install_component(component, confirmed))
+        elif path == "/api/fingerprint":
+            data = self._read_json()
+            texts = data.get("texts")
+            self._send_json(
+                self._service.create_fingerprint(
+                    str(data.get("name", "autor")),
+                    [str(t) for t in texts] if isinstance(texts, list) else [],
+                )
+            )
         else:
             self._send_error_json(f"Ruta desconeguda: {path}", HTTPStatus.NOT_FOUND)
 

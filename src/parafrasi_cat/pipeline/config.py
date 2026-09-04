@@ -46,6 +46,8 @@ class PipelineConfig:
         level: Nivell màxim de les regles actives (1 lèxic … 5 paràgraf); ``None`` = totes.
         length_ratio: Marge de longitud (mínim, màxim) acceptat respecte de l'original.
         use_style: Si és fals, no es calcula la distància d'estil.
+        syntax: Analitzador sintàctic (``auto`` = el parser local si està instal·lat,
+            ``none`` = cap). El parser només analitza; mai no genera text.
         languagetool: Si és cert, s'afegeix la validació local de LanguageTool quan
             estigui instal·lada. Per defecte és fals: el motor no depèn de Java ni de
             LanguageTool, i la interfície ofereix activar-lo si el detecta.
@@ -75,6 +77,7 @@ class PipelineConfig:
     dictionaries: tuple[str, ...] = ()
     preferences: str | None = None
     feedback: Path | None = None
+    syntax: str = "auto"
     languagetool: bool = False
 
     def __post_init__(self) -> None:
@@ -147,6 +150,7 @@ class PipelineConfig:
                 as_float(ratio, "max", defaults.length_ratio[1]),
             ),
             use_style=as_bool(data, "use_style", defaults.use_style),
+            syntax=as_str(data, "syntax", defaults.syntax),
             languagetool=as_bool(data, "languagetool", defaults.languagetool),
             dictionaries=tuple(
                 _maybe_path(item, base_dir) for item in as_str_list(data, "dictionaries")
@@ -186,6 +190,7 @@ class PipelineConfig:
             "level": self.level,
             "length_ratio": {"min": self.length_ratio[0], "max": self.length_ratio[1]},
             "use_style": self.use_style,
+            "syntax": self.syntax,
             "languagetool": self.languagetool,
             "dictionaries": list(self.dictionaries),
             "preferences": self.preferences,
