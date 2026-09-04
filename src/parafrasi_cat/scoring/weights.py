@@ -25,6 +25,13 @@ class ScoringWeights:
       l'empremta de l'autor més que l'original.
     - ``author_affinity_own``: el mateix pes amb text propi i empremta: un
       desempat lleu entre candidats segurs, no una pressió per imitar.
+    - ``structure``: pes del grau de reredacció estructural (famílies de
+      transformació ponderades: un canvi sintàctic segur pesa més que un
+      connector, i un canvi entre frases més que un de dins de la frase). Val 0
+      en mode conservador, on l'original guanya els empats, i el mode profund el
+      puja perquè, entre candidats igualment segurs, tingui avantatge la
+      reredacció estructural real. Es multiplica per la gramaticalitat: mai no
+      compensa un avís gramatical.
     - ``max_transformations``: nombre de transformacions que normalitza el guany.
 
     Les dimensions de preservació (factual, epistemològica, terminològica) no
@@ -38,6 +45,7 @@ class ScoringWeights:
     preferences: float = 0.5
     author_affinity: float = 2.0
     author_affinity_own: float = 0.5
+    structure: float = 0.0
     max_transformations: int = 3
 
     def __post_init__(self) -> None:
@@ -51,6 +59,7 @@ class ScoringWeights:
             "preferences",
             "author_affinity",
             "author_affinity_own",
+            "structure",
         ):
             if getattr(self, name) < 0:
                 raise ConfigError(f"El pes «{name}» no pot ser negatiu")
@@ -66,6 +75,7 @@ class ScoringWeights:
             preferences=as_float(data, "preferences", defaults.preferences),
             author_affinity=as_float(data, "author_affinity", defaults.author_affinity),
             author_affinity_own=as_float(data, "author_affinity_own", defaults.author_affinity_own),
+            structure=as_float(data, "structure", defaults.structure),
             max_transformations=as_int(data, "max_transformations", defaults.max_transformations),
         )
 
@@ -78,5 +88,6 @@ class ScoringWeights:
             "preferences": self.preferences,
             "author_affinity": self.author_affinity,
             "author_affinity_own": self.author_affinity_own,
+            "structure": self.structure,
             "max_transformations": self.max_transformations,
         }

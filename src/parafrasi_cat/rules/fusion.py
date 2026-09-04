@@ -19,7 +19,7 @@ de les dues frases no és fiable: un fragment no s'ha de tocar.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from parafrasi_cat.analyzer.sentences import Sentence
@@ -31,6 +31,7 @@ from parafrasi_cat.resources import as_int, as_mapping_list, as_str, as_str_list
 from parafrasi_cat.rules.base import ParagraphContext, ParagraphRule
 from parafrasi_cat.rules.definition import RuleDefinition
 from parafrasi_cat.rules.pattern_rule import HintsCache
+from parafrasi_cat.rules.patterns import GrammarHints
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +46,8 @@ class FusionStrategy:
     max_words_each: int = 0
     semantic_risk: SemanticRisk | None = None
     lowercase: bool = True
+    skip_if_second_starts_with: tuple[str, ...] = ()
+    """Inicis de la segona frase que l'estratègia no toca (una còpula: «És B.»)."""
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, object]) -> FusionStrategy:
@@ -57,6 +60,9 @@ class FusionStrategy:
             max_words_each=as_int(data, "max_words_each", 0),
             semantic_risk=None if risk is None else SemanticRisk.parse(str(risk)),
             lowercase=bool(data.get("lowercase", True)),
+            skip_if_second_starts_with=tuple(
+                t.lower() for t in as_str_list(data, "skip_if_second_starts_with")
+            ),
         )
 
 
@@ -96,6 +102,10 @@ class SentenceFusionRule(ParagraphRule):
             for strategy in self._strategies:
                 if strategy.triggers and not any(
                     _starts_with_phrase(start_text, t) for t in strategy.triggers
+                ):
+                    continue
+                if any(
+                    _starts_with_phrase(start_text, t) for t in strategy.skip_if_second_starts_with
                 ):
                     continue
                 if strategy.max_words_each and (
@@ -142,6 +152,7 @@ class SentenceFusionRule(ParagraphRule):
                         "category": self._definition.category,
                         "level": str(self._definition.level),
                         "strategy": strategy.strategy_id,
+                        "family": "CLAUSE_MERGE",
                     },
                 )
                 break  # una sola estratègia per parella
@@ -154,6 +165,174 @@ class SentenceFusionRule(ParagraphRule):
         if ctx.lexicon is not None and ctx.lexicon.has(low):
             return True
         return self._hints.for_lexicon(ctx.lexicon).is_finite_verb(token)
+
+
+#: Formes de còpula amb què pot començar la segona frase («És B.»).
+COPULAS = frozenset({"és", "són", "era", "eren"})
+#: Adverbis de restricció que, amb la negació, donen «no és només A, sinó també B».
+ONLY_ADVERBS = frozenset({"només", "solament", "únicament"})
+#: Predicats que no són atributs de debò («és a dir», «és clar», «és possible»...).
+COPULAR_EXCEPTIONS: tuple[str, ...] = (
+    "a dir", "clar", "possible", "probable", "evident", "cert", "necessari", "obvi",
+    "veritat", "que", "si", "on", "quan", "com", "per", "més", "menys",
+)  # fmt: skip
+MAX_PREDICATE_WORDS = 8
+
+
+class CopularFusionRule(ParagraphRule):
+    """Fusiona dues frases copulatives amb el mateix subjecte (motor «copular_fusion»).
+
+    Patrons que reconeix, amb la mateixa forma de còpula a totes dues frases i
+    la segona sense subjecte propi:
+
+    - «S no és només A. És B.» → «S no és només A, sinó també B.»;
+    - «S no és A. És B.» → «S no és A, sinó B.» (risc mitjà: afirma el contrast);
+    - «S és A. És B.» → «S és A i B.».
+
+    Condicions: predicats curts, sense verb conjugat, sense coma ni «que»;
+    la segona frase no pot començar per una locució com «és a dir» o «és
+    clar»; i, amb analitzador, la còpula de la primera ha de ser la de l'oració
+    principal i la segona no pot tenir cap subjecte explícit. La fusió
+    respecta la longitud de frase de l'autor, com la resta de fusions.
+    """
+
+    def __init__(self, definition: RuleDefinition, *, hints: HintsCache | None = None) -> None:
+        self._hints = hints or HintsCache()
+        super().__init__(
+            definition.rule_id,
+            transformation_type=definition.transformation_type,
+            description=definition.description,
+            category=definition.category,
+            level=definition.level,
+        )
+        self._definition = definition
+
+    def propose(self, ctx: ParagraphContext) -> Iterable[Transformation]:
+        sentences = ctx.sentences
+        hints = self._hints.for_lexicon(ctx.lexicon)
+        for first, second in zip(sentences, sentences[1:], strict=False):
+            if not _fusable(first, second, ctx.text):
+                continue
+            head = second.tokens[0]
+            copula = head.lower
+            if copula not in COPULAS or head.kind is not TokenKind.WORD:
+                continue
+            predicate_b = _predicate(second.tokens[1:], hints)
+            if predicate_b is None:
+                continue
+            found = _first_copula(first, copula, hints)
+            if found is None:
+                continue
+            copula_index, negated, only = found
+            words = len(first.words) + len(second.words) - 1
+            if not ctx.length_allows(words, _describe(first, second)):
+                continue
+            if not self._syntax_allows(ctx, first, second, copula_index):
+                continue
+            risk = self._definition.semantic_risk
+            if negated and only:
+                joiner, strategy = ", sinó també", "no_nomes_sino_tambe"
+            elif negated:
+                joiner, strategy, risk = ", sinó", "no_sino", SemanticRisk.MEDIUM
+            else:
+                joiner, strategy = " i", "coordinacio_predicats"
+            period = first.span.end - 1
+            span = Span(period, second.span.start + head.span.end)
+            before = span.slice(ctx.text)
+            if ctx.protected_conflict(span, joiner) is not None:
+                continue
+            yield Transformation(
+                rule_id=self.rule_id,
+                text_before=before,
+                text_after=joiner,
+                changed_span=span,
+                transformation_type=self._definition.transformation_type,
+                confidence=self._definition.confidence,
+                semantic_risk=risk,
+                explanation=(
+                    f"{self._definition.description} ({strategy}): «{first.text}» + «{second.text}»"
+                ),
+                metadata={
+                    "category": self._definition.category,
+                    "level": str(self._definition.level),
+                    "strategy": strategy,
+                    "family": "COPULAR_MERGE",
+                },
+            )
+
+    def _syntax_allows(
+        self, ctx: ParagraphContext, first: Sentence, second: Sentence, copula_index: int
+    ) -> bool:
+        """Amb analitzador: còpula principal a la primera i cap subjecte a la segona."""
+        if not ctx.syntax.available:
+            return True
+        analysis_first = ctx.parse_sentence(first)
+        analysis_second = ctx.parse_sentence(second)
+        if not analysis_first.confident or not analysis_second.confident:
+            ctx.note(
+                f"no s'han fusionat {_describe(first, second)}: l'analitzador sintàctic "
+                "no es refia de l'estructura d'alguna de les dues"
+            )
+            return False
+        root = analysis_first.root
+        copula_token = analysis_first.token_at(first.tokens[copula_index].span.start)
+        if root is None or copula_token is None:
+            return False
+        if not (copula_token.dep == "cop" and copula_token.head == root.index):
+            return False
+        second_root = analysis_second.root
+        if second_root is None:
+            return False
+        has_copula = any(
+            t.head == second_root.index and t.dep == "cop" for t in analysis_second.tokens
+        )
+        has_subject = any(
+            t.head == second_root.index and t.dep in ("nsubj", "csubj")
+            for t in analysis_second.tokens
+        )
+        return has_copula and not has_subject
+
+
+def _predicate(tokens: Sequence[Token], hints: GrammarHints) -> tuple[Token, ...] | None:
+    """Predicat curt i simple (sense verb conjugat, coma ni «que»), o ``None``."""
+    body = [t for t in tokens if not (t.kind is TokenKind.PUNCT and t.text == ".")]
+    if not body or body != list(tokens[: len(body)]):
+        return None
+    words = [t for t in body if t.is_lexical]
+    if not words or len(words) > MAX_PREDICATE_WORDS:
+        return None
+    low = " ".join(t.lower for t in body)
+    if any(_starts_with_phrase(low, exception) for exception in COPULAR_EXCEPTIONS):
+        return None
+    for token in body:
+        if token.kind is TokenKind.PUNCT and token.text not in ("'", "’"):
+            return None
+        if token.lower in ("que", "si", "no", "ni") or hints.is_finite_verb(token):
+            return None
+    return tuple(body)
+
+
+def _first_copula(
+    sentence: Sentence, copula: str, hints: GrammarHints
+) -> tuple[int, bool, bool] | None:
+    """Última còpula de la primera frase amb un predicat simple fins al punt final.
+
+    Retorna l'índex del token de la còpula, si va negada i si duu «només».
+    """
+    tokens = sentence.tokens
+    for index in range(len(tokens) - 2, 0, -1):
+        token = tokens[index]
+        if token.lower != copula or token.kind is not TokenKind.WORD:
+            continue
+        predicate = _predicate(tokens[index + 1 :], hints)
+        if predicate is None:
+            return None
+        only = predicate[0].lower in ONLY_ADVERBS
+        if only and len(predicate) < 2:
+            return None
+        negated = any(t.lower in ("no",) for t in tokens[max(0, index - 2) : index])
+        return index, negated, only
+    return None
 
 
 def _describe(first: Sentence, second: Sentence) -> str:

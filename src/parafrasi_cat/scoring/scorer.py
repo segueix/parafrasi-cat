@@ -16,14 +16,20 @@ Cada candidat rep una puntuació separada per dimensió:
   preferència no hi intervé;
 - ``afinitat_autor``: afinitat amb l'empremta de l'autor, només quan el text és
   un esborrany generat amb LLM (``None`` altrament);
-- ``grau_de_canvi``: proporció de caràcters canviats (0 = idèntic).
+- ``grau_de_canvi``: proporció de caràcters canviats (0 = idèntic);
+- ``grau_estructural``: grau de reredacció estructural (0-1), segons la
+  família de cada transformació: un canvi lèxic o de connector val poc, un
+  canvi sintàctic segur val més, i un canvi entre frases o de paràgraf, el
+  màxim. No mesura distància de caràcters: mesura què s'ha reestructurat.
 
 Una puntuació global (``total``) combina el guany per transformacions amb
 les penalitzacions d'estil i gramaticalitat, amb el bonus (o la penalització)
-de les preferències explícites i, en mode d'esborrany, amb l'afinitat autoral
-relativa a l'original; però qualsevol error de preservació (factual,
-epistemològica, terminològica) o qualsevol error de validació **invalida** el
-candidat: ``valid`` és fals i ``total`` és −1, i cap estil no ho compensa.
+de les preferències explícites, en mode d'esborrany amb l'afinitat autoral
+relativa a l'original i, amb el pes ``structure`` (el mode profund), amb el
+grau estructural multiplicat per la gramaticalitat; però qualsevol error de
+preservació (factual, epistemològica, terminològica) o qualsevol error de
+validació **invalida** el candidat: ``valid`` és fals i ``total`` és −1, i cap
+estil ni cap grau de canvi no ho compensa.
 """
 
 from __future__ import annotations
@@ -48,6 +54,7 @@ DIMENSIONS: tuple[str, ...] = (
     "preferencies_autor",
     "afinitat_autor",
     "grau_de_canvi",
+    "grau_estructural",
 )
 
 INVALID_TOTAL = -1.0
@@ -61,6 +68,7 @@ _DIMENSION_LABELS = {
     "preferencies_autor": "preferències de l'autor",
     "afinitat_autor": "afinitat amb l'estil de l'autor",
     "grau_de_canvi": "grau de canvi",
+    "grau_estructural": "reredacció estructural",
 }
 
 
@@ -258,10 +266,27 @@ class CompositeScorer:
                 dimensions["afinitat_autor"] = affinity.score
 
         dimensions["grau_de_canvi"] = round(candidate.change_ratio(), 4)
+        degree = candidate.structural_degree()
+        dimensions["grau_estructural"] = degree
+        structure_bonus = 0.0
+        if w.structure > 0 and degree > 0:
+            # Entre candidats igualment segurs, la reredacció estructural real té
+            # avantatge; escalat per la gramaticalitat, perquè un avís gramatical
+            # no quedi mai compensat pel grau de canvi.
+            grammar_score = dimensions.get("gramaticalitat")
+            scale = grammar_score if isinstance(grammar_score, float) else 1.0
+            structure_bonus = w.structure * degree * scale
+            components["estructura"] = round(structure_bonus, 4)
+            parts.append(f"reredacció estructural {structure_bonus:+.3f}")
 
         valid = not invalidating
         total = (
-            gain - style_penalty - grammar_penalty + preference_bonus + affinity_bonus
+            gain
+            - style_penalty
+            - grammar_penalty
+            + preference_bonus
+            + affinity_bonus
+            + structure_bonus
             if valid
             else INVALID_TOTAL
         )

@@ -8,7 +8,7 @@ que s'executa al mateix ordinador.
 > morfològica i sintàctica, validació gramatical i selecció determinista de
 > candidats.**
 
-**Versió 1.3.0.** Un cop instal·lats els recursos, tot funciona sense connexió.
+**Versió 1.3.1.** Un cop instal·lats els recursos, tot funciona sense connexió.
 Parafrasi-cat no envia text a serveis d'Internet: en mode local, el text no surt
 del dispositiu; en mode de xarxa local, només circula entre el navegador client
 i el servidor Parafrasi-cat dins de la LAN.

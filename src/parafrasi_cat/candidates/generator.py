@@ -11,14 +11,22 @@ Estratègia:
    reprojecten sobre el text original o s'encadenen amb la transformació que
    va produir el segment afectat.
 
-Garanties: els candidats es dedupliquen pel text, es descarten els que
-superen ``max_change_ratio`` i mai no s'aplica la mateixa regla dues vegades
-sobre el mateix segment.
+Garanties: els candidats es dedupliquen pel text (i pel text normalitzat,
+per no oferir dos candidats gairebé idèntics), es descarten els que superen
+``max_change_ratio`` i mai no s'aplica la mateixa regla dues vegades sobre el
+mateix segment.
+
+Diversitat: la generació treballa sobre una reserva més ampla que el límit de
+candidats, i la selecció final conserva primer el millor candidat de cada
+signatura estructural (``REORDER``, ``CLAUSE_SPLIT``, ``COPULAR_MERGE``,
+``MULTI_TRANSFORM(...)``...) abans d'omplir amb la resta. Així un canvi
+sintàctic no queda fora per culpa de vint variants lèxiques, i el límit de
+transformacions per candidat continua acotant la combinatòria.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import replace
 
 from parafrasi_cat.candidates.candidate import Candidate
@@ -53,6 +61,9 @@ class CandidateGenerator:
         self._max_depth = max_depth
         self._max_change_ratio = max_change_ratio
         self._beam_width = beam_width
+        #: Reserva de treball: més ampla que el límit, perquè la selecció final
+        #: pugui triar per diversitat i no pel primer que hagi arribat.
+        self._pool_limit = max(max_candidates, min(4 * max_candidates, max_candidates + 60))
 
     @property
     def max_transformations(self) -> int:
@@ -70,8 +81,9 @@ class CandidateGenerator:
         *,
         expand: ExpandFn | None = None,
     ) -> tuple[Candidate, ...]:
-        candidates: list[Candidate] = [Candidate.identity(sentence_index, source_text)]
-        seen: set[str] = {source_text}
+        identity = Candidate.identity(sentence_index, source_text)
+        candidates: list[Candidate] = [identity]
+        seen: set[str] = {source_text, identity.normalized_text()}
 
         ordered = sorted(
             (p for p in proposals if not p.is_identity and p.can_apply_to(source_text)),
@@ -88,7 +100,7 @@ class CandidateGenerator:
             next_frontier: list[tuple[int, ...]] = []
             for combo in frontier:
                 for j in range(combo[-1] + 1, len(ordered)):
-                    if len(candidates) >= self._max_candidates:
+                    if len(candidates) >= self._pool_limit:
                         break
                     if not all(_compatible(ordered[i], ordered[j]) for i in combo):
                         continue
@@ -114,7 +126,7 @@ class CandidateGenerator:
                 )[: self._beam_width]
                 added = 0
                 for base in beam:
-                    if len(candidates) >= self._max_candidates:
+                    if len(candidates) >= self._pool_limit:
                         break
                     for proposal in expand(base.text):
                         composed = self.compose(base, proposal)
@@ -122,12 +134,61 @@ class CandidateGenerator:
                             continue
                         if self._add_candidate(candidates, seen, composed):
                             added += 1
-                        if len(candidates) >= self._max_candidates:
+                        if len(candidates) >= self._pool_limit:
                             break
                 if not added:
                     break
 
-        return tuple(candidates[: self._max_candidates])
+        return self.select(candidates)
+
+    def select(self, candidates: Sequence[Candidate]) -> tuple[Candidate, ...]:
+        """Redueix la reserva al límit conservant la diversitat.
+
+        Per ordre: l'identitat; el millor candidat de cada signatura estructural
+        (per grau estructural i confiança acumulada); cada transformació solta
+        (un candidat per regla, perquè cada canvi es pugui veure per separat); i
+        la resta per la mateixa ordenació, fins al límit. L'ordre final és el
+        de generació, i tot és determinista: només depèn dels candidats.
+        """
+        if len(candidates) <= self._max_candidates:
+            return tuple(candidates)
+        identity = [c for c in candidates if c.is_identity][:1]
+        others = [c for c in candidates if not c.is_identity]
+        position = {id(c): n for n, c in enumerate(others)}
+        room = self._max_candidates - len(identity)
+
+        def rank(candidate: Candidate) -> tuple[float, float, int]:
+            return (
+                -candidate.structural_degree(),
+                -sum(t.confidence for t in candidate.transformations),
+                position[id(candidate)],
+            )
+
+        ranked = sorted(others, key=rank)
+        chosen: list[Candidate] = []
+        seen_signatures: set[str] = set()
+        seen_rules: set[str] = set()
+        for candidate in ranked:
+            if len(chosen) >= room:
+                break
+            if candidate.signature not in seen_signatures:
+                seen_signatures.add(candidate.signature)
+                chosen.append(candidate)
+        for candidate in ranked:
+            if len(chosen) >= room:
+                break
+            if candidate.n_transformations == 1 and candidate not in chosen:
+                rule_id = candidate.transformations[0].rule_id
+                if rule_id not in seen_rules:
+                    seen_rules.add(rule_id)
+                    chosen.append(candidate)
+        for candidate in ranked:
+            if len(chosen) >= room:
+                break
+            if candidate not in chosen:
+                chosen.append(candidate)
+        chosen.sort(key=lambda c: position[id(c)])
+        return tuple((*identity, *chosen))
 
     # --- composició en profunditat ---------------------------------------------------
 
@@ -232,7 +293,7 @@ class CandidateGenerator:
         source_text: str,
         transformations: tuple[Transformation, ...],
     ) -> bool:
-        if len(candidates) >= self._max_candidates:
+        if len(candidates) >= self._pool_limit:
             return False
         try:
             candidate = Candidate.from_transformations(sentence_index, source_text, transformations)
@@ -243,11 +304,15 @@ class CandidateGenerator:
     def _add_candidate(
         self, candidates: list[Candidate], seen: set[str], candidate: Candidate
     ) -> bool:
-        if candidate.text in seen or len(candidates) >= self._max_candidates:
+        if candidate.text in seen or len(candidates) >= self._pool_limit:
             return False
+        normalized = candidate.normalized_text()
+        if normalized in seen:
+            return False  # gairebé idèntic a un candidat anterior: no aporta res
         if candidate.change_ratio() > self._max_change_ratio:
             return False
         seen.add(candidate.text)
+        seen.add(normalized)
         candidates.append(candidate)
         return True
 

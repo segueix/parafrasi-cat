@@ -103,8 +103,7 @@ def test_every_candidate_keeps_the_facts(result: ParaphraseResult) -> None:
         "Oddo Altoviti",
         "1507",
         "1516",
-        "Benedetto",
-        "Rovezzano",
+        "Benedetto da Rovezzano",
     ]
     assert result.changed
     for fact in FACTS:

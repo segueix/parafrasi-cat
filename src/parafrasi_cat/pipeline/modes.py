@@ -9,7 +9,11 @@ poden combinar en un candidat i fins a quin nivell arriben les regles.
   reestructurar entre frases (nivell màxim 3). Si cap alternativa no és
   clarament segura, la puntuació deixa guanyar el text original.
 - ``profund``: fins al nivell 5 (paràgraf), amb el risc i la confiança que
-  declari el conjunt de regles i fins a tres transformacions combinades.
+  declari el conjunt de regles i fins a tres transformacions combinades. La
+  puntuació hi dona avantatge a la reredacció estructural real (reordenació,
+  subordinació, divisió, fusió) entre candidats igualment segurs: l'original
+  continua sent el candidat de seguretat, però no guanya pel sol fet de tenir
+  canvi zero.
 
 Cap dels dos modes no toca les proteccions: els termes protegits, els
 diccionaris, les preferències i la llista de validadors són idèntics en tots
@@ -20,7 +24,7 @@ terminologia protegida, negacions ni força epistemològica.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
 from parafrasi_cat.core.errors import ConfigError
@@ -79,6 +83,9 @@ class ModeSettings:
         max_candidates_per_sentence: Candidats avaluats per frase.
         max_level: Nivell màxim de regla que el mode permet.
         length_ratio: Marge de longitud acceptat respecte de l'original.
+        structure_gain: Pes del grau de reredacció estructural a la puntuació
+            (0 = l'original guanya els empats; més = avantatge per a la
+            reestructuració real entre candidats igualment segurs).
     """
 
     mode: RewriteMode
@@ -90,6 +97,7 @@ class ModeSettings:
     max_candidates_per_sentence: int
     max_level: int
     length_ratio: tuple[float, float]
+    structure_gain: float = 0.0
 
     @property
     def label(self) -> str:
@@ -112,6 +120,7 @@ class ModeSettings:
             max_candidates_per_sentence=self.max_candidates_per_sentence,
             level=self.level_for(level),
             length_ratio=self.length_ratio,
+            scoring=replace(config.scoring, structure=self.structure_gain),
         )
         for field in PROTECTED_FIELDS:
             if getattr(applied, field) != getattr(config, field):  # pragma: no cover - invariant
@@ -129,6 +138,7 @@ class ModeSettings:
             "candidate_depth": self.candidate_depth,
             "max_candidates_per_sentence": self.max_candidates_per_sentence,
             "max_level": self.max_level,
+            "structure_gain": self.structure_gain,
         }
 
 
@@ -151,15 +161,17 @@ DEEP = ModeSettings(
     mode=RewriteMode.DEEP,
     description=(
         "Fins al nivell 5 (paràgraf), amb combinacions de transformacions i reaplicació "
-        "de regles. No pot alterar cap dada protegida ni la força epistemològica."
+        "de regles, i amb preferència per la reredacció estructural real. No pot alterar "
+        "cap dada protegida ni la força epistemològica."
     ),
     max_semantic_risk=SemanticRisk.MEDIUM,
     min_confidence=None,
     max_transformations_per_sentence=3,
     candidate_depth=2,
-    max_candidates_per_sentence=20,
+    max_candidates_per_sentence=24,
     max_level=5,
     length_ratio=(0.6, 1.6),
+    structure_gain=0.35,
 )
 
 MODES: dict[RewriteMode, ModeSettings] = {

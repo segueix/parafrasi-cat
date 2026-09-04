@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
 from parafrasi_cat.core.spans import Span
-from parafrasi_cat.core.transformation import Transformation, apply_transformations
+from parafrasi_cat.core.transformation import (
+    Transformation,
+    TransformationFamily,
+    apply_transformations,
+)
+
+MULTI_TRANSFORM = "MULTI_TRANSFORM"
+_SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([,;:.!?»)])")
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +46,46 @@ class Candidate:
     @property
     def rule_ids(self) -> tuple[str, ...]:
         return tuple(t.rule_id for t in self.transformations)
+
+    @property
+    def families(self) -> tuple[TransformationFamily, ...]:
+        """Famílies estructurals de les transformacions, sense repeticions ni reparacions."""
+        seen: dict[TransformationFamily, None] = {}
+        for transformation in self.transformations:
+            family = transformation.family
+            if family is not TransformationFamily.REPAIR:
+                seen.setdefault(family, None)
+        return tuple(seen)
+
+    @property
+    def signature(self) -> str:
+        """Signatura abstracta: ``ORIGINAL``, una família, o ``MULTI_TRANSFORM(A+B)``."""
+        families = self.families
+        if not families:
+            return TransformationFamily.ORIGINAL.value
+        if len(families) == 1:
+            return families[0].value
+        return f"{MULTI_TRANSFORM}({'+'.join(sorted(f.value for f in families))})"
+
+    def structural_degree(self) -> float:
+        """Grau de reredacció estructural (0-1): pes de cada família per la seva confiança."""
+        total = sum(t.family.weight * t.confidence for t in self.transformations)
+        return round(min(1.0, total), 4)
+
+    @property
+    def is_structural(self) -> bool:
+        """Cert si alguna transformació canvia l'arquitectura de la frase."""
+        return any(t.family.structural for t in self.transformations)
+
+    def normalized_text(self) -> str:
+        """Text sense espais repetits ni espais davant de puntuació.
+
+        Serveix per detectar candidats gairebé idèntics: dos textos que només
+        difereixen en això no aporten cap alternativa real. Les majúscules sí
+        que compten: canvien el text.
+        """
+        collapsed = " ".join(self.text.split())
+        return _SPACE_BEFORE_PUNCT_RE.sub(r"\1", collapsed)
 
     def change_ratio(self) -> float:
         """Proporció de caràcters canviats (0 = idèntic, 1 = completament diferent)."""
@@ -107,4 +155,7 @@ class Candidate:
             "text": self.text,
             "transformations": [t.to_dict() for t in self.transformations],
             "change_ratio": round(self.change_ratio(), 4),
+            "signature": self.signature,
+            "families": [f.value for f in self.families],
+            "structural_degree": self.structural_degree(),
         }

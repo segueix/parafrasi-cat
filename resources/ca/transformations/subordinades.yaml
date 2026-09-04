@@ -106,3 +106,135 @@ rules:
       negative:
         - "Quan va ploure, vam sortir."
         - "Va arribar a Roma quan va poder."
+
+  # --- Causals: «X perquè Y» ↔ «Com que Y, X» --------------------------------------------
+  # «perquè» amb indicatiu és causal; amb subjuntiu és final («perquè vinguin»)
+  # i no es toca: la condició «mood: ind» ho comprova amb l'analitzador o, sense,
+  # amb l'endevinador. La relació causal es conserva sempre de manera explícita.
+  - rule_id: subordinada.causal_final_a_inicial
+    engine: pattern
+    category: subordinada
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.65
+    description: "«X perquè Y.» → «Com que Y, X.» (subordinada causal final a l'inici, amb el marcador «com que»)"
+    pattern:
+      - {start: true}
+      - {seq: true, group: main, min_tokens: 2, no_comma: true}
+      - {text: ",", optional: true}
+      - {seq: true, group: clause, greedy: true, min_tokens: 2}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        main:
+          has_finite_verb: true
+          no_relative: true
+          not_ends_with: [i, o, ni, però, sinó, de, "d'", a, en, per, amb, el, la, els, les, "l'", un, una, "no", més, molt, tan, com, que]
+        clause:
+          starts_with: [perquè, ja que, atès que, puix que]
+          has_finite_verb: true
+          is_adverbial_clause: true
+          mood: ind
+          no_clitic: true
+          single_clause: true
+    transformation: "{clause|lead(perquè=com que,ja que=com que,atès que=com que,puix que=com que)|cap}, {main|lower}"
+    examples:
+      positive:
+        - input: "La regla no funciona perquè el text és antic."
+          output: "Com que el text és antic, la regla no funciona."
+        - input: "El cavaller és reconeixible, ja que el cavall i l'armament són transparents."
+          output: "Com que el cavall i l'armament són transparents, el cavaller és reconeixible."
+      negative:
+        - "Ho expliquem perquè ho entenguin."
+        - "El cavaller és reconeixible perquè el cavall el fa transparent."
+        - "La regla que ho explica no funciona perquè el text és antic."
+
+  - rule_id: subordinada.causal_inicial_a_final
+    engine: pattern
+    category: subordinada
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.65
+    description: "«Com que Y, X.» → «X, ja que Y.» (subordinada causal inicial al final, amb el marcador «ja que»)"
+    pattern:
+      - {start: true}
+      - {text: com}
+      - {text: que}
+      - {seq: true, group: clause, no_comma: true, min_tokens: 2}
+      - {text: ","}
+      - {seq: true, group: main, greedy: true, min_tokens: 2, no_comma: true}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        clause: {has_finite_verb: true, no_relative: true, no_clitic: true}
+        main: {has_finite_verb: true, no_relative: true, not_starts_with: [i, o, ni, però, sinó, que, ","]}
+    transformation: "{main|cap}, ja que {clause}"
+    examples:
+      positive:
+        - input: "Com que el text és antic, la regla no funciona."
+          output: "La regla no funciona, ja que el text és antic."
+      negative:
+        - "Com que el veu, somriu."
+        - "Com que el text és antic, la regla que ho explica no funciona."
+
+  # --- Relatives copulatives explicatives ↔ aposicions ----------------------------------
+  - rule_id: subordinada.relativa_copulativa_a_aposicio
+    engine: pattern
+    category: subordinada
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.7
+    description: "«N, que és NP, ...» → «N, NP, ...» (relativa explicativa amb còpula reduïda a aposició)"
+    pattern:
+      - {text: ","}
+      - {text: que}
+      - {text: [és, són], group: cop}
+      - {np: true, group: pred}
+      - {boundary: true}
+    conditions:
+      groups:
+        pred: {starts_with: ["@determiner"], no_finite_verb: true}
+      context:
+        preceded_by: ["@word"]
+    transformation: ", {pred}"
+    examples:
+      positive:
+        - input: "L'orfil, que és una peça singular, no encaixa en la jerarquia."
+          output: "L'orfil, una peça singular, no encaixa en la jerarquia."
+        - input: "Els rocs, que són les peces més fortes, guarden els extrems."
+          output: "Els rocs, les peces més fortes, guarden els extrems."
+      negative:
+        - "Sé que és una peça singular."
+        - "L'orfil, que és molt antic, no encaixa en la jerarquia."
+        - "L'orfil, que és el que diu Cessolis, no encaixa."
+
+  - rule_id: subordinada.aposicio_a_relativa_copulativa
+    engine: pattern
+    category: subordinada
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: medium
+    confidence: 0.6
+    description: "«N, NP, ...» → «N, que és NP, ...» (aposició convertida en relativa explicativa; només amb analitzador)"
+    pattern:
+      - {text: ","}
+      - {np: true, group: pred}
+      - {text: ","}
+    conditions:
+      groups:
+        pred: {starts_with: ["@determiner"], no_finite_verb: true, is_apposition: true}
+      context:
+        preceded_by: ["@word"]
+      syntax:
+        requires_parser: true
+    transformation: ", que {pred|agree(és,són)} {pred},"
+    examples:
+      positive:
+        - input: "L'orfil, una peça singular, no encaixa en la jerarquia."
+          output: "L'orfil, que és una peça singular, no encaixa en la jerarquia."
+      negative:
+        - "L'orfil, segons Cessolis, no encaixa en la jerarquia."
+        - "Va venir, va mirar, i va marxar."

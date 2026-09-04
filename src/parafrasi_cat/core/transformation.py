@@ -43,6 +43,109 @@ class TransformationType(StrEnum):
     """Cap canvi (es fa servir per a candidats de referència)."""
 
 
+class TransformationFamily(StrEnum):
+    """Família estructural d'una transformació: què canvia de debò en la frase.
+
+    Serveix per classificar els candidats (signatura), per no generar-ne vint
+    de gairebé iguals i per mesurar el grau de reredacció: un canvi sintàctic
+    segur pesa més que un canvi de connector, i un canvi entre frases més que
+    un de dins de la frase. El pes no compensa mai cap error: només ordena
+    candidats igualment segurs.
+    """
+
+    ORIGINAL = "ORIGINAL"
+    LEXICAL = "LEXICAL"
+    CONNECTOR = "CONNECTOR"
+    PUNCTUATION = "PUNCTUATION"
+    VERBAL = "VERBAL"
+    NOMINALIZATION = "NOMINALIZATION"
+    SYNTACTIC = "SYNTACTIC"
+    REORDER = "REORDER"
+    SUBORDINATION = "SUBORDINATION"
+    COPULAR = "COPULAR"
+    IMPERSONAL = "IMPERSONAL"
+    CLAUSE_SPLIT = "CLAUSE_SPLIT"
+    CLAUSE_MERGE = "CLAUSE_MERGE"
+    COPULAR_MERGE = "COPULAR_MERGE"
+    REPAIR = "REPAIR"
+
+    @property
+    def weight(self) -> float:
+        """Pes en el grau de reredacció estructural (0 = no compta)."""
+        return _FAMILY_WEIGHTS[self]
+
+    @property
+    def structural(self) -> bool:
+        """Cert si la família canvia l'arquitectura de la frase, no només els mots."""
+        return self.weight >= 0.7
+
+    @property
+    def cross_sentence(self) -> bool:
+        return self in (
+            TransformationFamily.CLAUSE_SPLIT,
+            TransformationFamily.CLAUSE_MERGE,
+            TransformationFamily.COPULAR_MERGE,
+        )
+
+    @classmethod
+    def parse(cls, value: str) -> TransformationFamily | None:
+        try:
+            return cls(value.strip().upper())
+        except ValueError:
+            return None
+
+
+#: Pes de cada família en el grau de reredacció estructural. Un canvi lèxic
+#: superficial val poc; un connector, una mica més; un canvi sintàctic segur,
+#: força més; i un canvi entre frases o de paràgraf, el màxim.
+_FAMILY_WEIGHTS: dict[TransformationFamily, float] = {
+    TransformationFamily.ORIGINAL: 0.0,
+    TransformationFamily.REPAIR: 0.0,
+    TransformationFamily.LEXICAL: 0.25,
+    TransformationFamily.CONNECTOR: 0.35,
+    TransformationFamily.PUNCTUATION: 0.4,
+    TransformationFamily.VERBAL: 0.5,
+    TransformationFamily.NOMINALIZATION: 0.7,
+    TransformationFamily.SYNTACTIC: 0.8,
+    TransformationFamily.IMPERSONAL: 0.8,
+    TransformationFamily.COPULAR: 0.9,
+    TransformationFamily.REORDER: 1.0,
+    TransformationFamily.SUBORDINATION: 1.0,
+    TransformationFamily.CLAUSE_SPLIT: 1.1,
+    TransformationFamily.CLAUSE_MERGE: 1.1,
+    TransformationFamily.COPULAR_MERGE: 1.2,
+}
+
+#: Família per categoria de regla, quan la regla no la declara a les metadades.
+_FAMILY_BY_CATEGORY: dict[str, TransformationFamily] = {
+    "lexic": TransformationFamily.LEXICAL,
+    "diccionari": TransformationFamily.LEXICAL,
+    "connector": TransformationFamily.CONNECTOR,
+    "puntuacio": TransformationFamily.PUNCTUATION,
+    "verbal": TransformationFamily.VERBAL,
+    "nominalitzacio": TransformationFamily.NOMINALIZATION,
+    "copula": TransformationFamily.COPULAR,
+    "ordre": TransformationFamily.REORDER,
+    "temporal": TransformationFamily.REORDER,
+    "subordinada": TransformationFamily.SUBORDINATION,
+    "impersonal": TransformationFamily.IMPERSONAL,
+    "divisio": TransformationFamily.CLAUSE_SPLIT,
+    "fusio": TransformationFamily.CLAUSE_MERGE,
+    "concordanca": TransformationFamily.REPAIR,
+}
+
+_FAMILY_BY_TYPE: dict[str, TransformationFamily] = {
+    "lexical": TransformationFamily.LEXICAL,
+    "connector": TransformationFamily.CONNECTOR,
+    "syntactic": TransformationFamily.SYNTACTIC,
+    "morphological": TransformationFamily.VERBAL,
+    "punctuation": TransformationFamily.PUNCTUATION,
+    "sentence_split": TransformationFamily.CLAUSE_SPLIT,
+    "sentence_merge": TransformationFamily.CLAUSE_MERGE,
+    "identity": TransformationFamily.ORIGINAL,
+}
+
+
 class SemanticRisk(StrEnum):
     """Risc que una transformació alteri el significat del text original."""
 
@@ -133,6 +236,17 @@ class Transformation:
         return self.text_before == self.text_after
 
     @property
+    def family(self) -> TransformationFamily:
+        """Família estructural: la declarada, o la de la categoria, o la del tipus."""
+        declared = TransformationFamily.parse(str(self.metadata.get("family", "")))
+        if declared is not None:
+            return declared
+        by_category = _FAMILY_BY_CATEGORY.get(str(self.metadata.get("category", "")).lower())
+        if by_category is not None:
+            return by_category
+        return _FAMILY_BY_TYPE.get(self.transformation_type.value, TransformationFamily.SYNTACTIC)
+
+    @property
     def result_span(self) -> Span:
         """Interval que ocupa ``text_after`` un cop aplicada la transformació."""
         return Span(self.changed_span.start, self.changed_span.start + len(self.text_after))
@@ -168,6 +282,7 @@ class Transformation:
             "transformation_type": self.transformation_type.value,
             "confidence": self.confidence,
             "semantic_risk": self.semantic_risk.value,
+            "family": self.family.value,
             "explanation": self.explanation,
             "metadata": dict(self.metadata),
         }

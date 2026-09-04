@@ -148,9 +148,11 @@ def test_altoviti_offers_the_correct_constitueix_variant(
 def test_altoviti_protects_the_expected_spans(
     results: dict[RewriteMode, JsonDict],
 ) -> None:
+    # Des de la 1.3.1 la partícula «da» forma part del nom: «Benedetto da Rovezzano» és un
+    # sol tram protegit (abans eren dos trams i la partícula quedava exposada al motor verbal).
     for mode in MODES:
         protected = {span["text"] for span in results[mode]["protected_spans"]}
-        assert {"Oddo Altoviti", "1507", "1516", "Benedetto", "Rovezzano"} <= protected, mode
+        assert {"Oddo Altoviti", "1507", "1516", "Benedetto da Rovezzano"} <= protected, mode
 
 
 def test_deep_mode_reaches_further_without_losing_anything(

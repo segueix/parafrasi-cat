@@ -4,6 +4,13 @@ Passat perifràstic ↔ passat simple: «va encarregar» ↔ «encarregà»,
 «van ser» ↔ «foren». Els dos temps són equivalents en català; el canvi és
 només de registre. Les formes irregulars provenen d'una taula de dades i les
 regulars es deriven de la conjugació (-ar → -à/-aren, -ir → -í/-iren).
+
+En la direcció simple → perifràstic, que una forma *acabi* com un passat
+simple no és cap garantia: «sobirà», «germà» o «sofà» acaben en «-à» i no són
+verbs. Per això la regla només transforma amb evidència morfosintàctica
+suficient, combinada a :mod:`parafrasi_cat.morphology.verbal`: lectures del
+recurs morfològic, taula d'irregulars, terminació, analitzador sintàctic i
+pronoms febles. Davant del dubte no transforma, i deixa apuntat per què.
 """
 
 from __future__ import annotations
@@ -18,10 +25,12 @@ from parafrasi_cat.core.errors import ConfigError
 from parafrasi_cat.core.spans import Span
 from parafrasi_cat.core.text import match_casing
 from parafrasi_cat.core.transformation import Transformation
+from parafrasi_cat.morphology.verbal import PastSimpleEvidence, Verdict, assess_past_simple
 from parafrasi_cat.resources import as_mapping_list, as_str, load_mapping
 from parafrasi_cat.rules.base import Rule, RuleContext
 from parafrasi_cat.rules.definition import RuleDefinition
 from parafrasi_cat.rules.patterns import GrammarHints, is_participle
+from parafrasi_cat.syntax.analysis import SentenceSyntax
 
 _AUX_PERSONS: dict[str, tuple[str, str]] = {
     # auxiliar → (persona, nombre)
@@ -44,27 +53,73 @@ _REVERSE_ENDINGS: tuple[tuple[str, str, str], ...] = (
     ("íreu", "vau", "ir"),
 )
 _REVERSE_SINGULAR: tuple[tuple[str, str], ...] = (("à", "ar"), ("í", "ir"))
-# Formes que, davant d'un verb, només poden ser pronoms febles (o la negació).
-_PROCLITIC_EVIDENCE = frozenset(
-    {"no", "hi", "ho", "li", "es", "s'", "ens", "us", "em", "et", "n'", "m'", "t'"}
+# Formes que, davant d'un mot, només poden ser pronoms febles: un pronom feble
+# només acompanya un verb. «el», «la», «els», «les» no hi són (poden ser
+# articles: «no el germà») i la negació tampoc: «no» precedeix igualment un
+# adjectiu o un nom («però ja no sobirà», «però no independent»).
+_SURE_PROCLITICS = frozenset(
+    {"hi", "ho", "li", "es", "s'", "ens", "us", "em", "et", "n'", "m'", "t'"}
 )
-# Formes ambigües entre article i pronom: només compten si van precedides de «no»
-# o d'un altre pronom («no el pagà», «se'l menjà»).
-_AMBIGUOUS_CLITICS = frozenset({"el", "la", "els", "les"})
+
+#: Factor de confiança quan l'analitzador, tot i ser fiable, no hi veu un verb
+#: però la morfologia només hi veu un verb de passat. Es manté la transformació
+#: (el diccionari és coneixement lèxic, i l'analitzador s'equivoca sovint amb
+#: el passat simple), però amb menys confiança: el mode conservador la descarta.
+PARSER_DISAGREEMENT_FACTOR = 0.85
+
+#: Clau de metadades amb què les transformacions verbals es fan reconeixibles
+#: als validadors de classe.
+VERBAL_CHANGE_KEY = "verbal_change"
 
 
-def _pronoun_evidence(tokens: tuple[Token, ...], index: int, sure_pronouns: set[int]) -> bool:
-    """Hi ha un pronom feble (o «no») just abans del token ``index``?"""
+def _clitic_before(tokens: tuple[Token, ...], index: int, sure_pronouns: set[int]) -> bool:
+    """Hi ha un pronom feble segur just abans del token ``index``?"""
     if index == 0:
         return False
     previous = tokens[index - 1]
-    low = previous.lower.replace("’", "'")
-    if (index - 1) in sure_pronouns or low in _PROCLITIC_EVIDENCE:
+    if (index - 1) in sure_pronouns:
         return True
-    if low in _AMBIGUOUS_CLITICS and index >= 2:
-        before = tokens[index - 2]
-        return before.lower == "no" or (index - 2) in sure_pronouns
-    return False
+    low = previous.lower.replace("’", "'")
+    if low in _SURE_PROCLITICS:
+        return True
+    return (
+        previous.kind is TokenKind.CLITIC
+        and previous.subkind is TokenSubkind.PROCLITIC
+        and low[:1] not in ("d", "l")
+    )
+
+
+def _worth_noting(evidence: PastSimpleEvidence) -> bool:
+    """Cert si val la pena explicar el descart al resultat.
+
+    S'apunta quan hi ha hagut un dubte real: una forma amb lectura verbal que
+    el context no resol, o una forma que l'analitzador etiqueta com a verb i
+    la morfologia desmenteix («sobirà»). Un mot en «-à» o «-í» que cap font no
+    pren per verb («matí», «aquí», «català») no és cap candidat de debò, i
+    apuntar-lo seria soroll.
+    """
+    if evidence.verdict is Verdict.AMBIGUOUS:
+        return True
+    return evidence.verdict is Verdict.NOT_VERB and evidence.parser_verbal
+
+
+def _between_names(tokens: tuple[Token, ...], index: int) -> bool:
+    """Cert si el token va entre dos mots en majúscula que no obren la frase."""
+    before = next((t for t in reversed(tokens[:index]) if t.kind is TokenKind.WORD), None)
+    after = next((t for t in tokens[index + 1 :] if t.kind is TokenKind.WORD), None)
+    if before is None or after is None:
+        return False
+    if not (before.text[:1].isupper() and after.text[:1].isupper()):
+        return False
+    return any(t.kind is TokenKind.WORD for t in tokens[: tokens.index(before)])
+
+
+def _capitalized_inside(tokens: tuple[Token, ...], index: int) -> bool:
+    """Cert si el token va en majúscula i no és el primer mot de la frase."""
+    token = tokens[index]
+    if not token.text[:1].isupper():
+        return False
+    return any(t.kind is TokenKind.WORD for t in tokens[:index])
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,7 +200,13 @@ class PeriphrasticPastRule(Rule):
             after = match_casing(aux.text, simple)
             if ctx.protected_conflict(span, after) is not None:
                 continue
-            yield self._transformation(before, after, span, "passat perifràstic → passat simple")
+            yield self._transformation(
+                before,
+                after,
+                span,
+                "passat perifràstic → passat simple",
+                extra={VERBAL_CHANGE_KEY: "perifrastic_a_simple"},
+            )
 
     def _simple_form(self, infinitive: str, persons: tuple[str, str]) -> str | None:
         low = infinitive.lower()
@@ -174,56 +235,129 @@ class PeriphrasticPastRule(Rule):
         sure_pronouns = {
             p.token_index for p in ctx.sentence.pronouns if p.certainty is Certainty.SURE
         }
+        # L'anàlisi de la frase, si hi ha parser: la fa servir l'evidència per
+        # resoldre les formes ambigües. Sense parser és buida i no hi diu res.
+        analysis = ctx.parse() if ctx.analysis is not None or ctx.syntax.available else None
         for index, token in enumerate(tokens):
             if token.kind is not TokenKind.WORD or token.subkind is TokenSubkind.ROMAN_NUMERAL:
                 continue
             if index + 1 < len(tokens) and _enclitic_after(token, tokens[index + 1]):
                 continue
-            periphrastic = self._periphrastic_form(token, tokens, index, sure_pronouns)
+            evidence = self.evidence(ctx, tokens, index, sure_pronouns, analysis)
+            if evidence is None:
+                continue
+            periphrastic = evidence.periphrastic
             if periphrastic is None:
+                if _worth_noting(evidence):
+                    ctx.note(
+                        f"no s'ha canviat «{token.text}» a passat perifràstic: "
+                        + "; ".join(evidence.reasons)
+                    )
                 continue
             after = match_casing(token.text, periphrastic)
             if ctx.protected_conflict(token.span, after) is not None:
                 continue
+            confidence = self._definition.confidence
+            if evidence.parser_agrees is False:
+                confidence = round(confidence * PARSER_DISAGREEMENT_FACTOR, 4)
             yield self._transformation(
-                token.text, after, token.span, "passat simple → passat perifràstic"
+                token.text,
+                after,
+                token.span,
+                "passat simple → passat perifràstic",
+                confidence=confidence,
+                extra={
+                    VERBAL_CHANGE_KEY: "simple_a_perifrastic",
+                    "evidence": ", ".join(evidence.sources),
+                    "evidence_detail": "; ".join(evidence.reasons),
+                },
             )
 
-    def _periphrastic_form(
+    def evidence(
         self,
-        token: Token,
+        ctx: RuleContext,
         tokens: tuple[Token, ...],
         index: int,
         sure_pronouns: set[int],
-    ) -> str | None:
+        analysis: object = None,
+    ) -> PastSimpleEvidence | None:
+        """Evidència que el token ``index`` és un passat simple transformable.
+
+        ``None`` si la forma no s'assembla a cap passat simple (cap font no en
+        diu res i cap terminació no hi encaixa): aleshores no cal ni apuntar-ho.
+        """
+        token = tokens[index]
         low = token.lower
-        irregular = self._by_form.get(low)
-        if irregular is not None:
-            entry, aux = irregular
-            return f"{aux} {entry.infinitive}"
-        if self._hints.is_closed_class(low):
+        irregular: tuple[str, str] | None = None
+        found = self._by_form.get(low)
+        if found is not None:
+            entry, aux = found
+            irregular = (entry.infinitive, aux)
+        elif self._hints.is_closed_class(low):
+            return None  # «fou» és a la taula i alhora auxiliar: la taula mana
+        if _between_names(tokens, index):
+            # «Benedetto da Rovezzano»: una partícula entre dos noms propis forma
+            # part del nom, encara que el diccionari conegui la forma com a verb.
             return None
+        regular: tuple[str, str] | None = None
+        plural_ending = False
         for ending, aux, suffix in _REVERSE_ENDINGS:
             if low.endswith(ending) and len(low) >= len(ending) + 3:
-                return f"{aux} {low[: -len(ending)]}{suffix}"
-        if not _pronoun_evidence(tokens, index, sure_pronouns):
+                regular = (f"{low[: -len(ending)]}{suffix}", aux)
+                plural_ending = True
+                break
+        if regular is None:
+            for ending, suffix in _REVERSE_SINGULAR:
+                if low.endswith(ending) and len(low) >= len(ending) + 3:
+                    regular = (f"{low[: -len(ending)]}{suffix}", "va")
+                    break
+        parsed = analysis if isinstance(analysis, SentenceSyntax) else None
+        evidence = assess_past_simple(
+            token.text,
+            morphology=ctx.morphology,
+            analysis=parsed,
+            offset=token.span.start,
+            irregular=irregular,
+            regular=regular,
+            plural_ending=plural_ending,
+            clitic_before=_clitic_before(tokens, index, sure_pronouns),
+            capitalized_inside=_capitalized_inside(tokens, index),
+        )
+        if evidence.verdict is Verdict.UNKNOWN and irregular is None and regular is None:
             return None
-        for ending, suffix in _REVERSE_SINGULAR:
-            if low.endswith(ending) and len(low) >= len(ending) + 3:
-                return f"va {low[: -len(ending)]}{suffix}"
-        return None
+        if evidence.verdict is not Verdict.VERB and irregular is None and regular is None:
+            # Coneguda pel recurs però sense cap terminació de passat: no és
+            # cap candidata i no cal apuntar res.
+            return None
+        return evidence
 
-    def _transformation(self, before: str, after: str, span: Span, what: str) -> Transformation:
+    def _transformation(
+        self,
+        before: str,
+        after: str,
+        span: Span,
+        what: str,
+        *,
+        confidence: float | None = None,
+        extra: Mapping[str, str] | None = None,
+    ) -> Transformation:
+        metadata = {
+            "category": self._definition.category,
+            "level": str(self._definition.level),
+            "family": "VERBAL",
+        }
+        if extra:
+            metadata.update(extra)
         return Transformation(
             rule_id=self.rule_id,
             text_before=before,
             text_after=after,
             changed_span=span,
             transformation_type=self._definition.transformation_type,
-            confidence=self._definition.confidence,
+            confidence=self._definition.confidence if confidence is None else confidence,
             semantic_risk=self._definition.semantic_risk,
             explanation=f"{self._definition.description or what}: «{before}» → «{after}»",
-            metadata={"category": self._definition.category, "level": str(self._definition.level)},
+            metadata=metadata,
         )
 
 

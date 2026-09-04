@@ -55,6 +55,7 @@ from parafrasi_cat.validation.invariants import (
     NumericInvariantValidator,
     ProtectedSpanValidator,
 )
+from parafrasi_cat.validation.verbal import VerbalTransformationValidator
 
 PROTECTED_TERMS_FILE = "dictionaries/termes_protegits.txt"
 KNOWN_NAMES_FILE = "dictionaries/noms_propis.txt"
@@ -108,7 +109,9 @@ def build_pipeline(
     all_terms = tuple(dict.fromkeys((*user_terms, *dictionary_terms)))
     morphology = create_morphology_provider(config.morphology, lang, lexicon=lexicon)
     syntax = build_syntax_provider(config, morphology)
-    validators = build_validators(config, paths, analyzer, lexicon, rule_set, all_terms, syntax)
+    validators = build_validators(
+        config, paths, analyzer, lexicon, rule_set, all_terms, syntax, morphology
+    )
 
     style_profile = load_style_profile(
         paths.resolve_style_profile(config.style_profile), paths=paths
@@ -205,6 +208,7 @@ def build_validators(
     rule_set: RuleSet,
     user_terms: tuple[str, ...] = (),
     syntax: SyntaxProvider | None = None,
+    morphology: MorphologyProvider | None = None,
 ) -> list[Validator]:
     """Validadors en ordre de prioritat: contingut, terminologia, epistemologia, gramàtica.
 
@@ -213,7 +217,8 @@ def build_validators(
     - terminologia protegida per l'usuari i pels diccionaris del projecte;
     - marcadors d'atenuació i certesa, i classificació epistemològica explícita
       (només les regles amb ``allows_epistemic_change`` poden canviar-la);
-    - gramaticalitat heurística, concordança subjecte-verb (amb parser) i
+    - gramaticalitat heurística, validació per classe de les transformacions
+      verbals (amb morfologia i parser), concordança subjecte-verb (amb parser) i
       marge de longitud.
     """
     lang = paths.language(config.language)
@@ -241,6 +246,10 @@ def build_validators(
             EpistemicValidator(EpistemicLexicon.load(epistemology), rule_set.epistemic_rule_ids)
         )
     validators.append(GrammarHeuristicValidator())
+    if morphology is not None:
+        # Una transformació verbal ha de partir d'un verb i produir-ne un: LanguageTool
+        # no detecta «va sobirar», i el recurs morfològic local sí.
+        validators.append(VerbalTransformationValidator(morphology, syntax))
     if syntax is not None and syntax.available:
         # Concordança subjecte-verb amb el parser local: només les discordances
         # que hagi introduït el motor descarten un candidat.

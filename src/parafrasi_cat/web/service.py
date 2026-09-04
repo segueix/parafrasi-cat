@@ -509,6 +509,10 @@ class RewriteService:
             "is_identity": candidate.is_identity,
             "rejection_reason": evaluated.rejection_reason,
             "change_ratio": round(candidate.change_ratio(), 4),
+            "signature": candidate.signature,
+            "families": [f.value for f in candidate.families],
+            "structural_degree": candidate.structural_degree(),
+            "cross_sentence": any(t.family.cross_sentence for t in candidate.transformations),
             "score": None if score is None else score.to_dict(),
             "rules": [
                 {
@@ -519,6 +523,8 @@ class RewriteService:
                     "semantic_risk": t.semantic_risk.value,
                     "confidence": t.confidence,
                     "category": t.metadata.get("category", ""),
+                    "family": t.family.value,
+                    "evidence": t.metadata.get("evidence", ""),
                 }
                 for t in candidate.transformations
             ],

@@ -128,10 +128,16 @@ def test_periphrastic_past_both_directions(paths: ProjectPaths, outputs) -> None
     assert outputs(to_periphrastic, "Els mestres finalitzaren l'obra.") == [
         "Els mestres van finalitzar l'obra."
     ]
-    # «-à» només amb evidència pronominal («el pagà»); mai un nom com «sofà».
-    assert outputs(to_periphrastic, "El sofà és nou i no el pagà.") == [
-        "El sofà és nou i no el va pagar."
+    # «-à» només amb un pronom feble segur al davant («ho pagà»); mai un nom com «sofà».
+    assert outputs(to_periphrastic, "El sofà és nou i no ho pagà.") == [
+        "El sofà és nou i no ho va pagar."
     ]
+    # Abans, «no el X» bastava per prendre X per verb; però «el» pot ser article
+    # («però no el germà») i la negació precedeix igualment un adjectiu («però ja
+    # no sobirà»). Sense recurs morfològic ni analitzador, el dubte conserva l'original.
+    assert outputs(to_periphrastic, "El sofà és nou i no el pagà.") == []
+    assert outputs(to_periphrastic, "Va convidar el pare, però no el germà.") == []
+    assert outputs(to_periphrastic, "Era un home poderós, però ja no sobirà.") == []
     with pytest.raises(ConfigError):
         PeriphrasticPastRule(
             RuleDefinition.from_mapping({"rule_id": "x", **base}), direction="enrere"

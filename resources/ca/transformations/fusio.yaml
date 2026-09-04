@@ -33,6 +33,9 @@ rules:
         max_words: 16
         max_words_each: 8
         semantic_risk: medium
+        # Una segona frase que comença per una còpula («És B.») és cosa de la
+        # fusió copulativa, que en conserva el subjecte compartit.
+        skip_if_second_starts_with: [és, són, era, eren]
     examples:
       positive:
         - input: "Plou molt. Tanmateix, sortirem."
@@ -47,3 +50,27 @@ rules:
         - "Plou molt! Sortirem."
         - "Plou molt? Sortirem."
         - "Vegeu la pàg. Després tornarem."
+
+  # Fusió de dues frases copulatives amb el mateix subjecte: la segona no en
+  # té cap i la còpula és la mateixa. «no és només A. És B.» dona «no és només
+  # A, sinó també B.»; «és A. És B.» dona «és A i B.». Amb analitzador, la
+  # còpula de la primera ha de ser la de l'oració principal.
+  - rule_id: fusio.copulativa
+    engine: copular_fusion
+    category: fusio
+    level: 5
+    transformation_type: sentence_merge
+    semantic_risk: low
+    confidence: 0.8
+    description: "Fusió de dues frases copulatives amb el mateix subjecte («no és només A. És B.» → «no és només A, sinó també B.»)"
+    examples:
+      positive:
+        - input: "La qüestió, per tant, no és només etimològica. És institucional."
+          output: "La qüestió, per tant, no és només etimològica, sinó també institucional."
+        - input: "El rei és el centre del tauler. És el centre del regne."
+          output: "El rei és el centre del tauler i el centre del regne."
+      negative:
+        - "La casa és gran. És a dir, hi cabem tots."
+        - "El rei és fort. Són molts."
+        - "La qüestió no és només etimològica. Tampoc és institucional."
+        - "És evident que plou. És clar."

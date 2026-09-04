@@ -221,10 +221,15 @@ class UserTermDetector:
 
 
 #: Mots de lligam que poden aparèixer dins d'un nom propi compost
-#: («Universitat de Barcelona», «Institut d'Estudis Catalans», «Fabra i Poch»).
+#: («Universitat de Barcelona», «Institut d'Estudis Catalans», «Fabra i Poch»),
+#: amb les partícules dels noms estrangers («Benedetto da Rovezzano», «Ludwig
+#: van Beethoven», «Leonardo di Caprio»): sense elles, la partícula quedaria
+#: fora del fragment protegit i alguna regla la podria prendre per un mot corrent.
 _NAME_CONNECTORS: frozenset[str] = frozenset(
-    {"de", "del", "dels", "d'", "d’", "la", "les", "el", "els", "i", "l'", "l’", "en", "na"}
-)
+    {"de", "del", "dels", "d'", "d’", "la", "les", "el", "els", "i", "l'", "l’", "en", "na",
+     "da", "di", "du", "von", "van", "der", "den", "della", "delle", "dei", "degli", "do",
+     "dos", "das", "le", "des"}
+)  # fmt: skip
 
 #: Connectors admesos just després de la primera paraula d'una frase
 #: («Universitat de Barcelona és...», «Consell d'Europa...»).

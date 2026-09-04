@@ -79,6 +79,7 @@ class DiscardedCandidate:
         return {
             "text": self.text,
             "rule_ids": list(self.evaluated.candidate.rule_ids),
+            "signature": self.evaluated.candidate.signature,
             "accepted": self.evaluated.accepted,
             "score": None if self.evaluated.score is None else self.evaluated.score.total,
             "reason": self.reason,
@@ -150,8 +151,16 @@ class _UnitResult:
         return {
             "best": selected.candidate.text,
             "changed": not selected.candidate.is_identity,
+            "signature": selected.candidate.signature,
+            "structural_degree": selected.candidate.structural_degree(),
+            "signatures": sorted({c.candidate.signature for c in self.candidates}),
             "applied_rules": [
-                {"rule_id": t.rule_id, "before": t.text_before, "after": t.text_after}
+                {
+                    "rule_id": t.rule_id,
+                    "family": t.family.value,
+                    "before": t.text_before,
+                    "after": t.text_after,
+                }
                 for t in selected.candidate.transformations
             ],
             "score": None if selected.score is None else selected.score.to_dict(),
@@ -440,10 +449,12 @@ def _report_unit(lines: list[str], unit: _UnitResult, max_discarded: int) -> Non
     if selected.candidate.is_identity:
         lines.append("  → sense canvis (cap candidat segur millora l'original)")
     else:
-        lines.append(f"  → «{selected.candidate.text}»")
+        lines.append(f"  → «{selected.candidate.text}» [{selected.candidate.signature}]")
         lines.append("  Regles aplicades:")
         for t in selected.candidate.transformations:
-            lines.append(f"    · {t.rule_id}: «{t.text_before}» → «{t.text_after}»")
+            lines.append(
+                f"    · {t.rule_id} ({t.family.value}): «{t.text_before}» → «{t.text_after}»"
+            )
     if selected.score is not None:
         lines.append(
             f"  Puntuacions: global {selected.score.total:+.3f} · "
@@ -456,4 +467,5 @@ def _report_unit(lines: list[str], unit: _UnitResult, max_discarded: int) -> Non
         for item in discarded:
             rules = ", ".join(item.evaluated.candidate.rule_ids) or "—"
             marker = "·" if item.evaluated.accepted else "✘"
-            lines.append(f"    {marker} «{item.text}» [{rules}] — {item.reason}")
+            signature = item.evaluated.candidate.signature
+            lines.append(f"    {marker} «{item.text}» [{rules}; {signature}] — {item.reason}")

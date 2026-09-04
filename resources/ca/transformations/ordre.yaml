@@ -110,3 +110,260 @@ rules:
           output: "Segons Fabra, la norma és clara."
       negative:
         - "La norma, segons Fabra, és clara."
+
+  # --- Subordinades adverbials: posició dins de l'oració ---------------------------------
+  # Amb analitzador sintàctic, «is_subject» i «is_adverbial_clause» comproven
+  # l'arbre de dependències (el subjecte del nucli i una subordinada adverbial
+  # que en depèn directament); sense analitzador, recorren a les heurístiques
+  # de sempre. «no_clitic» evita que un pronom feble quedi davant del seu
+  # antecedent, i «single_clause» que es mogui més d'una clàusula alhora.
+  - rule_id: ordre.adverbial_interposada_a_inicial
+    engine: pattern
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.7
+    description: "«S, encara que Y, V...» → «Encara que Y, S V...» (subordinada adverbial interposada a l'inici)"
+    pattern:
+      - {start: true}
+      - {np: true, group: subj}
+      - {text: ","}
+      - {seq: true, group: clause, no_comma: true, min_tokens: 2}
+      - {text: ","}
+      - {seq: true, group: rest, greedy: true, min_tokens: 2}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        subj: {is_subject: true, no_finite_verb: true}
+        clause:
+          starts_with: &marcadors_adverbials
+            [encara que, tot i que, malgrat que, per bé que, si bé, quan, mentre, si,
+             sempre que, un cop, després que, abans que, fins que, des que, com que,
+             ja que, atès que]
+          has_finite_verb: true
+          is_adverbial_clause: true
+          no_clitic: true
+          single_clause: true
+        rest: {has_finite_verb: true}
+    transformation: "{clause|cap}, {subj|lower} {rest}"
+    examples:
+      positive:
+        - input: "El roc, encara que tingui un nom menys evident, pot ser assimilat a la funció de veguer."
+          output: "Encara que tingui un nom menys evident, el roc pot ser assimilat a la funció de veguer."
+        - input: "La reina, quan apareix, no necessita cap explicació."
+          output: "Quan apareix, la reina no necessita cap explicació."
+      negative:
+        - "El roc, que és una peça menor, pot ser assimilat a la funció de veguer."
+        - "La reina, quan el veu, somriu."
+        - "El roc, encara que tingui un nom menys evident quan apareix, pot ser assimilat a la funció de veguer."
+
+  - rule_id: ordre.adverbial_inicial_a_interposada
+    engine: pattern
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: medium
+    confidence: 0.6
+    description: "«Encara que Y, S V...» → «S, encara que Y, V...» (subordinada adverbial inicial interposada després del subjecte)"
+    pattern:
+      - {start: true}
+      - {seq: true, group: clause, no_comma: true, min_tokens: 3}
+      - {text: ","}
+      - {np: true, group: subj, min_tokens: 2}
+      - {seq: true, group: rest, greedy: true, min_tokens: 2}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        clause:
+          starts_with: [encara que, tot i que, malgrat que, per bé que, si bé, quan, mentre, si]
+          has_finite_verb: true
+          is_adverbial_clause: true
+          no_clitic: true
+          single_clause: true
+        subj:
+          is_subject: true
+          no_finite_verb: true
+          not_ends_with: [el, la, els, les, "l'", un, una, uns, unes]
+        rest: {has_finite_verb: true, not_starts_with: [",", i, o, ni]}
+    transformation: "{subj|cap}, {clause|lower}, {rest}"
+    examples:
+      positive:
+        - input: "Encara que tingui un nom menys evident, el roc pot ser assimilat a la funció de veguer."
+          output: "El roc, encara que tingui un nom menys evident, pot ser assimilat a la funció de veguer."
+      negative:
+        - "Encara que tingui un nom menys evident, pot ser assimilat a la funció de veguer."
+        - "Quan el veu, la reina somriu."
+
+  - rule_id: ordre.adverbial_final_a_inicial
+    engine: pattern
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.7
+    description: "«X quan Y.» → «Quan Y, X.» (subordinada adverbial final a l'inici de la frase)"
+    pattern:
+      - {start: true}
+      - {seq: true, group: main, min_tokens: 2, no_comma: true}
+      - {text: ",", optional: true}
+      - {seq: true, group: clause, greedy: true, min_tokens: 2}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        main:
+          has_finite_verb: true
+          no_relative: true
+          not_ends_with: [i, o, ni, però, sinó, de, "d'", a, en, per, amb, el, la, els, les, "l'", un, una, "no", més, molt, tan, com, que]
+        clause:
+          starts_with: [encara que, tot i que, malgrat que, per bé que, quan, mentre, si, sempre que, un cop, després que, abans que, fins que, des que]
+          has_finite_verb: true
+          is_adverbial_clause: true
+          no_clitic: true
+          single_clause: true
+    transformation: "{clause|cap}, {main|lower}"
+    examples:
+      positive:
+        - input: "La regla no funciona si el text és antic."
+          output: "Si el text és antic, la regla no funciona."
+        - input: "El roc pot ser assimilat a la funció de veguer, encara que tingui un nom menys evident."
+          output: "Encara que tingui un nom menys evident, el roc pot ser assimilat a la funció de veguer."
+      negative:
+        - "La regla que ho explica no funciona si el text és antic."
+        - "La reina somriu quan el veu."
+        - "La regla no funciona si el text és antic i quan plou."
+
+  - rule_id: ordre.adverbial_inicial_a_final
+    engine: pattern
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.7
+    description: "«Quan Y, X.» → «X quan Y.» (subordinada temporal o condicional inicial al final)"
+    pattern:
+      - {start: true}
+      - {seq: true, group: clause, no_comma: true, min_tokens: 2}
+      - {text: ","}
+      - {seq: true, group: main, greedy: true, min_tokens: 2, no_comma: true}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        clause:
+          starts_with: [quan, mentre, si, sempre que, un cop, després que, abans que, fins que, des que]
+          has_finite_verb: true
+          is_adverbial_clause: true
+          no_clitic: true
+          single_clause: true
+        main: {has_finite_verb: true, no_relative: true, not_starts_with: [i, o, ni, però, sinó, que, ",", doncs, aleshores, llavors]}
+    transformation: "{main|cap} {clause|lower}"
+    examples:
+      positive:
+        - input: "Si el text és antic, la regla no funciona."
+          output: "La regla no funciona si el text és antic."
+        - input: "Quan apareix, la reina no necessita cap explicació."
+          output: "La reina no necessita cap explicació quan apareix."
+      negative:
+        - "Si el text és antic, la regla que ho explica no funciona."
+        - "Quan el veu, la reina somriu."
+        - "Si plou, no sortirem, però tornarem."
+
+  - rule_id: ordre.concessiva_inicial_a_final
+    engine: pattern
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.7
+    description: "«Encara que Y, X.» → «X, encara que Y.» (subordinada concessiva inicial al final)"
+    pattern:
+      - {start: true}
+      - {seq: true, group: clause, no_comma: true, min_tokens: 3}
+      - {text: ","}
+      - {seq: true, group: main, greedy: true, min_tokens: 2, no_comma: true}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        clause:
+          starts_with: [encara que, tot i que, malgrat que, per bé que]
+          has_finite_verb: true
+          is_adverbial_clause: true
+          no_clitic: true
+          single_clause: true
+        main: {has_finite_verb: true, no_relative: true, not_starts_with: [i, o, ni, però, sinó, que, ","]}
+    transformation: "{main|cap}, {clause|lower}"
+    examples:
+      positive:
+        - input: "Encara que tingui un nom menys evident, el roc pot ser assimilat a la funció de veguer."
+          output: "El roc pot ser assimilat a la funció de veguer, encara que tingui un nom menys evident."
+      negative:
+        - "Encara que el vegi, no el saluda."
+        - "Si el text és antic, la regla no funciona."
+
+  # --- Connectors discursius: posició inicial ↔ posició medial ---------------------------
+  - rule_id: ordre.connector_medial_a_inicial
+    engine: pattern
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.7
+    description: "«S, per tant, V...» → «Per tant, S V...» (connector medial a l'inici de la frase)"
+    pattern:
+      - {start: true}
+      - {np: true, group: subj}
+      - {text: ","}
+      - {seq: true, group: conn, max_tokens: 3, no_punct: true}
+      - {text: ","}
+      - {seq: true, group: rest, greedy: true, min_tokens: 2}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        subj: {is_subject: true, no_finite_verb: true}
+        conn:
+          exact: &connectors_mobils
+            [per tant, tanmateix, en canvi, a més, a més a més, així doncs, no obstant això,
+             d'altra banda, en conseqüència, finalment, així mateix, per exemple, en definitiva,
+             en efecte, de fet, doncs, això sí, en principi, en realitat, per consegüent,
+             amb tot, així i tot, malgrat tot, en aquest sentit, en aquest cas]
+        rest: {has_finite_verb: true}
+    transformation: "{conn|cap}, {subj|lower} {rest}"
+    examples:
+      positive:
+        - input: "La qüestió, per tant, no és només etimològica."
+          output: "Per tant, la qüestió no és només etimològica."
+      negative:
+        - "La qüestió, segons Fabra, no és només etimològica."
+        - "Per tant, la qüestió no és només etimològica."
+
+  - rule_id: ordre.connector_inicial_a_medial
+    engine: pattern
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.65
+    description: "«Per tant, S V...» → «S, per tant, V...» (connector inicial darrere del subjecte)"
+    pattern:
+      - {start: true}
+      - {seq: true, group: conn, max_tokens: 3, no_punct: true}
+      - {text: ","}
+      - {np: true, group: subj, min_tokens: 2}
+      - {seq: true, group: rest, greedy: true, min_tokens: 2}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        conn: {exact: *connectors_mobils}
+        subj:
+          is_subject: true
+          no_finite_verb: true
+          not_ends_with: [el, la, els, les, "l'", un, una, uns, unes]
+        rest: {has_finite_verb: true, not_starts_with: [",", i, o, ni, que]}
+    transformation: "{subj|cap}, {conn|lower}, {rest}"
+    examples:
+      positive:
+        - input: "Per tant, la qüestió no és només etimològica."
+          output: "La qüestió, per tant, no és només etimològica."
+      negative:
+        - "Per tant, no és només etimològica."
+        - "Segons Fabra, la norma és clara."
