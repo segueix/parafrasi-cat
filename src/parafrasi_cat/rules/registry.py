@@ -9,7 +9,8 @@ registre les instancia pel nom del motor:
 - ``connector``: classes de connectors equivalents;
 - ``periphrastic_past``: passat perifràstic ↔ passat simple;
 - ``nominalization``: verb ↔ construcció nominal amb verb lleuger;
-- ``fusion``: fusió de frases (regla de paràgraf).
+- ``fusion``: fusió de frases (regla de paràgraf);
+- ``copular_fusion``: fusió de frases copulatives amb el mateix subjecte.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from parafrasi_cat.resources import ProjectPaths, as_str, as_str_list
 from parafrasi_cat.rules.base import AnyRule
 from parafrasi_cat.rules.connectors import ConnectorEquivalenceRule
 from parafrasi_cat.rules.definition import RuleDefinition, definition_from_params
-from parafrasi_cat.rules.fusion import SentenceFusionRule
+from parafrasi_cat.rules.fusion import CopularFusionRule, SentenceFusionRule
 from parafrasi_cat.rules.lexical import LexicalSubstitutionRule
 from parafrasi_cat.rules.nominal import nominalization_rule_from_params
 from parafrasi_cat.rules.pattern_rule import HintsCache, PatternRule
@@ -147,6 +148,12 @@ def _fusion_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPa
     )
 
 
+def _copular_fusion_factory(
+    rule_id: str, params: Mapping[str, object], paths: ProjectPaths
+) -> AnyRule:
+    return CopularFusionRule(definition_from_params(params, rule_id), hints=_Hints.for_paths(paths))
+
+
 def default_registry() -> RuleRegistry:
     """Registre amb tots els motors implementats."""
     registry = RuleRegistry()
@@ -183,5 +190,13 @@ def default_registry() -> RuleRegistry:
         "fusion",
         _fusion_factory,
         description="Fusió de frases consecutives compatibles (regla de paràgraf)",
+    )
+    registry.register(
+        "copular_fusion",
+        _copular_fusion_factory,
+        description=(
+            "Fusió de dues frases copulatives amb el mateix subjecte "
+            "(«no és només A. És B.» → «no és només A, sinó també B.»; regla de paràgraf)"
+        ),
     )
     return registry

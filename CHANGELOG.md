@@ -3,6 +3,44 @@
 El format segueix [Keep a Changelog](https://keepachangelog.com/ca/1.1.0/) i el
 projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
+## 1.3.1
+
+Correcció funcional i d'arquitectura del motor, a partir d'una prova real.
+
+- `verbal.simple_a_perifrastic` només transforma amb evidència morfosintàctica
+  suficient (`morphology/verbal.py`): lectures lèxiques del recurs morfològic
+  (l'endevinador per sufixos no hi compta), taula d'irregulars i terminacions,
+  analitzador sintàctic (categoria, forma verbal, temps, dependència i nucli) i
+  pronoms febles segurs. La negació sola ja no és cap evidència: «però ja no
+  sobirà» es conserva, i el motiu queda apuntat al resultat. Un predicatiu
+  nominal o adjectival («ja no rei», «no independent», «no el germà») no es
+  converteix mai en verb, i una partícula entre dos noms propis tampoc;
+- validació per classe de transformació (`validation/verbal.py`): un canvi
+  verbal ha de partir d'un verb de passat i produir un infinitiu que existeixi,
+  segons el recurs morfològic local; LanguageTool és una capa addicional, no
+  l'única garantia;
+- famílies sintàctiques generals guiades pel parser: subordinades adverbials
+  (interposada ↔ inicial ↔ final), causals («X perquè Y» ↔ «Com que Y, X»),
+  connectors (medial ↔ inicial), relatives copulatives ↔ aposicions,
+  impersonals («es considera» ↔ «hom considera») i fusió copulativa («no és
+  només A. És B.» → «no és només A, sinó també B.»). Les condicions
+  estructurals (`is_subject`, `is_adverbial_clause`, `mood`, `no_clitic`,
+  `single_clause`, `is_apposition`, `no_subject`) comproven l'arbre de
+  dependències quan hi ha analitzador i recorren a les heurístiques sense;
+- els verbs conjugats de les condicions de patró (`has_finite_verb`) es
+  reconeixen amb l'analitzador quan es refia de la frase: les divisions i
+  puntuacions ja s'apliquen a text real;
+- signatura estructural de cada candidat (`ORIGINAL`, `CONNECTOR`, `REORDER`,
+  `CLAUSE_SPLIT`, `COPULAR_MERGE`, `MULTI_TRANSFORM(...)`), deduplicació de
+  candidats gairebé idèntics i selecció que conserva la diversitat de famílies;
+- puntuació del mode profund: grau de reredacció estructural per família (un
+  canvi sintàctic pesa més que un connector, i un canvi entre frases més que un
+  de dins de la frase), escalat per la gramaticalitat i sense compensar mai cap
+  error de preservació; en mode conservador no compta;
+- observabilitat: família, signatura, grau estructural i evidència de cada
+  transformació al resultat, a l'informe i a l'API local;
+- test de regressió amb el text real i amb els casos d'ambigüitat el·líptica.
+
 ## 1.3.0
 
 - mode de xarxa local (`parafrasi-cat web --lan`), opcional i mai per defecte;

@@ -217,12 +217,15 @@ def test_grammar_defects_are_penalised_or_rejected() -> None:
     rejected = [c for c in result.sentences[0].candidates if not c.accepted]
     assert rejected and rejected[0].score is not None
     assert rejected[0].score.dimensions["gramaticalitat"] == 0.0
+    # Des de la 1.3.1 un candidat que només difereix de l'original per espais dobles es
+    # descarta com a gairebé idèntic abans de puntuar-se; el defecte lleu que competeix
+    # aquí ha de ser un canvi de text real (una paraula repetida: avís, no error).
     competing = make_pipeline(
-        [ReplaceRule("net", "Gairebé", "Quasi"), ReplaceRule("brut", "sempre", "sempre ")]
+        [ReplaceRule("net", "Gairebé", "Quasi"), ReplaceRule("brut", "sempre", "sempre sempre")]
     )
     result = competing.run(source)
     scored = {c.candidate.text: c.score for c in result.sentences[0].candidates if c.score}
-    dirty = scored["Gairebé sempre  va al mercat."]
+    dirty = scored["Gairebé sempre sempre va al mercat."]
     clean = scored["Quasi sempre va al mercat."]
     assert dirty.valid and dirty.dimensions["gramaticalitat"] == 0.85
     assert clean.dimensions["gramaticalitat"] == 1.0 and clean.total > dirty.total

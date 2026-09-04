@@ -1,0 +1,54 @@
+# Família 14: alternança entre construccions impersonals equivalents.
+# «es considera que» ↔ «hom considera que»: les dues són impersonals i de la
+# mateixa classe epistemològica; cap de les dues no té agent explícit, de manera
+# que no en desapareix cap. Un «es» reflexiu amb subjecte («la gent es creu»)
+# no és impersonal i no es toca: el context (o, amb analitzador, l'absència de
+# subjecte) ho comprova.
+description: Construccions impersonals amb «es» ↔ «hom».
+language: ca
+rules:
+  - rule_id: impersonal.es_a_hom
+    engine: pattern
+    category: impersonal
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.65
+    description: "«es considera que» → «hom considera que» (impersonal amb «es» → impersonal amb «hom»)"
+    pattern:
+      - {text: es, group: es}
+      - {text: &verbs_impersonals [creu, considera, pensa, suposa, diu, afirma, sosté, sap, entén, admet, accepta, pot, sol, veu, observa, constata], group: v}
+    conditions:
+      groups:
+        v: {no_subject: true}
+      context:
+        preceded_by: ["@start", "@punct", "no", "també", "tampoc", "ja", "encara", "i", "o", "però", "que", "com", "si", "quan", "on", "sovint", "sempre", "avui", "ara", "aleshores", "llavors"]
+    transformation: "{es|map(es=hom)} {v}"
+    examples:
+      positive:
+        - input: "Es considera que el text és antic."
+          output: "Hom considera que el text és antic."
+        - input: "Avui es pot afirmar que la datació és segura."
+          output: "Avui hom pot afirmar que la datació és segura."
+      negative:
+        - "La gent es creu que és fàcil."
+        - "Es va considerar que el text era antic."
+
+  - rule_id: impersonal.hom_a_es
+    engine: pattern
+    category: impersonal
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.7
+    description: "«hom considera que» → «es considera que» (impersonal amb «hom» → impersonal amb «es»)"
+    pattern:
+      - {text: hom, group: hom}
+      - {text: *verbs_impersonals, group: v}
+    transformation: "{hom|map(hom=es)} {v}"
+    examples:
+      positive:
+        - input: "Hom considera que el text és antic."
+          output: "Es considera que el text és antic."
+      negative:
+        - "Hom va considerar que el text era antic."

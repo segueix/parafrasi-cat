@@ -22,7 +22,9 @@ Les plantilles referencien els grups: ``"{subj} constitueix {pred}"``. Filtres:
 ``{p|map(fet=realitzat,feta=realitzada)}``,
 ``{cop|inflect(constituir,és=constitueix,són=constitueixen)}`` (canvi de verb
 conservant persona, nombre i gènere: primer amb el recurs morfològic i, si no
-en sap prou, amb el mapatge explícit que ve a continuació).
+en sap prou, amb el mapatge explícit que ve a continuació),
+``{clause|lead(perquè=com que,ja que=com que)}`` (canvia el marcador inicial
+d'un fragment i conserva la resta).
 """
 
 from __future__ import annotations
@@ -39,6 +41,7 @@ from parafrasi_cat.core.spans import Span
 from parafrasi_cat.core.text import LETTER, match_casing, phrase_pattern
 from parafrasi_cat.morphology.guesser import guess
 from parafrasi_cat.morphology.provider import MorphologyProvider, NullMorphology, inflect_like
+from parafrasi_cat.morphology.verbal import lexical_readings
 from parafrasi_cat.protected.spans import ProtectedSpan
 from parafrasi_cat.syntax.analysis import SentenceSyntax, empty
 
@@ -87,6 +90,11 @@ _DEGREE_ADVERBS = frozenset(
 )  # fmt: skip
 _NP_PREPOSITIONS = frozenset({"de", "d'", "del", "dels"})
 RELATIVE_MARKERS = frozenset({"que", "qui", "on", "quan", "perquè", "mentre", "si"})
+
+#: Formes que només poden ser pronoms febles.
+_SURE_PRONOUN_FORMS = frozenset({"hi", "ho", "li", "es", "em", "et", "ens", "us"})
+#: Formes que són pronoms només davant d'un verb; si no, articles.
+_AMBIGUOUS_PRONOUN_FORMS = frozenset({"el", "la", "els", "les", "en"})
 
 _INFINITIVE_RE = re.compile(r"^[^\W\d_]{2,}(?:ar|er|ir|re)$")
 _PARTICIPLE_RE = re.compile(r"^[^\W\d_]{2,}(?:[aiu]t|[aiu]da|[aiu]ts|[aiu]des)$")
@@ -257,6 +265,49 @@ class MatchState:
 
     syntax: SentenceSyntax = field(default_factory=empty)
     """Anàlisi sintàctica de la frase. Només la consulten les regles que la demanen."""
+
+    pronouns: frozenset[int] = frozenset()
+    """Índexs dels tokens que l'analitzador ha resolt com a pronoms febles segurs."""
+
+    def is_finite(self, token: Token) -> bool:
+        """Cert si el token és un verb conjugat, segons la millor font disponible.
+
+        Amb una anàlisi sintàctica fiable mana l'analitzador (categoria i forma
+        verbal), llevat que el recurs morfològic conegui la forma i no hi vegi cap
+        verb: aleshores no ho és. Sense analitzador decideixen les pistes
+        gramaticals de sempre (auxiliars, llista de formes freqüents, endevinador).
+        """
+        if not token.is_word:
+            return False
+        if self.syntax.confident:
+            parsed = self.syntax.token_at(token.span.start)
+            if parsed is not None and parsed.end == token.span.end:
+                if not parsed.is_finite_verb:
+                    return False
+                readings = lexical_readings(self.morphology, token.text)
+                return not (readings.known and not readings.past_verb and not readings.other_verb)
+        return self.hints.is_finite_verb(token)
+
+    def is_clitic(self, index: int) -> bool:
+        """Cert si el token és (o fa de) pronom feble.
+
+        Compta el que l'analitzador de pronoms ha resolt com a segur, els
+        clítics adherits i, en els casos ambigus («el», «la», «els», «les»),
+        la posició davant d'un verb conjugat, que és on fan de pronom.
+        """
+        token = self.tokens[index]
+        if index in self.pronouns:
+            return True
+        low = normalize_form(token.text)
+        if token.kind is TokenKind.CLITIC:
+            # «l'» i «d'» elidits són articles o preposicions si l'analitzador de
+            # pronoms no els ha resolt com a pronoms; la resta són sempre pronoms.
+            return low[:1] not in ("l", "d")
+        if low in _SURE_PRONOUN_FORMS:
+            return True
+        if low in _AMBIGUOUS_PRONOUN_FORMS and index + 1 < len(self.tokens):
+            return self.is_finite(self.tokens[index + 1])
+        return False
 
     def is_protected_token(self, index: int) -> bool:
         span = self.tokens[index].span
@@ -792,6 +843,17 @@ def _apply_filter(
         if number is None:
             return None
         return agree.group(1).strip() if number == "sg" else agree.group(2).strip()
+    lead = re.fullmatch(r"lead\((.*)\)", name)
+    if lead:
+        leads: dict[str, str] = {}
+        for pair in lead.group(1).split(","):
+            key, _, value = pair.partition("=")
+            leads[normalize_form(key)] = value.strip()
+        low = normalize_form(text)
+        for key in sorted(leads, key=len, reverse=True):
+            if low == key or low.startswith(key + " "):
+                return match_casing(text[: len(key)], leads[key]) + text[len(key) :]
+        return None
     mapping = re.fullmatch(r"map\((.*)\)", name)
     if mapping:
         table: dict[str, str] = {}

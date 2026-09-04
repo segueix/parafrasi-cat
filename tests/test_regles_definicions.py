@@ -7,14 +7,17 @@ import pytest
 from parafrasi_cat.analyzer import RuleBasedAnalyzer
 from parafrasi_cat.core import SemanticRisk
 from parafrasi_cat.protected import default_protector
-from parafrasi_cat.resources import ProjectPaths
+from parafrasi_cat.resources import ProjectPaths, as_mapping
 from parafrasi_cat.rules import RuleSet, RuleSetConfig, build_rule_set, default_registry
 from parafrasi_cat.rules.examples import verify_examples
 
 REQUIRED_CATEGORIES = {
     "lexic", "connector", "verbal", "nominalitzacio", "copula", "agent", "presencia", "ordre",
-    "temporal", "subordinada", "fusio", "divisio", "puntuacio",
+    "temporal", "subordinada", "impersonal", "fusio", "divisio", "puntuacio",
 }  # fmt: skip
+
+#: Regles de paràgraf (nivell 5): la fusió genèrica i la fusió copulativa.
+PARAGRAPH_RULES = {"fusio.frases_compatibles", "fusio.copulativa"}
 
 
 @pytest.fixture(scope="module")
@@ -24,13 +27,13 @@ def rule_set(paths: ProjectPaths) -> RuleSet:
 
 
 def test_rule_set_covers_all_families(rule_set: RuleSet) -> None:
-    assert 25 <= len(rule_set.rules) <= 45
+    assert 25 <= len(rule_set.rules) <= 70
     assert {d.category for d in rule_set.definitions} == REQUIRED_CATEGORIES
     assert {d.level for d in rule_set.definitions} == {1, 2, 3, 4, 5}
-    assert len(rule_set.paragraph_rules) == 1
-    assert len(rule_set.sentence_rules) == len(rule_set.rules) - 1
-    # El nivell 5 és la reestructuració de paràgraf: és l'únic que hi arriba.
-    assert {d.rule_id for d in rule_set.definitions if d.level == 5} == {"fusio.frases_compatibles"}
+    assert len(rule_set.paragraph_rules) == len(PARAGRAPH_RULES)
+    assert len(rule_set.sentence_rules) == len(rule_set.rules) - len(PARAGRAPH_RULES)
+    # El nivell 5 és la reestructuració de paràgraf: només hi arriben les regles de paràgraf.
+    assert {d.rule_id for d in rule_set.definitions if d.level == 5} == PARAGRAPH_RULES
     assert {r.level for r in rule_set.paragraph_rules} == {5}
 
 
@@ -84,8 +87,14 @@ RULE_IDS = [
     "subordinada.relativa_passiva_a_participi",
     "subordinada.relativa_passiva_perifrastica_a_participi",
     "subordinada.participi_a_relativa_passiva", "subordinada.quan_va_inf_a_en_inf",
-    "fusio.frases_compatibles", "divisio.coordinada_i", "divisio.coordinada_pero",
-    "puntuacio.punt_i_coma_a_punt", "puntuacio.parentesi_a_comes",
+    "subordinada.causal_final_a_inicial", "subordinada.causal_inicial_a_final",
+    "subordinada.relativa_copulativa_a_aposicio", "subordinada.aposicio_a_relativa_copulativa",
+    "ordre.adverbial_interposada_a_inicial", "ordre.adverbial_inicial_a_interposada",
+    "ordre.adverbial_final_a_inicial", "ordre.adverbial_inicial_a_final",
+    "ordre.concessiva_inicial_a_final", "ordre.connector_medial_a_inicial",
+    "ordre.connector_inicial_a_medial", "impersonal.es_a_hom", "impersonal.hom_a_es",
+    "fusio.frases_compatibles", "fusio.copulativa", "divisio.coordinada_i",
+    "divisio.coordinada_pero", "puntuacio.punt_i_coma_a_punt", "puntuacio.parentesi_a_comes",
     "puntuacio.parentesi_final_a_coma", "puntuacio.guions_a_comes",
 ]  # fmt: skip
 
@@ -96,5 +105,10 @@ def test_rule_id_list_matches_rule_set(rule_set: RuleSet) -> None:
 
 @pytest.mark.parametrize("rule_id", RULE_IDS)
 def test_rule_examples(rule_set: RuleSet, example_checker, rule_id: str) -> None:  # type: ignore[no-untyped-def]
+    definition = next(d for d in rule_set.definitions if d.rule_id == rule_id)
+    if as_mapping(definition.conditions, "syntax").get("requires_parser") is True:
+        # Les regles que exigeixen l'analitzador no proposen res sense: els seus
+        # exemples es comproven amb el parser a tests/test_reredaccio_profunda.py.
+        pytest.skip(f"«{rule_id}» exigeix l'analitzador sintàctic")
     failures = example_checker(rule_set, rule_id)
     assert not failures, "\n".join(failures)

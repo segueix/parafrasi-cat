@@ -328,6 +328,61 @@ class SentenceSyntax:
         """Mot que conté la posició de caràcter indicada."""
         return next((t for t in self.tokens if t.start <= offset < t.end), None)
 
+    def subtree(self, token: SyntaxToken) -> tuple[SyntaxToken, ...]:
+        """El mot i tots els seus dependents (directes i indirectes), en ordre."""
+        by_index = {t.index: t for t in self.tokens}
+        members = {token.index}
+        changed = True
+        while changed:
+            changed = False
+            for candidate in self.tokens:
+                if candidate.index in members or candidate.head not in members:
+                    continue
+                if candidate.head == candidate.index:
+                    continue
+                members.add(candidate.index)
+                changed = True
+        return tuple(by_index[i] for i in sorted(members))
+
+    def subtree_span(self, token: SyntaxToken) -> tuple[int, int]:
+        """Interval de caràcters que ocupa el subarbre d'un mot (sense la puntuació final)."""
+        members = [t for t in self.subtree(token) if t.pos != "PUNCT"]
+        if not members:
+            return token.start, token.end
+        return members[0].start, members[-1].end
+
+    def main_head(self) -> SyntaxToken | None:
+        """El nucli de l'oració principal: l'arrel, o el verb principal si l'arrel no ho és."""
+        return self.root
+
+    def subject_of_root(self) -> SyntaxToken | None:
+        """Subjecte nominal del nucli (un de sol), o ``None``."""
+        root = self.root
+        if root is None:
+            return None
+        direct = [t for t in self.tokens if t.head == root.index and t.dep in SUBJECT_DEPS]
+        return direct[0] if len(direct) == 1 else None
+
+    def adverbial_clauses_of_root(self) -> tuple[SyntaxToken, ...]:
+        """Nuclis de les subordinades adverbials que depenen directament del nucli."""
+        root = self.root
+        if root is None:
+            return ()
+        return tuple(
+            t
+            for t in self.tokens
+            if t.head == root.index and t.dep == "advcl" and t.index != root.index
+        )
+
+    def covers(self, token: SyntaxToken, start: int, end: int) -> bool:
+        """Cert si el subarbre del mot ocupa exactament l'interval (puntuació a part)."""
+        first, last = self.subtree_span(token)
+        return first == start and last == end
+
+    def finite_tokens_in(self, start: int, end: int) -> tuple[SyntaxToken, ...]:
+        """Verbs conjugats dins de l'interval."""
+        return tuple(t for t in self.tokens_in(start, end) if t.is_finite_verb)
+
     def tokens_in(self, start: int, end: int) -> tuple[SyntaxToken, ...]:
         return tuple(t for t in self.tokens if t.start >= start and t.end <= end)
 
