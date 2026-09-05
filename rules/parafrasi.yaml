@@ -18,6 +18,7 @@ include:
   - resources/ca/transformations/temporals.yaml
   - resources/ca/transformations/subordinades.yaml
   - resources/ca/transformations/impersonals.yaml
+  - resources/ca/transformations/cobertura_profunda.yaml
   - resources/ca/transformations/fusio.yaml
   - resources/ca/transformations/divisio.yaml
   - resources/ca/transformations/puntuacio.yaml
