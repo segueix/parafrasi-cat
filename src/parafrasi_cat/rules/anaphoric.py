@@ -2,7 +2,7 @@
 
 Patró objectiu: «... . Un fet que obligava...» quan la segona frase queda com
 un sintagma nominal amb una relativa, sense oració principal. Amb parser local,
-si la frase anterior és fiable, el nom és realment l'arrel del fragment i la
+si hi ha una frase anterior, el nom és realment l'arrel del fragment i la
 relativa en depèn, es pot reformular com «... . Aquest fet obligava...».
 
 No es genera text lliurement: només es substitueix l'inici declarat per una
@@ -56,8 +56,6 @@ class AnaphoricFragmentRepairRule(ParagraphRule):
 
         for first, second in zip(ctx.sentences, ctx.sentences[1:], strict=False):
             if not _same_paragraph_gap(first, second, ctx.text):
-                continue
-            if not ctx.parse_sentence(first).confident:
                 continue
 
             matched = _fragment_head(second)
