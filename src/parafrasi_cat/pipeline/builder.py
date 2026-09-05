@@ -313,30 +313,36 @@ def load_feedback(config: PipelineConfig, author: AuthorPreferences | None) -> F
     return FeedbackStore.load(file)
 
 
-def _load_abbreviations(lang: Path) -> tuple[str, ...]:
-    data = load_mapping(lang / "lexicon" / "abreviatures.yaml")
-    values = as_str_list(data, "abbreviations")
-    return tuple(values) or DEFAULT_ABBREVIATIONS
+def _load_abbreviations(lang: Path) -> frozenset[str]:
+    file = lang / "lexicon" / "abreviatures.yaml"
+    if not file.is_file():
+        return DEFAULT_ABBREVIATIONS
+    data = load_mapping(file)
+    return DEFAULT_ABBREVIATIONS | frozenset(as_str_list(data, "abbreviations"))
 
 
 def _load_connectors(lang: Path) -> tuple[str, ...]:
-    data = load_mapping(lang / "lexicon" / "connectors.yaml")
-    connectors: list[str] = []
-    for key in ("causal", "consequence", "contrast", "addition", "reformulation", "ordering"):
-        connectors.extend(as_str_list(data, key))
-    return tuple(dict.fromkeys(connectors))
+    file = lang / "connectors" / "connectors.yaml"
+    if not file.is_file():
+        return ()
+    data = load_mapping(file)
+    forms: list[str] = []
+    for group in as_mapping_list(data, "groups"):
+        for connector in as_mapping_list(group, "connectors"):
+            form = as_str(connector, "form").strip()
+            if form:
+                forms.append(form)
+    return tuple(dict.fromkeys(forms))
 
 
 def _read_optional_terms(paths: ProjectPaths, relative: str) -> tuple[str, ...]:
-    file = paths.root / relative
-    return read_term_list(file) if file.is_file() else ()
+    file = paths.optional(relative)
+    return read_term_list(file) if file is not None else ()
 
 
 def _collect_user_terms(config: PipelineConfig, paths: ProjectPaths) -> tuple[str, ...]:
-    terms = list(config.protected_terms)
-    default_file = paths.root / PROTECTED_TERMS_FILE
-    if default_file.is_file():
-        terms.extend(read_term_list(default_file))
+    terms: list[str] = list(config.protected_terms)
     for file in config.protected_terms_files:
         terms.extend(read_term_list(file))
-    return tuple(dict.fromkeys(term for term in terms if term))
+    terms.extend(_read_optional_terms(paths, PROTECTED_TERMS_FILE))
+    return tuple(dict.fromkeys(terms))
