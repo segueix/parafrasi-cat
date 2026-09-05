@@ -78,8 +78,12 @@ class DiversifiedAuthorAdaptation(AuthorAdaptation):
         # Sense component sintàctic fiable no afegim cap judici nou.
         if "sintaxi" not in base.components:
             return base
-        stats = self.stats_of(text).syntax
-        if len(stats) < MIN_SENTENCES:
+        unit = self.stats_of(text)
+        stats = unit.syntax
+        # Si alguna frase del paràgraf no té parse fiable, eliminar-la de la
+        # seqüència crearia falses adjacències entre patrons. En aquest cas no
+        # puntuem la diversitat: menys cobertura, mai una inferència dubtosa.
+        if len(stats) < MIN_SENTENCES or len(stats) != unit.n_sentences:
             return base
 
         fingerprint = self.preferences.fingerprint
@@ -169,10 +173,12 @@ def structural_diversity_similarity(
         if previous.pattern == current.pattern
     ) / (n - 1)
     # Amb empremtes antigues no tenim una taxa de ratxes explícita. La suma de
-    # p² és l'esperança de repetir patró en dues frases consecutives si la
-    # distribució de l'autor fos independent; ometem la cua no inclosa a ``top``
-    # i, per tant, el criteri és deliberadament conservador.
-    author_repeat = min(1.0, sum(share * share for share in author_shares))
+    # p² aproxima la repetició esperable dels patrons coneguts. Per a la cua que
+    # no entra a ``top`` prenem el cas més permissiu (tota la cua com un sol
+    # patró), de manera que la penalització no sigui excessiva.
+    known = min(1.0, sum(author_shares))
+    residual = max(0.0, 1.0 - known)
+    author_repeat = min(1.0, sum(share * share for share in author_shares) + residual**2)
     repeat_excess = max(0.0, candidate_repeats - author_repeat)
     runs = 1.0 - min(
         1.0,
