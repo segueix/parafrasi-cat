@@ -32,7 +32,6 @@ def test_rule_set_covers_all_families(rule_set: RuleSet) -> None:
     assert {d.level for d in rule_set.definitions} == {1, 2, 3, 4, 5}
     assert len(rule_set.paragraph_rules) == len(PARAGRAPH_RULES)
     assert len(rule_set.sentence_rules) == len(rule_set.rules) - len(PARAGRAPH_RULES)
-    # El nivell 5 és la reestructuració de paràgraf: només hi arriben les regles de paràgraf.
     assert {d.rule_id for d in rule_set.definitions if d.level == 5} == PARAGRAPH_RULES
     assert {r.level for r in rule_set.paragraph_rules} == {5}
 
@@ -73,17 +72,17 @@ def example_checker(catalan_analyzer: RuleBasedAnalyzer):  # type: ignore[no-unt
 
 RULE_IDS = [
     "lexical.substitution", "connector.equivalents", "connector.aixi_com_a_i_tambe",
-    "verbal.perifrastic_a_simple", "verbal.simple_a_perifrastic", "verbal.cal_inf_a_es_necessari",
-    "verbal.cal_que_a_es_necessari_que", "verbal.es_necessari_inf_a_cal",
-    "verbal.es_necessari_que_a_cal_que", "nominal.verb_a_nom", "nominal.nom_a_verb",
+    "verbal.perifrastic_a_simple", "verbal.simple_a_perifrastic",
+    "verbal.es_necessari_inf_a_cal", "verbal.es_necessari_que_a_cal_que",
+    "nominal.verb_a_nom", "nominal.nom_a_verb",
     "copula.es_a_constitueix", "copula.es_a_constitueix_invertit",
     "copula.es_a_constitueix_invertit_amb_aposicio", "copula.constitueix_a_es",
     "copula.es_a_correspon_a",
     "agent.fet_per_a_realitzat_per", "agent.realitzat_per_a_fet_per", "agent.fet_per_a_obra_de",
     "presencia.hi_ha_la_presencia_de_a_hi_ha", "presencia.hi_ha_la_presencia_de_a_apareix",
     "presencia.en_loc_hi_ha_la_presencia_a_presenta", "presencia.en_loc_hi_ha_a_presenta",
-    "ordre.inversio_copula", "ordre.inversio_copula_amb_aposicio", "ordre.segons_inicial_a_final",
-    "ordre.segons_final_a_inicial", "temporal.inicial_a_final", "temporal.final_a_inicial",
+    "ordre.inversio_copula", "ordre.inversio_copula_amb_aposicio",
+    "temporal.inicial_a_final", "temporal.final_a_inicial",
     "subordinada.relativa_passiva_a_participi",
     "subordinada.relativa_passiva_perifrastica_a_participi",
     "subordinada.participi_a_relativa_passiva", "subordinada.quan_va_inf_a_en_inf",
@@ -97,9 +96,7 @@ RULE_IDS = [
     "fusio.frases_compatibles", "fusio.copulativa", "divisio.coordinada_i",
     "divisio.coordinada_pero", "puntuacio.punt_i_coma_a_punt", "puntuacio.parentesi_a_comes",
     "puntuacio.parentesi_final_a_coma", "puntuacio.guions_a_comes",
-    "assertiu.sembla_que_podria", "assertiu.potser_podria", "assertiu.podria_potser",
-    "assertiu.potser_subjecte_podria", "assertiu.sembla_que_potser", "assertiu.podria_ser_possible",
-    "assertiu.hipotesi_explicita", "assertiu.com_detalla_font",
+    "assertiu.normalitza_modalitzacio", "assertiu.hipotesi_explicita", "assertiu.com_detalla_font",
     "assertiu.limitacio_documental_inicial", "assertiu.limitacio_documental",
     "assertiu.plantejament_directe",
     "blocs.subordinada_adverbial", "blocs.complement_del_verb", "blocs.participial_del_subjecte",
@@ -114,9 +111,19 @@ def test_rule_id_list_matches_rule_set(rule_set: RuleSet) -> None:
 @pytest.mark.parametrize("rule_id", RULE_IDS)
 def test_rule_examples(rule_set: RuleSet, example_checker, rule_id: str) -> None:  # type: ignore[no-untyped-def]
     definition = next(d for d in rule_set.definitions if d.rule_id == rule_id)
+    if definition.engine == "epistemic_normalize":
+        pytest.skip(f"«{rule_id}» usa un motor específic cobert pels tests assertius")
     if as_mapping(definition.conditions, "syntax").get("requires_parser") is True:
-        # Les regles que exigeixen l'analitzador no proposen res sense: els seus
-        # exemples es comproven amb el parser a tests/test_reredaccio_profunda.py.
         pytest.skip(f"«{rule_id}» exigeix l'analitzador sintàctic")
     failures = example_checker(rule_set, rule_id)
     assert not failures, "\n".join(failures)
+
+
+def test_no_generic_rule_moves_initial_source_attribution(rule_set: RuleSet) -> None:
+    assert "ordre.segons_inicial_a_final" not in rule_set.rule_ids
+    assert "ordre.segons_final_a_inicial" not in rule_set.rule_ids
+
+
+def test_general_rules_do_not_expand_cal_to_es_necessari(rule_set: RuleSet) -> None:
+    assert "verbal.cal_inf_a_es_necessari" not in rule_set.rule_ids
+    assert "verbal.cal_que_a_es_necessari_que" not in rule_set.rule_ids
