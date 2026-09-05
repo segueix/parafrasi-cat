@@ -379,6 +379,30 @@ class SentenceSyntax:
         first, last = self.subtree_span(token)
         return first == start and last == end
 
+    def closed_subtree(self, start: int, end: int) -> SyntaxToken | None:
+        """Nucli del subarbre tancat que ocupa exactament l'interval, o ``None``.
+
+        Un interval és un subarbre tancat quan tots els mots que hi cauen
+        (puntuació a part) depenen, directament o indirectament, d'un sol mot
+        de dins (el nucli); el nucli depèn d'un mot de fora; i cap mot de fora
+        no depèn de cap mot de dins. És la condició perquè un bloc es pugui
+        moure sencer sense tallar cap dependència: les subordinades internes hi
+        queden dins i res del que queda fora no hi penja.
+        """
+        inside = [t for t in self.tokens_in(start, end) if t.pos != "PUNCT"]
+        if not inside:
+            return None
+        indices = {t.index for t in inside}
+        heads = [t for t in inside if t.head not in indices or t.is_root]
+        if len(heads) != 1 or heads[0].is_root:
+            return None
+        for token in self.tokens:
+            if token.index in indices or token.pos == "PUNCT":
+                continue
+            if token.head in indices:
+                return None
+        return heads[0]
+
     def finite_tokens_in(self, start: int, end: int) -> tuple[SyntaxToken, ...]:
         """Verbs conjugats dins de l'interval."""
         return tuple(t for t in self.tokens_in(start, end) if t.is_finite_verb)

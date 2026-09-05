@@ -17,30 +17,43 @@ Cada candidat rep una puntuació separada per dimensió:
 - ``afinitat_autor``: afinitat amb l'empremta de l'autor, només quan el text és
   un esborrany generat amb LLM (``None`` altrament);
 - ``grau_de_canvi``: proporció de caràcters canviats (0 = idèntic);
-- ``grau_estructural``: grau de reredacció estructural (0-1), segons la
-  família de cada transformació: un canvi lèxic o de connector val poc, un
-  canvi sintàctic segur val més, i un canvi entre frases o de paràgraf, el
-  màxim. No mesura distància de caràcters: mesura què s'ha reestructurat.
+- ``grau_superficial``: grau de canvi superficial (0-1): mots, connectors,
+  puntuació i flexió verbal, que no toquen l'arquitectura de la frase;
+- ``grau_estructural``: grau de reredacció estructural (0-1): només les
+  famílies que reorganitzen la frase o el paràgraf (reordenació, subordinació,
+  canvi de construcció, divisió, fusió). No mesura distància de caràcters ni
+  nombre de canvis: mesura què s'ha reestructurat;
+- ``qualitat_sintactica``: 1 menys la degradació estructural local que el
+  candidat introdueix respecte de l'original (relatives consecutives,
+  acumulació de «que», repetició d'estructura).
 
-Una puntuació global (``total``) combina el guany per transformacions amb
-les penalitzacions d'estil i gramaticalitat, amb el bonus (o la penalització)
-de les preferències explícites, en mode d'esborrany amb l'afinitat autoral
-relativa a l'original i, amb el pes ``structure`` (el mode profund), amb el
-grau estructural multiplicat per la gramaticalitat; però qualsevol error de
-preservació (factual, epistemològica, terminològica) o qualsevol error de
-validació **invalida** el candidat: ``valid`` és fals i ``total`` és −1, i cap
-estil ni cap grau de canvi no ho compensa.
+El guany per transformacions és conscient de la família: dins d'una mateixa
+família les aportacions tenen rendiments decreixents (``family_gain_decay``),
+de manera que tres retocs verbals no valen tres vegades un i mai no simulen
+una reordenació. Una puntuació global (``total``) combina aquest guany amb
+les penalitzacions d'estil, de gramaticalitat i de degradació, amb el bonus
+(o la penalització) de les preferències explícites, en mode d'esborrany amb
+l'afinitat autoral relativa a l'original i, amb el pes ``structure`` (el mode
+profund), amb el grau estructural multiplicat per la gramaticalitat; un
+candidat que degrada l'estructura perd, proporcionalment, el guany i el bonus
+estructural. Qualsevol error de preservació (factual, epistemològica,
+terminològica) o qualsevol error de validació **invalida** el candidat:
+``valid`` és fals i ``total`` és −1, i cap estil ni cap grau de canvi no ho
+compensa.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 from parafrasi_cat.candidates.candidate import Candidate
+from parafrasi_cat.core.transformation import Transformation, TransformationFamily
 from parafrasi_cat.preferences.evaluator import PreferenceEvaluator
 from parafrasi_cat.scoring.weights import ScoringWeights
 from parafrasi_cat.style.adaptation import AdaptationContext, AuthorAdaptation
+from parafrasi_cat.style.degradation import StructuralDegradation
 from parafrasi_cat.style.evaluator import StyleEvaluator
 from parafrasi_cat.validation.grammar import WARNING_PENALTY
 from parafrasi_cat.validation.result import ValidationDimension, ValidationResult
@@ -54,7 +67,9 @@ DIMENSIONS: tuple[str, ...] = (
     "preferencies_autor",
     "afinitat_autor",
     "grau_de_canvi",
+    "grau_superficial",
     "grau_estructural",
+    "qualitat_sintactica",
 )
 
 INVALID_TOTAL = -1.0
@@ -68,7 +83,9 @@ _DIMENSION_LABELS = {
     "preferencies_autor": "preferències de l'autor",
     "afinitat_autor": "afinitat amb l'estil de l'autor",
     "grau_de_canvi": "grau de canvi",
+    "grau_superficial": "canvi superficial",
     "grau_estructural": "reredacció estructural",
+    "qualitat_sintactica": "qualitat sintàctica",
 }
 
 
@@ -103,6 +120,8 @@ class ScoreBreakdown:
             que l'original (buit fora del mode d'esborrany).
         author_affinity: Afinitat amb l'empremta, per components (buit fora del
             mode d'esborrany).
+        degradation_reasons: Per què el candidat degrada l'estructura local
+            (buit si no la degrada).
     """
 
     total: float
@@ -114,6 +133,7 @@ class ScoreBreakdown:
     preference_explanation: str = ""
     author_explanation: str = ""
     author_affinity: dict[str, object] = field(default_factory=dict)
+    degradation_reasons: tuple[str, ...] = ()
 
     def dimension(self, name: str) -> float | None:
         return self.dimensions.get(name)
@@ -138,6 +158,7 @@ class ScoreBreakdown:
             "preference_explanation": self.preference_explanation,
             "author_explanation": self.author_explanation,
             "author_affinity": dict(self.author_affinity),
+            "degradation_reasons": list(self.degradation_reasons),
         }
 
 
@@ -167,11 +188,13 @@ class CompositeScorer:
         style_evaluator: StyleEvaluator | None = None,
         preference_evaluator: PreferenceEvaluator | None = None,
         adaptation: AuthorAdaptation | None = None,
+        degradation: StructuralDegradation | None = None,
     ) -> None:
         self._weights = weights or ScoringWeights()
         self._style = style_evaluator
         self._preferences = preference_evaluator
         self._adaptation = adaptation
+        self._degradation = degradation
 
     @property
     def weights(self) -> ScoringWeights:
@@ -190,12 +213,33 @@ class CompositeScorer:
         """Adaptació autoral activa (només en mode d'esborrany generat amb LLM)."""
         return self._adaptation
 
+    @property
+    def degradation(self) -> StructuralDegradation | None:
+        """Mesura de degradació estructural local (opcional)."""
+        return self._degradation
+
+    def transformation_gain(self, transformations: Sequence[Transformation]) -> float:
+        """Guany per transformacions, conscient de la família.
+
+        Cada transformació aporta ``confiança × (1 − pes_del_risc × risc)``;
+        dins d'una mateixa família, les aportacions s'ordenen de més a menys i
+        la k-èsima es multiplica per ``family_gain_decay^(k−1)``: repetir la
+        mateixa mena de retoc aporta cada cop menys.
+        """
+        w = self._weights
+        by_family: dict[TransformationFamily, list[float]] = {}
+        for t in transformations:
+            value = t.confidence * max(0.0, 1.0 - w.semantic_risk * t.semantic_risk.weight)
+            by_family.setdefault(t.family, []).append(value)
+        total = 0.0
+        for values in by_family.values():
+            for rank, value in enumerate(sorted(values, reverse=True)):
+                total += value * w.family_gain_decay**rank
+        return w.transformation_gain * total / w.max_transformations
+
     def score(self, candidate: Candidate, ctx: ScoringContext | None = None) -> ScoreBreakdown:
         w = self._weights
-        gain = 0.0
-        for t in candidate.transformations:
-            gain += t.confidence * max(0.0, 1.0 - w.semantic_risk * t.semantic_risk.weight)
-        gain = w.transformation_gain * gain / w.max_transformations
+        gain = self.transformation_gain(candidate.transformations)
 
         components: dict[str, float] = {"transformacions": round(gain, 4)}
         parts = [f"guany per transformacions {gain:+.3f}"]
@@ -266,16 +310,39 @@ class CompositeScorer:
                 dimensions["afinitat_autor"] = affinity.score
 
         dimensions["grau_de_canvi"] = round(candidate.change_ratio(), 4)
+        dimensions["grau_superficial"] = candidate.surface_degree()
         degree = candidate.structural_degree()
         dimensions["grau_estructural"] = degree
+
+        degradation_penalty = 0.0
+        degradation_reasons: tuple[str, ...] = ()
+        dimensions["qualitat_sintactica"] = 1.0
+        if self._degradation is not None and candidate.transformations:
+            degradation = self._degradation.assess(candidate.text, candidate.source_text)
+            if degradation.degraded:
+                # Un canvi que degrada l'estructura local (relatives encadenades,
+                # «que» acumulats) perd el premi que tindria com a reredacció i, a
+                # més, rep una penalització; mai no s'invalida.
+                degradation_penalty = w.degradation * degradation.score
+                degradation_reasons = degradation.reasons
+                gain *= 1.0 - degradation.score
+                components["transformacions"] = round(gain, 4)
+                components["degradacio"] = round(-degradation_penalty, 4)
+                parts.append(
+                    f"degradació estructural {-degradation_penalty:+.3f} "
+                    f"({'; '.join(degradation.reasons)})"
+                )
+                dimensions["qualitat_sintactica"] = round(1.0 - degradation.score, 4)
+
         structure_bonus = 0.0
         if w.structure > 0 and degree > 0:
             # Entre candidats igualment segurs, la reredacció estructural real té
             # avantatge; escalat per la gramaticalitat, perquè un avís gramatical
-            # no quedi mai compensat pel grau de canvi.
+            # no quedi mai compensat pel grau de canvi, i per la qualitat sintàctica.
             grammar_score = dimensions.get("gramaticalitat")
             scale = grammar_score if isinstance(grammar_score, float) else 1.0
-            structure_bonus = w.structure * degree * scale
+            quality = dimensions["qualitat_sintactica"]
+            structure_bonus = w.structure * degree * scale * (quality if quality else 0.0)
             components["estructura"] = round(structure_bonus, 4)
             parts.append(f"reredacció estructural {structure_bonus:+.3f}")
 
@@ -284,6 +351,7 @@ class CompositeScorer:
             gain
             - style_penalty
             - grammar_penalty
+            - degradation_penalty
             + preference_bonus
             + affinity_bonus
             + structure_bonus
@@ -302,6 +370,7 @@ class CompositeScorer:
             preference_explanation=preference_explanation,
             author_explanation=author_explanation,
             author_affinity=author_affinity,
+            degradation_reasons=degradation_reasons,
         )
 
 

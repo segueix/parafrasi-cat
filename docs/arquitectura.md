@@ -27,8 +27,11 @@ text d'entrada
 [validation] invariants de contingut (fragments protegits, xifres, negació, modalitat, longitud)
    │        └─ candidat que falla → rebutjat (mai no se selecciona)
    ▼
-[scoring]   puntuació composta (guany per canvis segurs − distància d'estil) i selecció determinista
-   │
+[scoring]   puntuació composta (guany per canvis segurs, conscient de la família; grau estructural
+   │        i superficial; penalització de degradació − distància d'estil) i selecció determinista
+   ▼
+[pipeline]  fase de paràgraf: regles entre frases i, al nivell 5 del mode profund, cerca en feix
+   │        d'arquitectures alternatives de paràgraf (paragraph_search)
    ▼
 [pipeline]  reconstrucció del document conservant espais i salts de línia
    │
@@ -49,7 +52,7 @@ ParaphraseResult (text resultant + informe complet)
 | `validation` | Invariants de contingut | `Validator`, `ValidationResult`, validadors concrets |
 | `style` | Estilometria i perfils | `StyleProfile`, `StyleMetrics`, `StyleEvaluator`, `estimate_profile` |
 | `scoring` | Puntuació i selecció | `ScoringWeights`, `CompositeScorer`, `select_best` |
-| `pipeline` | Orquestració i configuració | `Pipeline`, `PipelineConfig`, `build_pipeline`, `ParaphraseResult` |
+| `pipeline` | Orquestració i configuració | `Pipeline`, `PipelineConfig`, `build_pipeline`, `ParaphraseResult`, `ParagraphBeam` |
 | `resources` (mòdul) | Localització i lectura de YAML/JSON | `ProjectPaths`, `load_mapping`, accessors tipats |
 | `cli` (mòdul) | Interfície de línia d'ordres | `main` |
 

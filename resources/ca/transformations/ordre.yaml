@@ -111,12 +111,55 @@ rules:
       negative:
         - "La norma, segons Fabra, és clara."
 
+  # --- Complements circumstancials interposats -------------------------------------------
+  # «S, en el text de les edicions, V...» → «En el text de les edicions, S V...».
+  # Només amb analitzador: el complement ha de ser un subarbre tancat que pengi
+  # del nucli de l'oració (obl); un complement del nom no es mou.
+  - rule_id: ordre.complement_interposat_a_inicial
+    engine: pattern
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.7
+    description: "«S, PREP X, V...» → «PREP X, S V...» (complement circumstancial interposat a l'inici de la frase; només amb analitzador)"
+    pattern:
+      - {start: true}
+      - {np: true, group: subj}
+      - {text: ","}
+      - {seq: true, group: comp, no_comma: true, min_tokens: 2}
+      - {text: ","}
+      - {seq: true, group: rest, greedy: true, min_tokens: 2}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        subj: {is_subject: true, no_finite_verb: true}
+        comp:
+          starts_with: [en, a, durant, des de, dins, sota, davant, després de, abans de, al llarg de, arran de, a partir de, amb, segons]
+          no_finite_verb: true
+          no_clitic: true
+          is_adjunct: true
+        rest: {has_finite_verb: true, not_starts_with: [",", i, o, ni, que]}
+      syntax:
+        requires_parser: true
+    transformation: "{comp|cap}, {subj|lower} {rest}"
+    examples:
+      positive:
+        - input: "Aquest enfocament, en el text de les edicions madrilenyes, podria interpretar-se com una estratègia calculada."
+          output: "En el text de les edicions madrilenyes, aquest enfocament podria interpretar-se com una estratègia calculada."
+      negative:
+        - "Aquest enfocament, per tant, podria interpretar-se com una estratègia calculada."
+        - "El text, que és antic, podria interpretar-se com una estratègia."
+
   # --- Subordinades adverbials: posició dins de l'oració ---------------------------------
   # Amb analitzador sintàctic, «is_subject» i «is_adverbial_clause» comproven
   # l'arbre de dependències (el subjecte del nucli i una subordinada adverbial
   # que en depèn directament); sense analitzador, recorren a les heurístiques
   # de sempre. «no_clitic» evita que un pronom feble quedi davant del seu
-  # antecedent, i «single_clause» que es mogui més d'una clàusula alhora.
+  # antecedent, i «movable_subtree» que es mogui un bloc que no sigui un
+  # subarbre tancat: amb analitzador fiable, una subordinada complexa (amb una
+  # completiva o una relativa a dins) es pot moure sencera; sense, només una
+  # clàusula simple.
   - rule_id: ordre.adverbial_interposada_a_inicial
     engine: pattern
     category: ordre
@@ -144,7 +187,7 @@ rules:
           has_finite_verb: true
           is_adverbial_clause: true
           no_clitic: true
-          single_clause: true
+          movable_subtree: true
         rest: {has_finite_verb: true}
     transformation: "{clause|cap}, {subj|lower} {rest}"
     examples:
@@ -180,7 +223,7 @@ rules:
           has_finite_verb: true
           is_adverbial_clause: true
           no_clitic: true
-          single_clause: true
+          movable_subtree: true
         subj:
           is_subject: true
           no_finite_verb: true
@@ -214,13 +257,13 @@ rules:
         main:
           has_finite_verb: true
           no_relative: true
-          not_ends_with: [i, o, ni, però, sinó, de, "d'", a, en, per, amb, el, la, els, les, "l'", un, una, "no", més, molt, tan, com, que]
+          not_ends_with: [i, o, ni, però, sinó, de, "d'", a, en, per, amb, el, la, els, les, "l'", un, una, "no", com, que]
         clause:
           starts_with: [encara que, tot i que, malgrat que, per bé que, quan, mentre, si, sempre que, un cop, després que, abans que, fins que, des que]
           has_finite_verb: true
           is_adverbial_clause: true
           no_clitic: true
-          single_clause: true
+          movable_subtree: true
     transformation: "{clause|cap}, {main|lower}"
     examples:
       positive:
@@ -254,7 +297,7 @@ rules:
           has_finite_verb: true
           is_adverbial_clause: true
           no_clitic: true
-          single_clause: true
+          movable_subtree: true
         main: {has_finite_verb: true, no_relative: true, not_starts_with: [i, o, ni, però, sinó, que, ",", doncs, aleshores, llavors]}
     transformation: "{main|cap} {clause|lower}"
     examples:
@@ -289,7 +332,7 @@ rules:
           has_finite_verb: true
           is_adverbial_clause: true
           no_clitic: true
-          single_clause: true
+          movable_subtree: true
         main: {has_finite_verb: true, no_relative: true, not_starts_with: [i, o, ni, però, sinó, que, ","]}
     transformation: "{main|cap}, {clause|lower}"
     examples:
@@ -301,9 +344,12 @@ rules:
         - "Si el text és antic, la regla no funciona."
 
   # --- Connectors discursius: posició inicial ↔ posició medial ---------------------------
+  # Moure un connector és una reordenació lleu (structural_weight 0.4): no
+  # reorganitza cap clàusula.
   - rule_id: ordre.connector_medial_a_inicial
     engine: pattern
     category: ordre
+    structural_weight: 0.4
     level: 3
     transformation_type: syntactic
     semantic_risk: low
@@ -339,6 +385,7 @@ rules:
   - rule_id: ordre.connector_inicial_a_medial
     engine: pattern
     category: ordre
+    structural_weight: 0.4
     level: 3
     transformation_type: syntactic
     semantic_risk: low

@@ -16,6 +16,7 @@ from parafrasi_cat.candidates.repair import AgreementRepair
 from parafrasi_cat.core.spans import Span
 from parafrasi_cat.core.transformation import SemanticRisk, Transformation
 from parafrasi_cat.morphology.provider import MorphologyProvider, NullMorphology
+from parafrasi_cat.pipeline.paragraph_search import BeamSettings, ParagraphBeam
 from parafrasi_cat.pipeline.result import (
     EvaluatedCandidate,
     ParagraphResult,
@@ -69,6 +70,14 @@ class Pipeline:
     que se seleccionen amb el mateix procediment i es validen contra el paràgraf
     original. La fusió respecta la longitud de frase de l'autor.
 
+    Amb ``paragraph_beam_width`` > 1 i nivell 5 (el mode profund), la fase de
+    paràgraf no parteix d'un sol text intermedi: conserva uns quants candidats
+    segurs i diversos de cada frase i compara arquitectures alternatives de
+    paràgraf senceres amb una cerca en feix determinista
+    (:mod:`parafrasi_cat.pipeline.paragraph_search`). El candidat que guanya
+    localment pot perdre davant d'un que, combinat amb la frase següent, dona
+    un paràgraf millor; les frases s'hi remarquen d'acord amb la tria final.
+
     Sense regles actives, el resultat és exactament el text d'entrada.
     """
 
@@ -94,6 +103,8 @@ class Pipeline:
         max_sentence_length: int | None = None,
         adaptation: AuthorAdaptation | None = None,
         source_mode: str = "own",
+        paragraph_beam_width: int = 1,
+        sentence_candidates_for_paragraph: int = 3,
     ) -> None:
         self._analyzer = analyzer
         self._protector = protector
@@ -109,7 +120,9 @@ class Pipeline:
         self._style_profile = style_profile
         self._morphology: MorphologyProvider = morphology or NullMorphology()
         provider: SyntaxProvider = NullSyntax() if syntax is None else syntax
-        self._syntax = CachedSyntax(provider) if provider.available else provider
+        if provider.available and not isinstance(provider, CachedSyntax):
+            provider = CachedSyntax(provider)
+        self._syntax = provider
         self._repair = AgreementRepair(self._syntax, self._morphology)
         self._preferred_sentence_length = preferred_sentence_length
         self._max_sentence_length = max_sentence_length
@@ -120,10 +133,27 @@ class Pipeline:
         self._lexicon = lexicon
         self._dictionary_names = tuple(dictionary_names)
         self._preferences_name = preferences_name
+        self._beam_settings = BeamSettings(
+            beam_width=max(1, paragraph_beam_width),
+            candidates_per_sentence=max(1, sentence_candidates_for_paragraph),
+        )
 
     @property
     def analyzer(self) -> Analyzer:
         return self._analyzer
+
+    @property
+    def beam_settings(self) -> BeamSettings:
+        return self._beam_settings
+
+    @property
+    def searches_paragraphs(self) -> bool:
+        """Cert si la fase de paràgraf compara arquitectures amb la cerca en feix."""
+        if self._beam_settings.beam_width <= 1:
+            return False
+        if self._max_level is not None and self._max_level < 5:
+            return False
+        return bool(self._rule_set.paragraph_rules) or self._adaptation is not None
 
     @property
     def protector(self) -> Protector:
@@ -194,20 +224,32 @@ class Pipeline:
             for sentence in analysis.sentences
         )
         paragraph_results: tuple[ParagraphResult, ...] = ()
-        if self._rule_set.paragraph_rules and analysis.paragraphs:
-            paragraph_results = tuple(
-                self._process_paragraph(
-                    paragraph,
-                    sentence_results,
-                    protected,
-                    text,
-                    _context(
-                        stats,
-                        {s.index for s in analysis.sentences if paragraph.span.contains(s.span)},
-                    ),
-                )
-                for paragraph in analysis.paragraphs
-            )
+        searching = self.searches_paragraphs
+        if analysis.paragraphs and (self._rule_set.paragraph_rules or searching):
+            beam = self._paragraph_beam() if searching else None
+            updated = list(sentence_results)
+            collected: list[ParagraphResult] = []
+            for paragraph in analysis.paragraphs:
+                positions = [
+                    n for n, s in enumerate(sentence_results) if paragraph.span.contains(s.span)
+                ]
+                document = _context(stats, {sentence_results[n].index for n in positions})
+                if beam is not None and positions:
+                    result, remarked = beam.search(
+                        paragraph,
+                        [sentence_results[n] for n in positions],
+                        Protector.within(protected, paragraph.span),
+                        document,
+                    )
+                    for n, sentence_result in zip(positions, remarked, strict=True):
+                        updated[n] = sentence_result
+                else:
+                    result = self._process_paragraph(
+                        paragraph, sentence_results, protected, text, document
+                    )
+                collected.append(result)
+            sentence_results = tuple(updated)
+            paragraph_results = tuple(collected)
             output = _reassemble(text, tuple((p.span, p.output_text) for p in paragraph_results))
         else:
             output = _reassemble(text, tuple((s.span, s.output_text) for s in sentence_results))
@@ -346,6 +388,36 @@ class Pipeline:
         return proposals, rejected
 
     # --- paràgrafs -----------------------------------------------------------------------
+
+    def _paragraph_context(self, text: str) -> ParagraphContext:
+        """Context de regles de paràgraf per a un text de paràgraf qualsevol."""
+        analysis = self._analyzer.analyze(text)
+        return ParagraphContext(
+            text=text,
+            sentences=analysis.sentences,
+            protected_spans=self._protector.protect(text),
+            source_text=text,
+            lexicon=self._lexicon,
+            syntax=self._syntax,
+            style_profile=self._style_profile,
+            preferred_sentence_length=self._preferred_sentence_length,
+            max_sentence_length=self._max_sentence_length,
+        )
+
+    def _paragraph_beam(self) -> ParagraphBeam:
+        weights = getattr(self._scorer, "weights", None)
+        affinity_weight = float(getattr(weights, "author_affinity", 0.0)) if weights else 0.0
+        return ParagraphBeam(
+            settings=self._beam_settings,
+            generator=self._generator,
+            scorer=self._scorer,
+            validators=self._validators,
+            paragraph_rules=self._rule_set.paragraph_rules,
+            context_factory=self._paragraph_context,
+            rejection_reason=self._rejection_reason,
+            adaptation=self._adaptation,
+            affinity_weight=affinity_weight,
+        )
 
     def _process_paragraph(
         self,

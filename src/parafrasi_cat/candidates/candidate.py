@@ -15,6 +15,8 @@ from parafrasi_cat.core.transformation import (
 )
 
 MULTI_TRANSFORM = "MULTI_TRANSFORM"
+#: Rendiments decreixents d'una mateixa família: la k-èsima aplicació val ``0.5^(k−1)``.
+FAMILY_DECAY = 0.5
 _SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([,;:.!?»)])")
 
 
@@ -49,13 +51,18 @@ class Candidate:
 
     @property
     def families(self) -> tuple[TransformationFamily, ...]:
-        """Famílies estructurals de les transformacions, sense repeticions ni reparacions."""
+        """Famílies de les transformacions, sense repeticions ni reparacions."""
         seen: dict[TransformationFamily, None] = {}
         for transformation in self.transformations:
             family = transformation.family
             if family is not TransformationFamily.REPAIR:
                 seen.setdefault(family, None)
         return tuple(seen)
+
+    @property
+    def structural_families(self) -> tuple[TransformationFamily, ...]:
+        """Famílies estructurals presents (les que reorganitzen la frase o el paràgraf)."""
+        return tuple(f for f in self.families if f.structural)
 
     @property
     def signature(self) -> str:
@@ -68,9 +75,53 @@ class Candidate:
         return f"{MULTI_TRANSFORM}({'+'.join(sorted(f.value for f in families))})"
 
     def structural_degree(self) -> float:
-        """Grau de reredacció estructural (0-1): pes de cada família per la seva confiança."""
-        total = sum(t.family.weight * t.confidence for t in self.transformations)
-        return round(min(1.0, total), 4)
+        """Grau de reredacció estructural (0-1): només l'arquitectura lingüística.
+
+        Hi compten únicament les transformacions de famílies estructurals
+        (reordenació, subordinació, canvi de construcció, divisió, fusió). Cap
+        substitució lèxica, de connector, de puntuació ni de flexió verbal no hi
+        suma res, per moltes que se n'apliquin: tres canvis «va gaudir» → «gaudí»
+        donen exactament 0.
+
+        Cada transformació estructural aporta ``pes de la regla × confiança ×
+        abast``, on l'abast és la part de la frase que el canvi reorganitza
+        (reordenar tota l'oració pesa més que tocar-ne un sintagma; un canvi
+        entre frases compta sencer). Les aportacions es combinen com a
+        probabilitats independents, ``1 − Π(1 − a_i)``: el resultat mai no passa
+        d'1, dues famílies diferents pesen més que dues aplicacions de la
+        mateixa, i les repeticions d'una família tenen rendiments decreixents
+        (la segona val la meitat; la tercera, un quart).
+        """
+        return _combine(self._impacts(structural=True))
+
+    def surface_degree(self) -> float:
+        """Grau de canvi superficial (0-1): mots, connectors, puntuació i flexió.
+
+        Mateixa agregació que el grau estructural, sobre les famílies no
+        estructurals. Serveix per explicar què ha canviat, no per premiar-ho.
+        """
+        return _combine(self._impacts(structural=False))
+
+    def _impacts(self, *, structural: bool) -> list[float]:
+        by_family: dict[TransformationFamily, list[float]] = {}
+        length = max(1, len(self.source_text))
+        for transformation in self.transformations:
+            family = transformation.family
+            if family.structural is not structural or family is TransformationFamily.REPAIR:
+                continue
+            if structural:
+                coverage = min(1.0, transformation.changed_span.length / length)
+                reach = 1.0 if family.cross_sentence else 0.5 + 0.5 * coverage
+                impact = transformation.structural_weight * transformation.confidence * reach
+            else:
+                impact = family.surface_weight * transformation.confidence
+            if impact > 0:
+                by_family.setdefault(family, []).append(impact)
+        impacts: list[float] = []
+        for values in by_family.values():
+            for rank, value in enumerate(sorted(values, reverse=True)):
+                impacts.append(value * FAMILY_DECAY**rank)
+        return impacts
 
     @property
     def is_structural(self) -> bool:
@@ -157,5 +208,15 @@ class Candidate:
             "change_ratio": round(self.change_ratio(), 4),
             "signature": self.signature,
             "families": [f.value for f in self.families],
+            "structural_families": [f.value for f in self.structural_families],
             "structural_degree": self.structural_degree(),
+            "surface_degree": self.surface_degree(),
         }
+
+
+def _combine(impacts: Iterable[float]) -> float:
+    """Combina aportacions (0-1) com a probabilitats independents: ``1 − Π(1 − a)``."""
+    remaining = 1.0
+    for impact in impacts:
+        remaining *= 1.0 - max(0.0, min(1.0, impact))
+    return round(1.0 - remaining, 4)

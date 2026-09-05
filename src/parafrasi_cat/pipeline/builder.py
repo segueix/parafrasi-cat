@@ -34,10 +34,11 @@ from parafrasi_cat.rules.registry import RuleRegistry, default_registry
 from parafrasi_cat.rules.ruleset import RuleSet, RuleSetConfig, build_rule_set
 from parafrasi_cat.scoring.scorer import CompositeScorer
 from parafrasi_cat.style.adaptation import AuthorAdaptation
+from parafrasi_cat.style.degradation import StructuralDegradation
 from parafrasi_cat.style.evaluator import StyleEvaluator
 from parafrasi_cat.style.observations import StyleResources
 from parafrasi_cat.style.profile import load_style_profile
-from parafrasi_cat.syntax.analysis import NullSyntax, SyntaxProvider
+from parafrasi_cat.syntax.analysis import CachedSyntax, NullSyntax, SyntaxProvider
 from parafrasi_cat.syntax.spacy_parser import SpacySyntax
 from parafrasi_cat.validation.agreement import AgreementValidator
 from parafrasi_cat.validation.base import Validator
@@ -109,6 +110,10 @@ def build_pipeline(
     all_terms = tuple(dict.fromkeys((*user_terms, *dictionary_terms)))
     morphology = create_morphology_provider(config.morphology, lang, lexicon=lexicon)
     syntax = build_syntax_provider(config, morphology)
+    if syntax.available and not isinstance(syntax, CachedSyntax):
+        # Una sola memòria cau d'anàlisis per a la canonada, els validadors, l'empremta
+        # i la degradació: la mateixa frase no s'analitza dues vegades.
+        syntax = CachedSyntax(syntax)
     validators = build_validators(
         config, paths, analyzer, lexicon, rule_set, all_terms, syntax, morphology
     )
@@ -171,7 +176,13 @@ def build_pipeline(
         )
         if not config.source_mode.adapts_to_author:
             weights = replace(weights, author_affinity=weights.author_affinity_own)
-    scorer = CompositeScorer(weights, style_evaluator, preference_evaluator, adaptation)
+    # La degradació estructural local (relatives encadenades, «que» acumulats) es
+    # mesura sempre, comparant cada candidat amb el text que substitueix; amb
+    # empremta, la penalització es rebaixa si l'autor mateix encadena subordinades.
+    degradation = StructuralDegradation(analyzer, syntax, style_profile.preferences)
+    scorer = CompositeScorer(
+        weights, style_evaluator, preference_evaluator, adaptation, degradation
+    )
 
     return Pipeline(
         analyzer=analyzer,
@@ -197,6 +208,8 @@ def build_pipeline(
         max_sentence_length=author.max_sentence_length if author else None,
         adaptation=adaptation,
         source_mode=config.source_mode.value,
+        paragraph_beam_width=config.paragraph_beam_width,
+        sentence_candidates_for_paragraph=config.sentence_candidates_for_paragraph,
     )
 
 
