@@ -32,6 +32,14 @@ class ScoringWeights:
       puja perquè, entre candidats igualment segurs, tingui avantatge la
       reredacció estructural real. Es multiplica per la gramaticalitat: mai no
       compensa un avís gramatical.
+    - ``family_gain_decay``: rendiments decreixents del guany dins d'una mateixa
+      família: la segona transformació d'una família aporta aquesta fracció de
+      la primera, la tercera el quadrat... Tres retocs verbals no valen tres
+      vegades un retoc verbal, i mai no simulen una reordenació.
+    - ``degradation``: penalització per degradació estructural local (relatives
+      consecutives amb el mateix marcador, acumulació de «que», repetició de la
+      mateixa estructura). Un candidat que degrada l'estructura perd, a més, el
+      premi que tindria com a reredacció.
     - ``max_transformations``: nombre de transformacions que normalitza el guany.
 
     Les dimensions de preservació (factual, epistemològica, terminològica) no
@@ -46,11 +54,15 @@ class ScoringWeights:
     author_affinity: float = 2.0
     author_affinity_own: float = 0.5
     structure: float = 0.0
+    family_gain_decay: float = 0.5
+    degradation: float = 0.5
     max_transformations: int = 3
 
     def __post_init__(self) -> None:
         if self.max_transformations < 1:
             raise ConfigError("max_transformations ha de ser almenys 1")
+        if not 0.0 <= self.family_gain_decay <= 1.0:
+            raise ConfigError("family_gain_decay ha d'estar entre 0 i 1")
         for name in (
             "transformation_gain",
             "semantic_risk",
@@ -60,6 +72,7 @@ class ScoringWeights:
             "author_affinity",
             "author_affinity_own",
             "structure",
+            "degradation",
         ):
             if getattr(self, name) < 0:
                 raise ConfigError(f"El pes «{name}» no pot ser negatiu")
@@ -76,6 +89,8 @@ class ScoringWeights:
             author_affinity=as_float(data, "author_affinity", defaults.author_affinity),
             author_affinity_own=as_float(data, "author_affinity_own", defaults.author_affinity_own),
             structure=as_float(data, "structure", defaults.structure),
+            family_gain_decay=as_float(data, "family_gain_decay", defaults.family_gain_decay),
+            degradation=as_float(data, "degradation", defaults.degradation),
             max_transformations=as_int(data, "max_transformations", defaults.max_transformations),
         )
 
@@ -89,5 +104,7 @@ class ScoringWeights:
             "author_affinity": self.author_affinity,
             "author_affinity_own": self.author_affinity_own,
             "structure": self.structure,
+            "family_gain_decay": self.family_gain_decay,
+            "degradation": self.degradation,
             "max_transformations": self.max_transformations,
         }

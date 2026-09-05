@@ -130,14 +130,14 @@ rules:
         main:
           has_finite_verb: true
           no_relative: true
-          not_ends_with: [i, o, ni, però, sinó, de, "d'", a, en, per, amb, el, la, els, les, "l'", un, una, "no", més, molt, tan, com, que]
+          not_ends_with: [i, o, ni, però, sinó, de, "d'", a, en, per, amb, el, la, els, les, "l'", un, una, "no", com, que]
         clause:
           starts_with: [perquè, ja que, atès que, puix que]
           has_finite_verb: true
           is_adverbial_clause: true
           mood: ind
           no_clitic: true
-          single_clause: true
+          movable_subtree: true
     transformation: "{clause|lead(perquè=com que,ja que=com que,atès que=com que,puix que=com que)|cap}, {main|lower}"
     examples:
       positive:

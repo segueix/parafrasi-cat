@@ -3,6 +3,66 @@
 El format segueix [Keep a Changelog](https://keepachangelog.com/ca/1.1.0/) i el
 projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
+## 1.3.2
+
+Correcció d'arquitectura del mode profund al nivell 5, a partir d'un paràgraf
+acadèmic real: el resultat continuava sent massa semblant a l'original.
+
+- **Grau estructural real.** `TransformationFamily.structural` és una propietat
+  lingüística explícita (`STRUCTURAL_FAMILIES`), no un llindar de pes. Les
+  famílies lèxica, de connector, de puntuació, verbal i de reparació tenen pes
+  estructural 0: tres canvis «va gaudir» → «gaudí» donen grau estructural 0 (abans
+  0,9975). El grau estructural combina les aportacions (pes de la regla ×
+  confiança × abast del canvi dins de la frase) com a probabilitats
+  independents, amb rendiments decreixents dins d'una mateixa família: mai no
+  creix linealment amb el nombre de transformacions. El grau superficial
+  (`surface_degree`, dimensió `grau_superficial`) explica la resta. Una regla pot
+  matisar el pes de la seva família (`structural_weight`): moure un connector és
+  una reordenació lleu; «; B.» → «. B.» és una divisió lleu (`CLAUSE_SPLIT`).
+- **Scoring conscient de la família.** El guany per transformacions aplica
+  rendiments decreixents dins de cada família (`family_gain_decay`): repetir
+  tres retocs verbals aporta poc guany addicional, i una reordenació segura pot
+  superar-los en mode profund; en mode conservador no hi ha cap avantatge
+  estructural. Les dimensions de preservació continuen invalidant.
+- **Degradació estructural local** (`style/degradation.py`): relatives
+  consecutives amb el mateix marcador («..., que fou impulsada..., que
+  intensificà...»), acumulació de «que» i repetició de la mateixa estructura es
+  detecten comparant candidat i original (amb el parser quan és fiable) i es
+  penalitzen sense invalidar: el candidat perd el premi de reredacció i rep una
+  penalització (`degradation`), rebaixada si l'empremta mostra que l'autor
+  encadena subordinades.
+- **Subarbres movibles.** La condició `movable_subtree` substitueix
+  `single_clause` a les reordenacions de subordinades: amb anàlisi fiable, una
+  subordinada complexa (amb una completiva o una relativa a dins) es mou sencera
+  si és un subarbre tancat (`SentenceSyntax.closed_subtree`); sense analitzador
+  val l'heurística conservadora de sempre, i un parse dubtós no autoritza mai el
+  moviment. Regla nova `ordre.complement_interposat_a_inicial` (complement
+  circumstancial del verb, només amb analitzador).
+- **Cerca en feix d'arquitectures de paràgraf** (`pipeline/paragraph_search.py`):
+  al nivell 5 del mode profund, cada frase conserva l'original, el millor
+  candidat i el millor de cada signatura estructural; un feix determinista i
+  acotat (`paragraph_beam_width` 6, `sentence_candidates_for_paragraph` 3)
+  construeix arquitectures alternatives, aplica les regles de paràgraf al darrer
+  parell de frases en el moment en què són possibles, poda conservant la
+  diversitat i, sobre les arquitectures completes (sempre amb la dels guanyadors
+  locals i l'original), valida contra el paràgraf original, puntua globalment
+  amb l'afinitat de l'autor mesurada sobre el paràgraf sencer i tria la millor.
+  Un candidat localment segon pot guanyar si dona un paràgraf millor; les frases
+  queden remarcades i la traça (`ParagraphResult.search`) és accessible al
+  resultat, a l'informe i a l'API local.
+- **Cobertura del nivell 5.** Fusió d'un fragment nominal anafòric amb la frase
+  anterior («... de la Santa Inquisició. Un fet que obligava...» → «..., un fet
+  que obligava...», només amb analitzador); les divisions, reordenacions i
+  fusions es comparen ara com a arquitectures de paràgraf, amb el ritme de
+  l'autor.
+- Una sola memòria cau del parser per a la canonada, els validadors, l'empremta
+  i la degradació.
+- Tests nous (`tests/test_arquitectura_paragraf.py`): famílies estructurals i no
+  estructurals, rendiments decreixents, diversitat, degradació, subarbres
+  movibles amb i sense parse fiable, òptim local contra global al feix,
+  fragments protegits i preservació epistemològica dins del feix, i el paràgraf
+  real en mode profund i conservador.
+
 ## 1.3.1
 
 Correcció funcional i d'arquitectura del motor, a partir d'una prova real.

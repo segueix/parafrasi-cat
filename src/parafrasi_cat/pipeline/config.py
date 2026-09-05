@@ -86,6 +86,11 @@ class PipelineConfig:
         max_transformations_per_sentence: Límit de transformacions combinades per frase.
         max_candidates_per_sentence: Límit de candidats avaluats per frase.
         candidate_depth: Nivells de reaplicació de regles sobre els candidats (1 = cap).
+        paragraph_beam_width: Amplada de la cerca en feix d'arquitectures de paràgraf
+            (1 = sense cerca: el paràgraf es reconstrueix amb els guanyadors locals).
+            El mode profund l'activa al nivell 5.
+        sentence_candidates_for_paragraph: Candidats alternatius (a més de l'original)
+            que cada frase conserva per a la cerca de paràgraf.
         level: Nivell màxim de les regles actives (1 lèxic … 5 paràgraf); ``None`` = totes.
         length_ratio: Marge de longitud (mínim, màxim) acceptat respecte de l'original.
         use_style: Si és fals, no es calcula la distància d'estil.
@@ -117,6 +122,8 @@ class PipelineConfig:
     max_transformations_per_sentence: int = 3
     max_candidates_per_sentence: int = 20
     candidate_depth: int = 2
+    paragraph_beam_width: int = 1
+    sentence_candidates_for_paragraph: int = 3
     level: int | None = None
     length_ratio: tuple[float, float] = (0.6, 1.6)
     use_style: bool = True
@@ -136,6 +143,8 @@ class PipelineConfig:
             raise ConfigError("candidate_depth ha de ser almenys 1")
         if self.max_transformations_per_sentence < 1 or self.max_candidates_per_sentence < 1:
             raise ConfigError("Els límits de transformacions i candidats han de ser almenys 1")
+        if self.paragraph_beam_width < 1 or self.sentence_candidates_for_paragraph < 1:
+            raise ConfigError("Els límits de la cerca de paràgraf han de ser almenys 1")
         low, high = self.length_ratio
         if not 0.0 < low <= 1.0 <= high:
             raise ConfigError("length_ratio ha de complir 0 < mínim <= 1 <= màxim")
@@ -193,6 +202,14 @@ class PipelineConfig:
                 data, "max_candidates_per_sentence", defaults.max_candidates_per_sentence
             ),
             candidate_depth=as_int(data, "candidate_depth", defaults.candidate_depth),
+            paragraph_beam_width=as_int(
+                data, "paragraph_beam_width", defaults.paragraph_beam_width
+            ),
+            sentence_candidates_for_paragraph=as_int(
+                data,
+                "sentence_candidates_for_paragraph",
+                defaults.sentence_candidates_for_paragraph,
+            ),
             level=as_int(data, "level") if data.get("level") is not None else None,
             length_ratio=(
                 as_float(ratio, "min", defaults.length_ratio[0]),
@@ -237,6 +254,8 @@ class PipelineConfig:
             "max_transformations_per_sentence": self.max_transformations_per_sentence,
             "max_candidates_per_sentence": self.max_candidates_per_sentence,
             "candidate_depth": self.candidate_depth,
+            "paragraph_beam_width": self.paragraph_beam_width,
+            "sentence_candidates_for_paragraph": self.sentence_candidates_for_paragraph,
             "level": self.level,
             "length_ratio": {"min": self.length_ratio[0], "max": self.length_ratio[1]},
             "use_style": self.use_style,

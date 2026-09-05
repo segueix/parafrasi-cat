@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from parafrasi_cat.candidates.candidate import Candidate
 from parafrasi_cat.core.spans import Span
@@ -12,6 +13,9 @@ from parafrasi_cat.core.transformation import Transformation
 from parafrasi_cat.protected.spans import ProtectedSpan
 from parafrasi_cat.scoring.scorer import ScoreBreakdown
 from parafrasi_cat.validation.result import ValidationResult
+
+if TYPE_CHECKING:
+    from parafrasi_cat.pipeline.paragraph_search import ParagraphSearch
 
 
 @dataclass(frozen=True, slots=True)
@@ -208,10 +212,13 @@ class SentenceResult(_UnitResult):
 
 @dataclass(frozen=True, slots=True)
 class ParagraphResult(_UnitResult):
-    """Resultat de les regles de paràgraf (fusió de frases) sobre un paràgraf.
+    """Resultat de la fase de paràgraf sobre un paràgraf.
 
     ``intermediate_text`` és el paràgraf després de les transformacions de
-    frase; ``output_text`` el resultat final del paràgraf.
+    frase (amb cerca en feix, les de l'arquitectura escollida) i
+    ``output_text`` el resultat final. Amb cerca en feix (mode profund, nivell
+    5), ``search`` conserva tota la traça: candidats conservats per frase,
+    arquitectures avaluades, puntuacions globals i estats podats.
     """
 
     index: int
@@ -224,10 +231,17 @@ class ParagraphResult(_UnitResult):
     protected_spans: tuple[ProtectedSpan, ...]
     notes: tuple[str, ...] = ()
     """Per què no s'han fusionat frases del paràgraf, quan és rellevant."""
+    search: ParagraphSearch | None = None
+    """Traça de la cerca en feix d'arquitectures (``None`` sense cerca)."""
 
     @property
     def changed(self) -> bool:
         return self.output_text != self.intermediate_text
+
+    @property
+    def searched(self) -> bool:
+        """Cert si el paràgraf s'ha decidit amb la cerca en feix d'arquitectures."""
+        return self.search is not None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -243,6 +257,7 @@ class ParagraphResult(_UnitResult):
             "summary": self.summary(),
             "candidates": [c.to_dict() for c in self.candidates],
             "rejected_proposals": [r.to_dict() for r in self.rejected_proposals],
+            "search": None if self.search is None else self.search.to_dict(),
         }
 
 
@@ -366,6 +381,7 @@ class ParaphraseResult:
             lines.append("")
             lines.append(f"Paràgraf {paragraph.index + 1} (regles entre frases):")
             _report_unit(lines, paragraph, max_discarded)
+            _report_search(lines, paragraph)
             lines.extend(f"  ℹ {note}" for note in paragraph.notes)
         lines.append("")
         lines.append("Text resultant:")
@@ -442,6 +458,37 @@ def _explain_preferences(lines: list[str], selected: EvaluatedCandidate) -> None
     if score.author_explanation:
         bonus = score.components.get("afinitat_autor", 0.0)
         lines.append(f"  Afinitat amb l'estil ({bonus:+.3f}): {score.author_explanation}")
+
+
+def _report_search(lines: list[str], paragraph: ParagraphResult) -> None:
+    """Traça de la cerca en feix: què s'ha conservat, què ha guanyat i per quant."""
+    search = paragraph.search
+    if search is None:
+        return
+    winner = search.winner
+    lines.append(
+        f"  Cerca d'arquitectures (feix {search.beam_width}, {search.explored} estats explorats, "
+        f"{len(search.alternatives)} arquitectures completes, {len(search.pruned)} podades):"
+    )
+    for n, alternative in enumerate(search.alternatives):
+        marker = "→" if n == search.selected else ("·" if alternative.valid else "✘")
+        rules = ", ".join(t.rule_id for t in alternative.state.paragraph.transformations) or "—"
+        lines.append(
+            f"    {marker} {alternative.origin} [{' | '.join(alternative.state.signatures)}; "
+            f"{rules}] global {alternative.global_total:+.3f} "
+            f"(frases {alternative.local_total:+.3f}, paràgraf {alternative.paragraph_total:+.3f}"
+            + (
+                f", afinitat {alternative.affinity_delta:+.3f}"
+                if alternative.affinity_delta is not None
+                else ""
+            )
+            + ")"
+        )
+    if winner.origin != "guanyadors locals":
+        lines.append(
+            f"  L'arquitectura escollida ({winner.origin}) supera la dels guanyadors locals "
+            f"({search.local_winner_total:+.3f})."
+        )
 
 
 def _report_unit(lines: list[str], unit: _UnitResult, max_discarded: int) -> None:

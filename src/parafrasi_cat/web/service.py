@@ -460,14 +460,35 @@ class RewriteService:
         for paragraph in result.paragraphs:
             if len(paragraph.candidates) <= 1 and not paragraph.rejected_proposals:
                 continue  # cap regla entre frases hi ha proposat res
-            units.append(
-                self._unit(
-                    paragraph,
-                    "paragraph",
-                    paragraph.index,
-                    f"Paràgraf {paragraph.index + 1} (regles entre frases)",
-                )
+            unit = self._unit(
+                paragraph,
+                "paragraph",
+                paragraph.index,
+                f"Paràgraf {paragraph.index + 1} (regles entre frases)",
             )
+            search = paragraph.search
+            if search is not None:
+                # Resum de la cerca d'arquitectures: prou per explicar la tria, sense
+                # abocar-hi tota la traça (que queda al resultat complet).
+                unit["search"] = {
+                    "beam_width": search.beam_width,
+                    "explored": search.explored,
+                    "selected": search.selected,
+                    "local_winner_total": search.local_winner_total,
+                    "alternatives": [
+                        {
+                            "origin": a.origin,
+                            "signatures": list(a.state.signatures),
+                            "paragraph_rules": [
+                                t.rule_id for t in a.state.paragraph.transformations
+                            ],
+                            "global_total": a.global_total,
+                            "valid": a.valid,
+                        }
+                        for a in search.alternatives
+                    ],
+                }
+            units.append(unit)
         return units
 
     def _unit(self, unit: _UnitResult, kind: str, index: int, label: str) -> JsonDict:
@@ -511,7 +532,9 @@ class RewriteService:
             "change_ratio": round(candidate.change_ratio(), 4),
             "signature": candidate.signature,
             "families": [f.value for f in candidate.families],
+            "structural_families": [f.value for f in candidate.structural_families],
             "structural_degree": candidate.structural_degree(),
+            "surface_degree": candidate.surface_degree(),
             "cross_sentence": any(t.family.cross_sentence for t in candidate.transformations),
             "score": None if score is None else score.to_dict(),
             "rules": [
@@ -524,6 +547,7 @@ class RewriteService:
                     "confidence": t.confidence,
                     "category": t.metadata.get("category", ""),
                     "family": t.family.value,
+                    "structural": t.family.structural,
                     "evidence": t.metadata.get("evidence", ""),
                 }
                 for t in candidate.transformations

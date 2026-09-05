@@ -13,7 +13,9 @@ poden combinar en un candidat i fins a quin nivell arriben les regles.
   puntuació hi dona avantatge a la reredacció estructural real (reordenació,
   subordinació, divisió, fusió) entre candidats igualment segurs: l'original
   continua sent el candidat de seguretat, però no guanya pel sol fet de tenir
-  canvi zero.
+  canvi zero. Al nivell 5, el paràgraf no es reconstrueix amb els guanyadors
+  locals de cada frase: una cerca en feix determinista compara arquitectures
+  alternatives de paràgraf senceres (vegeu ``pipeline.paragraph_search``).
 
 Cap dels dos modes no toca les proteccions: els termes protegits, els
 diccionaris, les preferències i la llista de validadors són idèntics en tots
@@ -86,6 +88,10 @@ class ModeSettings:
         structure_gain: Pes del grau de reredacció estructural a la puntuació
             (0 = l'original guanya els empats; més = avantatge per a la
             reestructuració real entre candidats igualment segurs).
+        paragraph_beam_width: Amplada de la cerca en feix d'arquitectures de
+            paràgraf quan el nivell efectiu és 5 (1 = sense cerca).
+        sentence_candidates_for_paragraph: Alternatives que cada frase conserva
+            per a la cerca de paràgraf, a més de l'original.
     """
 
     mode: RewriteMode
@@ -98,6 +104,8 @@ class ModeSettings:
     max_level: int
     length_ratio: tuple[float, float]
     structure_gain: float = 0.0
+    paragraph_beam_width: int = 1
+    sentence_candidates_for_paragraph: int = 3
 
     @property
     def label(self) -> str:
@@ -112,15 +120,19 @@ class ModeSettings:
 
     def apply(self, config: PipelineConfig, level: int | None = None) -> PipelineConfig:
         """Aplica l'envoltant a ``config`` sense tocar cap protecció."""
+        effective = self.level_for(level)
         applied = config.with_overrides(
             max_semantic_risk=self.max_semantic_risk,
             min_confidence=self.min_confidence,
             max_transformations_per_sentence=self.max_transformations_per_sentence,
             candidate_depth=self.candidate_depth,
             max_candidates_per_sentence=self.max_candidates_per_sentence,
-            level=self.level_for(level),
+            level=effective,
             length_ratio=self.length_ratio,
             scoring=replace(config.scoring, structure=self.structure_gain),
+            # La cerca d'arquitectures de paràgraf només té sentit al nivell 5.
+            paragraph_beam_width=self.paragraph_beam_width if effective >= MAX_LEVEL else 1,
+            sentence_candidates_for_paragraph=self.sentence_candidates_for_paragraph,
         )
         for field in PROTECTED_FIELDS:
             if getattr(applied, field) != getattr(config, field):  # pragma: no cover - invariant
@@ -139,6 +151,8 @@ class ModeSettings:
             "max_candidates_per_sentence": self.max_candidates_per_sentence,
             "max_level": self.max_level,
             "structure_gain": self.structure_gain,
+            "paragraph_beam_width": self.paragraph_beam_width,
+            "sentence_candidates_for_paragraph": self.sentence_candidates_for_paragraph,
         }
 
 
@@ -172,6 +186,8 @@ DEEP = ModeSettings(
     max_level=5,
     length_ratio=(0.6, 1.6),
     structure_gain=0.35,
+    paragraph_beam_width=6,
+    sentence_candidates_for_paragraph=3,
 )
 
 MODES: dict[RewriteMode, ModeSettings] = {

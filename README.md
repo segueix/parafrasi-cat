@@ -8,7 +8,7 @@ que s'executa al mateix ordinador.
 > morfològica i sintàctica, validació gramatical i selecció determinista de
 > candidats.**
 
-**Versió 1.3.1.** Un cop instal·lats els recursos, tot funciona sense connexió.
+**Versió 1.3.2.** Un cop instal·lats els recursos, tot funciona sense connexió.
 Parafrasi-cat no envia text a serveis d'Internet: en mode local, el text no surt
 del dispositiu; en mode de xarxa local, només circula entre el navegador client
 i el servidor Parafrasi-cat dins de la LAN.
@@ -266,14 +266,30 @@ els diccionaris, les preferències i la llista de validadors són idèntics.
 |---|---|---|
 | 1 | Lèxic | 3 |
 | 2 | Connectors | 7 |
-| 3 | Sintaxi: còpula, agent, presència, ordre, temporals, subordinades | 26 |
+| 3 | Sintaxi: còpula, agent, presència, ordre, temporals, subordinades, impersonals | 40 |
 | 4 | Entre frases: divisió i puntuació | 3 |
-| 5 | **Reestructuració controlada de paràgraf** | 1 |
+| 5 | **Reestructuració controlada de paràgraf** | 2 |
 
 El **nivell 5 és diferent del 4**: activa una fase de paràgraf que reorganitza
-frases senceres (fusió amb represa anafòrica). El nivell 4 treballa dins de
-cada frase i no arriba a aquesta fase. Les proteccions són exactament les
-mateixes als dos nivells.
+frases senceres (fusió amb represa anafòrica, fusió copulativa, integració d'un
+fragment nominal anafòric) i, en mode profund, **compara arquitectures
+alternatives de paràgraf**: en lloc de reconstruir el paràgraf amb el candidat
+que guanya a cada frase, una cerca en feix determinista i acotada conserva uns
+quants candidats segurs i diversos de cada frase (l'original, el millor i el
+millor de cada família estructural), aplica les regles de paràgraf on són
+possibles i tria l'arquitectura sencera que puntua millor, amb l'afinitat de
+l'autor mesurada sobre tot el paràgraf. Un candidat que queda segon en una
+frase pot guanyar si dona un paràgraf millor; el resultat ho explica. El nivell
+4 treballa dins de cada frase i no arriba a aquesta fase. Les proteccions són
+exactament les mateixes als dos nivells.
+
+El **grau estructural** d'un candidat només mesura l'arquitectura lingüística:
+reordenacions, subordinació, canvis de construcció, divisions i fusions. Les
+substitucions lèxiques, de connector, de puntuació i la flexió verbal («va
+gaudir» → «gaudí») tenen grau estructural 0 i es recullen a part com a **grau
+superficial**; repetir la mateixa família té rendiments decreixents, i una
+transformació que degrada l'estructura local (dues relatives consecutives amb
+el mateix marcador, «que» acumulats) rep una penalització, mai una invalidació.
 
 Reestructurar en profunditat **no vol dir escriure més llarg**. Abans de
 fusionar res, el motor calcula la longitud de la frase resultant i la compara

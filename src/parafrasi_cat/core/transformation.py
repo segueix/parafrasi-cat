@@ -44,13 +44,20 @@ class TransformationType(StrEnum):
 
 
 class TransformationFamily(StrEnum):
-    """Família estructural d'una transformació: què canvia de debò en la frase.
+    """Família lingüística d'una transformació: què canvia de debò en la frase.
 
     Serveix per classificar els candidats (signatura), per no generar-ne vint
-    de gairebé iguals i per mesurar el grau de reredacció: un canvi sintàctic
-    segur pesa més que un canvi de connector, i un canvi entre frases més que
-    un de dins de la frase. El pes no compensa mai cap error: només ordena
-    candidats igualment segurs.
+    de gairebé iguals i per mesurar dos graus de canvi diferents:
+
+    - el **grau superficial**: substitucions lèxiques, de connector, de
+      puntuació o de flexió verbal, que deixen l'arquitectura de la frase tal
+      com era («va gaudir» → «gaudí» és variació morfològica, no reredacció);
+    - el **grau estructural**: reordenacions, subordinació, canvis de
+      construcció, divisions i fusions, que reorganitzen la frase o el paràgraf.
+
+    Una família és estructural perquè ho és lingüísticament (``STRUCTURAL``),
+    no perquè el seu pes numèric superi cap llindar. Cap pes no compensa mai
+    cap error: només ordena candidats igualment segurs.
     """
 
     ORIGINAL = "ORIGINAL"
@@ -70,22 +77,29 @@ class TransformationFamily(StrEnum):
     REPAIR = "REPAIR"
 
     @property
-    def weight(self) -> float:
-        """Pes en el grau de reredacció estructural (0 = no compta)."""
-        return _FAMILY_WEIGHTS[self]
+    def structural(self) -> bool:
+        """Cert si la família canvia l'arquitectura de la frase, no només els mots.
+
+        És una propietat lingüística explícita: una reordenació, una
+        subordinació, un canvi de construcció, una divisió o una fusió ho són;
+        una substitució lèxica, de connector, de puntuació, una flexió verbal o
+        una reparació de concordança no ho són mai, per moltes que se n'apliquin.
+        """
+        return self in STRUCTURAL_FAMILIES
 
     @property
-    def structural(self) -> bool:
-        """Cert si la família canvia l'arquitectura de la frase, no només els mots."""
-        return self.weight >= 0.7
+    def weight(self) -> float:
+        """Pes en el grau de reredacció estructural (0 per a tota família no estructural)."""
+        return _STRUCTURAL_WEIGHTS.get(self, 0.0)
+
+    @property
+    def surface_weight(self) -> float:
+        """Pes en el grau de canvi superficial (0 per a les famílies estructurals)."""
+        return _SURFACE_WEIGHTS.get(self, 0.0)
 
     @property
     def cross_sentence(self) -> bool:
-        return self in (
-            TransformationFamily.CLAUSE_SPLIT,
-            TransformationFamily.CLAUSE_MERGE,
-            TransformationFamily.COPULAR_MERGE,
-        )
+        return self in CROSS_SENTENCE_FAMILIES
 
     @classmethod
     def parse(cls, value: str) -> TransformationFamily | None:
@@ -95,25 +109,51 @@ class TransformationFamily(StrEnum):
             return None
 
 
-#: Pes de cada família en el grau de reredacció estructural. Un canvi lèxic
-#: superficial val poc; un connector, una mica més; un canvi sintàctic segur,
-#: força més; i un canvi entre frases o de paràgraf, el màxim.
-_FAMILY_WEIGHTS: dict[TransformationFamily, float] = {
-    TransformationFamily.ORIGINAL: 0.0,
-    TransformationFamily.REPAIR: 0.0,
-    TransformationFamily.LEXICAL: 0.25,
+#: Famílies que reorganitzen l'arquitectura lingüística de la frase o del paràgraf.
+STRUCTURAL_FAMILIES: frozenset[TransformationFamily] = frozenset(
+    {
+        TransformationFamily.NOMINALIZATION,
+        TransformationFamily.SYNTACTIC,
+        TransformationFamily.REORDER,
+        TransformationFamily.SUBORDINATION,
+        TransformationFamily.COPULAR,
+        TransformationFamily.IMPERSONAL,
+        TransformationFamily.CLAUSE_SPLIT,
+        TransformationFamily.CLAUSE_MERGE,
+        TransformationFamily.COPULAR_MERGE,
+    }
+)
+
+#: Famílies que canvien els límits entre frases.
+CROSS_SENTENCE_FAMILIES: frozenset[TransformationFamily] = frozenset(
+    {
+        TransformationFamily.CLAUSE_SPLIT,
+        TransformationFamily.CLAUSE_MERGE,
+        TransformationFamily.COPULAR_MERGE,
+    }
+)
+
+#: Pes de cada família estructural en el grau de reredacció estructural: un
+#: canvi de construcció (còpula, impersonal, nominalització) reorganitza menys
+#: que una reordenació o una subordinació, i un canvi entre frases és el màxim.
+_STRUCTURAL_WEIGHTS: dict[TransformationFamily, float] = {
+    TransformationFamily.COPULAR: 0.5,
+    TransformationFamily.IMPERSONAL: 0.5,
+    TransformationFamily.NOMINALIZATION: 0.6,
+    TransformationFamily.SYNTACTIC: 0.7,
+    TransformationFamily.SUBORDINATION: 0.85,
+    TransformationFamily.REORDER: 0.9,
+    TransformationFamily.CLAUSE_SPLIT: 1.0,
+    TransformationFamily.CLAUSE_MERGE: 1.0,
+    TransformationFamily.COPULAR_MERGE: 1.0,
+}
+
+#: Pes de cada família superficial en el grau de canvi superficial.
+_SURFACE_WEIGHTS: dict[TransformationFamily, float] = {
+    TransformationFamily.LEXICAL: 0.3,
     TransformationFamily.CONNECTOR: 0.35,
-    TransformationFamily.PUNCTUATION: 0.4,
-    TransformationFamily.VERBAL: 0.5,
-    TransformationFamily.NOMINALIZATION: 0.7,
-    TransformationFamily.SYNTACTIC: 0.8,
-    TransformationFamily.IMPERSONAL: 0.8,
-    TransformationFamily.COPULAR: 0.9,
-    TransformationFamily.REORDER: 1.0,
-    TransformationFamily.SUBORDINATION: 1.0,
-    TransformationFamily.CLAUSE_SPLIT: 1.1,
-    TransformationFamily.CLAUSE_MERGE: 1.1,
-    TransformationFamily.COPULAR_MERGE: 1.2,
+    TransformationFamily.PUNCTUATION: 0.3,
+    TransformationFamily.VERBAL: 0.4,
 }
 
 #: Família per categoria de regla, quan la regla no la declara a les metadades.
@@ -144,6 +184,11 @@ _FAMILY_BY_TYPE: dict[str, TransformationFamily] = {
     "sentence_merge": TransformationFamily.CLAUSE_MERGE,
     "identity": TransformationFamily.ORIGINAL,
 }
+
+#: Clau de metadades amb què una regla pot matisar el pes estructural de la seva
+#: família (entre 0 i 1): moure un connector és una reordenació més lleu que
+#: moure una subordinada sencera.
+STRUCTURAL_WEIGHT_KEY = "structural_weight"
 
 
 class SemanticRisk(StrEnum):
@@ -247,6 +292,21 @@ class Transformation:
         return _FAMILY_BY_TYPE.get(self.transformation_type.value, TransformationFamily.SYNTACTIC)
 
     @property
+    def structural_weight(self) -> float:
+        """Pes estructural efectiu: el de la família, matisat per la regla si ho declara."""
+        family = self.family
+        if not family.structural:
+            return 0.0
+        declared = self.metadata.get(STRUCTURAL_WEIGHT_KEY)
+        if declared is not None:
+            try:
+                value = float(declared)
+            except (TypeError, ValueError):
+                return family.weight
+            return max(0.0, min(1.0, value))
+        return family.weight
+
+    @property
     def result_span(self) -> Span:
         """Interval que ocupa ``text_after`` un cop aplicada la transformació."""
         return Span(self.changed_span.start, self.changed_span.start + len(self.text_after))
@@ -283,6 +343,7 @@ class Transformation:
             "confidence": self.confidence,
             "semantic_risk": self.semantic_risk.value,
             "family": self.family.value,
+            "structural": self.family.structural,
             "explanation": self.explanation,
             "metadata": dict(self.metadata),
         }

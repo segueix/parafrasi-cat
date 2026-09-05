@@ -2,9 +2,14 @@
 description: Punt i coma → punt; parèntesis i guions → comes.
 language: ca
 rules:
+  # Substituir el punt i coma per un punt crea una frase nova: lingüísticament
+  # és una divisió (CLAUSE_SPLIT), més lleu que una divisió sintàctica perquè
+  # el límit entre clàusules ja hi era.
   - rule_id: puntuacio.punt_i_coma_a_punt
     engine: pattern
     category: puntuacio
+    family: CLAUSE_SPLIT
+    structural_weight: 0.6
     level: 4
     transformation_type: punctuation
     semantic_risk: low

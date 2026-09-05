@@ -32,6 +32,7 @@ from parafrasi_cat.rules.base import ParagraphContext, ParagraphRule
 from parafrasi_cat.rules.definition import RuleDefinition
 from parafrasi_cat.rules.pattern_rule import HintsCache
 from parafrasi_cat.rules.patterns import GrammarHints
+from parafrasi_cat.syntax.analysis import COPULA_DEPS
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +49,8 @@ class FusionStrategy:
     lowercase: bool = True
     skip_if_second_starts_with: tuple[str, ...] = ()
     """Inicis de la segona frase que l'estratègia no toca (una còpula: «És B.»)."""
+    nominal_fragment: bool = False
+    """Cert si la segona frase ha de ser un fragment nominal anafòric (només amb analitzador)."""
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, object]) -> FusionStrategy:
@@ -63,6 +66,7 @@ class FusionStrategy:
             skip_if_second_starts_with=tuple(
                 t.lower() for t in as_str_list(data, "skip_if_second_starts_with")
             ),
+            nominal_fragment=data.get("nominal_fragment") is True,
         )
 
 
@@ -114,11 +118,17 @@ class SentenceFusionRule(ParagraphRule):
                     continue
                 if words_first + words_second > strategy.max_words:
                     continue
-                # Aquestes dues comprovacions no depenen de l'estratègia: si una
-                # volia fusionar i no pot, cap altra no ho arreglarà.
+                # La longitud no depèn de l'estratègia: si una volia fusionar i no
+                # pot, cap altra no ho arreglarà.
                 if not ctx.length_allows(words_first + words_second, _describe(first, second)):
                     break
-                if not ctx.syntax_confident(first, second):
+                if strategy.nominal_fragment:
+                    # Un fragment nominal («Un fet que...») no supera mai el criteri
+                    # de confiança: aquí és precisament el que es demana, i la
+                    # primera frase ha de ser una oració fiable.
+                    if not _anaphoric_fragment(ctx, first, second):
+                        continue
+                elif not ctx.syntax_confident(first, second):
                     ctx.note(
                         f"no s'han fusionat {_describe(first, second)}: l'analitzador sintàctic "
                         "no es refia de l'estructura d'alguna de les dues"
@@ -333,6 +343,30 @@ def _first_copula(
         negated = any(t.lower in ("no",) for t in tokens[max(0, index - 2) : index])
         return index, negated, only
     return None
+
+
+#: Categories que poden ser nucli d'un fragment nominal anafòric.
+NOMINAL_POS = frozenset({"NOUN", "PROPN", "PRON"})
+
+
+def _anaphoric_fragment(ctx: ParagraphContext, first: Sentence, second: Sentence) -> bool:
+    """Cert si la segona frase és un sintagma nominal amb relativa i la primera, fiable.
+
+    Només amb analitzador: el nucli de la segona ha de ser un nom (no un verb ni
+    un predicat amb còpula), amb una relativa que en depengui i sense cap altre
+    verb principal; la primera ha de superar el criteri de confiança.
+    """
+    if not ctx.syntax.available:
+        return False
+    if not ctx.parse_sentence(first).confident:
+        return False
+    analysis = ctx.parse_sentence(second)
+    root = analysis.root
+    if root is None or root.pos not in NOMINAL_POS:
+        return False
+    if any(t.head == root.index and t.dep in COPULA_DEPS for t in analysis.tokens):
+        return False
+    return any(t.head == root.index and t.dep in ("acl", "acl:relcl") for t in analysis.tokens)
 
 
 def _describe(first: Sentence, second: Sentence) -> str:

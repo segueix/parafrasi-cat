@@ -9,7 +9,7 @@ from parafrasi_cat.analyzer.clitics import Certainty
 from parafrasi_cat.analyzer.lexicon import ClosedClassLexicon
 from parafrasi_cat.analyzer.tokens import Token, TokenKind
 from parafrasi_cat.core.spans import Span
-from parafrasi_cat.core.transformation import Transformation
+from parafrasi_cat.core.transformation import STRUCTURAL_WEIGHT_KEY, Transformation
 from parafrasi_cat.resources import as_mapping, as_str_list
 from parafrasi_cat.rules.base import Rule, RuleContext
 from parafrasi_cat.rules.definition import RuleDefinition
@@ -70,6 +70,13 @@ class PatternRule(Rule):
         self._matcher = PatternMatcher(definition.pattern)
         self._hints = hints or _DEFAULT_HINTS
         self._uses_syntax = uses_syntax(definition.conditions)
+        # Una regla pot declarar la família (quan la categoria no la determina:
+        # «; B.» → «. B.» divideix la frase) i matisar-ne el pes estructural.
+        self._extra_metadata: dict[str, str] = {}
+        for key in ("family", STRUCTURAL_WEIGHT_KEY):
+            value = definition.params.get(key)
+            if value is not None:
+                self._extra_metadata[key] = str(value)
 
     @property
     def definition(self) -> RuleDefinition:
@@ -121,6 +128,7 @@ class PatternRule(Rule):
                         "category": definition.category,
                         "level": str(definition.level),
                         "template": str(index),
+                        **self._extra_metadata,
                     },
                 )
 
@@ -226,7 +234,7 @@ def _group_ok(
 #: Condicions de grup que consulten l'estructura de la frase.
 STRUCTURAL_KEYS = frozenset(
     {"is_subject", "is_adverbial_clause", "mood", "no_clitic", "single_clause", "exact",
-     "is_apposition", "no_subject"}
+     "is_apposition", "no_subject", "movable_subtree", "is_adjunct"}
 )  # fmt: skip
 
 
@@ -268,6 +276,20 @@ def _structural_ok(
         if any(state.is_clitic(first + offset) for offset in range(len(tokens))):
             return False
     if spec.get("single_clause") is True and not _single_clause(tokens, state, starts):
+        return False
+    if spec.get("movable_subtree") is True:
+        # Amb anàlisi fiable, el bloc s'ha de poder moure sencer: un subarbre
+        # tancat, amb les subordinades internes a dins i cap dependència externa.
+        # Sense analitzador, val la condició conservadora de sempre: una sola
+        # clàusula. Un parse dubtós no autoritza mai el moviment complex.
+        if syntax.confident:
+            if syntax.closed_subtree(start, end) is None:
+                return False
+        elif not _single_clause(tokens, state, starts):
+            return False
+    if spec.get("is_adjunct") is True and (
+        not syntax.confident or not _is_adjunct_of_root(syntax, start, end)
+    ):
         return False
     if spec.get("is_subject") is True:
         if syntax.confident:
@@ -370,6 +392,27 @@ def _is_adverbial_clause(
             return lemma not in COMPLEMENT_TAKING_LEMMAS
         return False
     return False
+
+
+#: Relacions d'un complement circumstancial que es pot desplaçar sencer.
+ADJUNCT_DEPS = frozenset({"obl", "obl:tmod", "obl:mod", "obl:arg", "advmod", "nmod:tmod"})
+
+
+def _is_adjunct_of_root(syntax: SentenceSyntax, start: int, end: int) -> bool:
+    """Cert si l'interval és un complement circumstancial tancat del nucli de l'oració.
+
+    El bloc ha de ser un subarbre tancat, el seu nucli ha de tenir una relació
+    de complement (``obl``, ``advmod``...) i ha de penjar del nucli de
+    l'oració o del seu verb principal: un complement d'un nom («el text de les
+    edicions») o d'una subordinada no es desplaça al davant de tot.
+    """
+    head = syntax.closed_subtree(start, end)
+    root = syntax.root
+    if head is None or root is None or head.dep not in ADJUNCT_DEPS:
+        return False
+    verb = syntax.main_verb()
+    allowed = {root.index} | ({verb.index} if verb is not None else set())
+    return head.head in allowed
 
 
 def _normalized(text: str) -> str:
