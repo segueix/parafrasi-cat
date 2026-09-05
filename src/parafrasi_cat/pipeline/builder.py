@@ -36,7 +36,6 @@ from parafrasi_cat.scoring.assertive import AssertiveEvaluator
 from parafrasi_cat.scoring.scorer import CompositeScorer
 from parafrasi_cat.style.adaptation import AuthorAdaptation
 from parafrasi_cat.style.degradation import StructuralDegradation
-from parafrasi_cat.style.diversity import DiversifiedAuthorAdaptation
 from parafrasi_cat.style.evaluator import StyleEvaluator
 from parafrasi_cat.style.fusion_rhythm import FusionRhythm
 from parafrasi_cat.style.observations import StyleResources
@@ -45,6 +44,7 @@ from parafrasi_cat.syntax.analysis import CachedSyntax, NullSyntax, SyntaxProvid
 from parafrasi_cat.syntax.spacy_parser import SpacySyntax
 from parafrasi_cat.validation.agreement import AgreementValidator
 from parafrasi_cat.validation.base import Validator
+from parafrasi_cat.validation.conditional_scope import ConditionalScopeValidator
 from parafrasi_cat.validation.epistemic import (
     EPISTEMOLOGY_FILE,
     EpistemicLexicon,
@@ -156,12 +156,7 @@ def build_pipeline(
     if config.source_mode.adapts_to_author and style_profile.preferences is None:
         raise ConfigError(FINGERPRINT_REQUIRED)
     if style_profile.preferences is not None:
-        adaptation_type = (
-            DiversifiedAuthorAdaptation
-            if config.source_mode.adapts_to_author
-            else AuthorAdaptation
-        )
-        adaptation = adaptation_type(
+        adaptation = AuthorAdaptation(
             style_profile.preferences,
             analyzer,
             StyleResources.load(paths, config.language, lexicon=lexicon),
@@ -171,8 +166,8 @@ def build_pipeline(
         if config.source_mode.adapts_to_author:
             # Un esborrany LLM ja pot estar molt ben redactat. No exigim que la
             # transformació sigui una "millora" absoluta: entre alternatives que
-            # han superat els validadors, premiem la reescriptura real, l'afinitat
-            # amb l'autor i una diversitat estructural compatible amb l'empremta.
+            # han superat els validadors, premiem la reescriptura real i l'afinitat
+            # amb l'autor. El valor explícit de configuració mana si és més alt.
             weights = replace(
                 weights,
                 rewrite_pressure=max(weights.rewrite_pressure, LLM_REWRITE_PRESSURE),
@@ -245,6 +240,7 @@ def build_validators(
         NegationValidator(
             as_str_list(modality, "negation"), as_str_list(modality, "negation_exceptions")
         ),
+        ConditionalScopeValidator(),
     ]
     if user_terms:
         validators.append(ProtectedTermValidator(user_terms))
