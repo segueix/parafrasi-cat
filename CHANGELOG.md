@@ -3,6 +3,96 @@
 El format segueix [Keep a Changelog](https://keepachangelog.com/ca/1.1.0/) i el
 projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
+## 1.3.13
+
+Tria entre connectors equivalents dins d'un paràgraf: el motor deixa
+d'introduir repeticions que l'original no tenia («atès que… atès que» on hi
+havia «perquè… perquè») quan existeix una alternativa igual de segura. La
+repetició continua sent legítima: la que l'autor ha escrit no es toca, i cap
+frase no canvia si no hi ha cap candidat segur.
+
+### Per què encara guanyava «atès que… atès que»
+
+Tres causes independents, totes tres corregides:
+
+- **La mesura no veia els connectors que discutia.** El recompte de la v1.3.11
+  es feia sobre `UnitStats.connectors`, que surt de l'observació d'estil: les
+  formes de més d'una paraula lexicalitzades com a conjunció («atès que», «ja
+  que», «com que») no hi arriben mai, perquè l'observador només mira
+  expressions de classe connector o marcador i tokens solts. El perfil de
+  connectors d'un paràgraf amb dos «atès que» sortia buit, i la penalització
+  valia zero.
+- **Només mirava aparicions consecutives.** Dues repeticions separades per un
+  altre connector no comptaven, per pròximes que fossin.
+- **Penalitzava l'original i no el candidat.** Com que es mesurava el candidat
+  sol, un paràgraf que ja repetia «perquè» rebia la penalització, i el candidat
+  que hi introduïa «atès que… atès que» no en rebia cap.
+
+### Repetició de connectors mesurada de nou (`style/connector_repetition.py`)
+
+- **Inventari accionable**: les formes que declaren les classes d'equivalència
+  de connectors de les regles actives (membres i objectius). Són exactament les
+  que el motor pot intercanviar; les formes que no pot variar no hi entren, i
+  els marcadors d'interacció col·loquial («home», «escolta») tampoc. Es
+  reconeixen sobre els tokens, de manera que les formes de més d'una paraula ja
+  no depenen del lexicó d'expressions.
+- **Distància**: cada aparició es compara amb l'anterior de la mateixa forma i
+  pesa `1 / (1 + frases de distància)`: 1,00 dins de la mateixa frase, 0,50 a
+  la següent, 0,33 dues més enllà, 0,25 tres… Decreix sempre, és acotat i no té
+  cap llindar. Fora de la unitat que es puntua no es mesura res.
+- **Introduïda contra heretada**: es compara la severitat per forma del
+  candidat amb la de l'original i només es penalitza l'excés. Conservar
+  «perquè… perquè» no costa res; substituir-ho per «atès que… atès que» sí,
+  perquè la forma nova no era repetida a l'original.
+
+### El feix conserva els perfils de connectors
+
+- Els candidats locals porten anotats els connectors que contenen
+  (`LocalOption.connectors`), i cada estat el seu perfil acumulat.
+- `_prune` guanya una capa: després del millor estat i del millor estat de cada
+  candidat de la frase acabada d'afegir, es conserva el millor estat de cada
+  perfil de connectors recent (els dos darrers). Dues arquitectures amb les
+  mateixes signatures que difereixen només en un connector triat unes frases
+  enrere ja no es maten entre elles. Tot continua acotat per l'amplada del feix:
+  cap capa no hi afegeix ni un estat de més.
+- Els prefixos del feix es puntuen contra el prefix **original** del paràgraf,
+  no contra el text intermedi, de manera que la cerca optimitza el mateix
+  objectiu que la selecció final.
+
+### La decisió es pren una sola vegada, sobre el paràgraf sencer
+
+- La repetició és una propietat del paràgraf. Les puntuacions de frase ja no
+  se sumen amb la seva aproximació: el component `repeticio_connectors` es
+  descompta del total de frases (com ja es feia amb l'afinitat autoral) i es
+  torna a mesurar una sola vegada sobre l'arquitectura completa, contra el
+  paràgraf original. No hi ha cap bonus nou ni cap doble recompte.
+- **Un canvi que recrea una repetició no cobra el guany que cobrava.** Amb una
+  penalització fixa i petita, afegir un segon canvi de connector idèntic sempre
+  sortia a compte: el premi per transformació (0,19) superava la penalització
+  (0,09). Ara, en proporció a la severitat, les frases que porten la forma
+  repetida perden exactament el guany que el mateix puntuador els havia
+  concedit per aquell canvi. No hi ha cap constant nova ni cap pes inflat: el
+  pes `connector_repetition` continua sent 0,18.
+
+### Traçabilitat
+
+`ScoreBreakdown.connectors` i cada arquitectura del feix exposen el perfil de
+connectors, les repeticions detectades amb la seva distància, quines són noves
+respecte de l'original i la penalització resultant. El motiu de conservació de
+cada estat del feix diu si ha sobreviscut pel seu perfil de connectors.
+
+### Altres
+
+- `Pipeline.scorer` és accessible com les altres peces de la canonada.
+- La versió que declarava el paquet (`parafrasi_cat.__version__`) s'havia quedat
+  a la 1.3.3 mentre `pyproject.toml` avançava; ara tornen a coincidir. Les
+  versions 1.3.4 a 1.3.12 estan documentades a l'historial de git.
+- Tests nous (`tests/test_regressions_1313.py`): inventari, formes de més d'una
+  paraula, decaïment per distància, introduïda contra heretada, connectors
+  equivalents diferents sense penalització, absència de referència, veïnatge,
+  traça, diversitat de perfils al feix, poda acotada, guany retirat, text real
+  de l'orfil amb totes les proteccions anteriors i determinisme.
+
 ## 1.3.3
 
 Més cobertura d'alternatives segures al nivell 5 del mode profund, sense

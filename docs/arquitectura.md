@@ -54,7 +54,7 @@ ParaphraseResult (text resultant + informe complet)
 | `rules` | Regles que proposen transformacions | `Rule`, `RuleContext`, `LexicalSubstitutionRule`, `BlockMoveRule`, `RuleRegistry`, `RuleSetConfig` |
 | `candidates` | Construcció de versions alternatives | `Candidate`, `CandidateGenerator` |
 | `validation` | Invariants de contingut | `Validator`, `ValidationResult`, validadors concrets, `EpistemicCategory`, matriu `TRANSITIONS` |
-| `style` | Estilometria i perfils | `StyleProfile`, `StyleMetrics`, `StyleEvaluator`, `estimate_profile`, `FusionRhythm`, `epistemic_profile` |
+| `style` | Estilometria i perfils | `StyleProfile`, `StyleMetrics`, `StyleEvaluator`, `estimate_profile`, `FusionRhythm`, `epistemic_profile`, `ConnectorRepetition` |
 | `scoring` | Puntuació i selecció | `ScoringWeights`, `CompositeScorer`, `AssertiveEvaluator`, `select_best` |
 | `pipeline` | Orquestració i configuració | `Pipeline`, `PipelineConfig`, `build_pipeline`, `ParaphraseResult`, `ParagraphBeam` |
 | `resources` (mòdul) | Localització i lectura de YAML/JSON | `ProjectPaths`, `load_mapping`, accessors tipats |
