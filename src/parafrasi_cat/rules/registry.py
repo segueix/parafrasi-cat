@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from parafrasi_cat.core.errors import ConfigError
 from parafrasi_cat.resources import ProjectPaths, as_str, as_str_list
+from parafrasi_cat.rules.anaphoric import AnaphoricFragmentRepairRule
 from parafrasi_cat.rules.assertive import AssertiveNormalizationRule
 from parafrasi_cat.rules.base import AnyRule
 from parafrasi_cat.rules.blocks import BlockMoveRule
@@ -127,6 +128,13 @@ def _assertive_factory(rule_id: str, params: Mapping[str, object], paths: Projec
     return AssertiveNormalizationRule(definition_from_params(params, rule_id))
 
 
+def _anaphoric_fragment_factory(
+    rule_id: str, params: Mapping[str, object], paths: ProjectPaths
+) -> AnyRule:
+    del paths
+    return AnaphoricFragmentRepairRule(definition_from_params(params, rule_id))
+
+
 def default_registry() -> RuleRegistry:
     registry = RuleRegistry()
     registry.register("lexical.substitution", _lexical_factory, description="Substitució lèxica basada en diccionari")
@@ -139,4 +147,9 @@ def default_registry() -> RuleRegistry:
     registry.register("block_move", _block_move_factory, description="Moviment de blocs sintàctics tancats")
     registry.register("copular_fusion", _copular_fusion_factory, description="Fusió de frases copulatives")
     registry.register("epistemic_normalize", _assertive_factory, description="Normalització determinista de piles de modalització")
+    registry.register(
+        "anaphoric_fragment_repair",
+        _anaphoric_fragment_factory,
+        description="Reparació de fragments nominals anafòrics confirmats pel parser",
+    )
     return registry
