@@ -33,10 +33,17 @@ rules:
       - id: causal
         slot: conjunction
         function: causa
+        # «puix que» es reconeix si ja apareix al text, però no es genera com a
+        # objectiu normal: és un connector marcat/arcaïtzant. La tria productiva
+        # queda entre «ja que» i «atès que», i l'empremta de l'autor continua
+        # decidint quin dels dos encaixa millor amb el corpus real.
         members:
           - {form: ja que}
           - {form: atès que, register: formal}
-          - {form: puix que, register: formal}
+          - {form: puix que, register: marcat}
+        targets:
+          - {form: ja que}
+          - {form: atès que, register: formal}
       - id: consequencia_inicial
         slot: sentence_initial
         function: conseqüència
