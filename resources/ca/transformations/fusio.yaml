@@ -14,19 +14,12 @@ rules:
     confidence: 0.6
     description: "Fusió de dues frases consecutives compatibles"
     strategies:
-      - id: contrast_pero
-        triggers: [però]
-        joiner: ", "
-        max_words: 40
-      - id: connector_punt_i_coma
-        triggers: [tanmateix, no obstant això, a més, a més a més, així mateix, per tant, en conseqüència, així doncs, d'altra banda, en canvi, finalment, després, aleshores, llavors, també, així i tot, amb tot, malgrat tot, en efecte, de fet, a continuació, tot seguit, per aquest motiu, per això]
-        joiner: "; "
-        max_words: 45
-      - id: anafora_demostrativa
-        triggers: [en aquest, en aquesta, en aquests, en aquestes, aquest, aquesta, aquests, aquestes, això, hi]
-        joiner: ", i "
-        max_words: 50
-        semantic_risk: medium
+      # No es fusionen simples fronteres «. Però» → «, però», connectors amb
+      # punt i coma ni «. Aquesta» → «, i aquesta». Són canvis de puntuació o
+      # d'enllaç massa petits per comptar com a reredacció profunda i, com que
+      # la família CLAUSE_MERGE és estructural, acabaven rebent massa premi al
+      # nivell 5. Les equivalències de connectors continuen disponibles al
+      # nivell 2 i les divisions/reordenacions reals al nivell 3-4.
       - id: frases_curtes
         triggers: []
         joiner: " i "
@@ -47,18 +40,16 @@ rules:
         nominal_fragment: true
     examples:
       positive:
-        - input: "Plou molt. Tanmateix, sortirem."
-          output: "Plou molt; tanmateix, sortirem."
-        - input: "Plou molt. Però sortirem."
-          output: "Plou molt, però sortirem."
         - input: "Plou. Fa fred."
           output: "Plou i fa fred."
-        - input: "El monument és de marbre. En aquest sarcòfag hi ha dos cranis."
-          output: "El monument és de marbre, i en aquest sarcòfag hi ha dos cranis."
+        - input: "L'obra era dedicada al secretari. Un fet que obligava l'autor a ser prudent."
+          output: "L'obra era dedicada al secretari, un fet que obligava l'autor a ser prudent."
       negative:
         - "Plou molt! Sortirem."
         - "Plou molt? Sortirem."
         - "Vegeu la pàg. Després tornarem."
+        - "Plou molt. Però sortirem."
+        - "El monument és antic. Aquesta dada és important."
 
   # Si la fusió anterior no és possible perquè la frase resultant seria massa
   # llarga per a l'autor, un fragment anafòric pot continuar sent una frase
