@@ -30,8 +30,10 @@ d'un fragment i conserva la resta).
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import lru_cache
+from typing import cast
 
 from parafrasi_cat.analyzer.clitics import DEFAULT_AUXILIARY_FORMS
 from parafrasi_cat.analyzer.lexicon import ClosedClassLexicon, WordClass, normalize_form
@@ -269,6 +271,9 @@ class MatchState:
     pronouns: frozenset[int] = frozenset()
     """Índexs dels tokens que l'analitzador ha resolt com a pronoms febles segurs."""
 
+    document_text: str = ""
+    """Text sencer del document, per a les condicions que en depenen (buit = la frase)."""
+
     def is_finite(self, token: Token) -> bool:
         """Cert si el token és un verb conjugat, segons la millor font disponible.
 
@@ -283,10 +288,25 @@ class MatchState:
             parsed = self.syntax.token_at(token.span.start)
             if parsed is not None and parsed.end == token.span.end:
                 if not parsed.is_finite_verb:
-                    return False
+                    # L'analitzador pot etiquetar malament una forma conjugada poc
+                    # freqüent («continuaria»): si el recurs morfològic només hi veu
+                    # un verb conjugat, mana el recurs.
+                    return self._finite_by_dictionary(token)
                 readings = lexical_readings(self.morphology, token.text)
                 return not (readings.known and not readings.past_verb and not readings.other_verb)
-        return self.hints.is_finite_verb(token)
+        if self.hints.is_finite_verb(token):
+            return True
+        # Sense analitzador, el recurs morfològic és la millor evidència que queda: una
+        # forma que només coneix com a verb conjugat («permetria») és finita encara que
+        # no sigui a la llista de formes freqüents ni l'endevini cap sufix.
+        return self._finite_by_dictionary(token)
+
+    def _finite_by_dictionary(self, token: Token) -> bool:
+        # Dins d'un fragment protegit (un nom com «Benedetto da Rovezzano», una data,
+        # una citació) no hi ha cap verb per molt que el diccionari conegui la forma.
+        if any(p.overlaps(token.span) for p in self.protected):
+            return False
+        return _finite_only_by_dictionary(self.morphology, token.text)
 
     def is_clitic(self, index: int) -> bool:
         """Cert si el token és (o fa de) pronom feble.
@@ -818,6 +838,8 @@ def number_of(state: MatchState, tokens: Sequence[Token]) -> str | None:
 def _apply_filter(
     name: str, text: str, tokens: Sequence[Token], state: MatchState, protected_first: bool
 ) -> str | None:
+    if name == "de":
+        return with_de(text)
     if name == "cap":
         return text[:1].upper() + text[1:]
     if name == "lower":
@@ -892,6 +914,59 @@ def _inflect(arguments: str, text: str, state: MatchState) -> str | None:
     return match_casing(text, generated)
 
 
+_DE_CONTRACTIONS = {
+    "el": "del", "els": "dels", "un": "d'un", "una": "d'una", "uns": "d'uns", "unes": "d'unes",
+    "la": "de la", "les": "de les", "aquest": "d'aquest", "aquesta": "d'aquesta",
+    "aquests": "d'aquests", "aquestes": "d'aquestes",
+}  # fmt: skip
+
+
+def with_de(text: str) -> str | None:
+    """«de» + determinant o mot, amb la contracció o l'elisió que toca («el» → «del»)."""
+    words = text.split()
+    if not words:
+        return None
+    first = normalize_form(words[0])
+    if first in _DE_CONTRACTIONS:
+        return " ".join([_DE_CONTRACTIONS[first], *words[1:]])
+    if first[:1] in "aeiouhàèéíòóúï":
+        return "d'" + text
+    return "de " + text
+
+
+_FINITE_MOODS = frozenset({"ind", "subj", "cond", "imp"})
+
+
+def _finite_only_by_dictionary(morphology: MorphologyProvider, form: str) -> bool:
+    """Cert si el recurs morfològic coneix la forma només com a verb conjugat.
+
+    Cap lectura no verbal i almenys una lectura amb mode finit; l'endevinador
+    per sufixos no hi compta, perquè no és cap evidència lèxica. La resposta es
+    recorda per forma: la pregunta es repeteix a cada grup de cada regla.
+    """
+    return _finite_only_cached(cast("Hashable", morphology), form.strip().lower())
+
+
+@lru_cache(maxsize=16384)
+def _finite_only_cached(morphology: Hashable, form: str) -> bool:
+    provider = cast("MorphologyProvider", morphology)
+    try:
+        entries = list(provider.analyze(form))
+    except Exception:  # pragma: no cover - un recurs defectuós no ha d'aturar el motor
+        return False
+    entries = [e for e in entries if getattr(e, "source", "") != "guesser"]
+    if not entries:
+        return False
+    finite = False
+    for entry in entries:
+        features = entry.features
+        if features.pos != "verb":
+            return False
+        if features.mood in _FINITE_MOODS:
+            finite = True
+    return finite
+
+
 def render_template(template: str, match: Match, state: MatchState) -> str | None:
     """Omple una plantilla amb els grups de l'encaix. ``None`` si un filtre no és aplicable."""
     failed = False
@@ -908,6 +983,11 @@ def render_template(template: str, match: Match, state: MatchState) -> str | Non
         bounds = match.groups[name]
         protected_first = state.is_protected_token(bounds[0])
         for name_ in filters:
+            if name_ == "sentcase":
+                # Majúscula inicial només si l'encaix comença la frase: el grup
+                # ocupa el lloc del primer mot.
+                text = text[:1].upper() + text[1:] if match.start == 0 else text
+                continue
             result = _apply_filter(name_, text, tokens, state, protected_first)
             if result is None:
                 failed = True

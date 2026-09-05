@@ -3,6 +3,145 @@
 El format segueix [Keep a Changelog](https://keepachangelog.com/ca/1.1.0/) i el
 projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
+## 1.3.3
+
+Més cobertura d'alternatives segures al nivell 5 del mode profund, sense
+augmentar l'agressivitat, i opció «Llenguatge assertiu» a la interfície. El
+patró «0 – 0 – 0 – 0 – transformació forta – transformació forta – 0» d'un
+paràgraf acadèmic real (deu frases) passa a set frases amb alternativa segura,
+sis d'elles estructurals; les tres restants queden intactes perquè no tenen
+cap alternativa segura, i el resultat ho diu.
+
+### Cobertura estructural: capa de transformacions intermèdies
+
+- Regla nova `ordre.pero_medial_a_inicial`: «La hipòtesi no depèn, però, d'una
+  sola coincidència» → «Tanmateix, la hipòtesi no depèn d'una sola
+  coincidència» (i «No obstant això, …»). Reordenació discursiva lleu
+  (`structural_weight` 0,4), sense cap substitució lèxica que no vingui d'un
+  diccionari explícit.
+- La detecció de verb conjugat sense analitzador consulta el recurs morfològic:
+  una forma que el diccionari només coneix com a verb conjugat («permetria»,
+  «continuaria») compta encara que no sigui a la llista de formes freqüents ni
+  l'endevini cap sufix; dins d'un fragment protegit («Benedetto *da*
+  Rovezzano») no hi ha mai cap verb. Amb l'analitzador, una forma conjugada que
+  el parser etiqueta malament («continuaria» com a adjectiu) també la salva el
+  diccionari. `divisio.coordinada_pero` torna a dividir «…continuaria sent
+  hipotètica, però permetria ordenar…».
+- L'analitzador rep el text amb els apòstrofs tipogràfics normalitzats
+  (`prepare_text`): «d’aquest» deixava el parser sense arrel fiable i bloquejava
+  totes les transformacions guiades per la sintaxi sobre textos reals. Les
+  superfícies originals es conserven als tokens i als resultats.
+
+### Moviment de blocs sintàctics complets (`block_move`)
+
+- Motor nou `rules/blocks.py` i regles `blocs.subordinada_adverbial`
+  (condicionals, causals, concessives, temporals, finals: inicial ↔ final, amb
+  els marcadors que canvien de forma segons la posició: «perquè» → «com que»),
+  `blocs.complement_del_verb` (complement circumstancial de tres o més paraules
+  cap a l'inici) i `blocs.participial_del_subjecte` (participial interposat del
+  subjecte cap al davant, dins de la seva clàusula: «El problema principal és
+  que, considerat de manera aïllada, cap d'aquests elements permet…»).
+- Comprovació `SentenceSyntax.block_check` (el `movable_subtree` dels blocs):
+  subarbre tancat, cap dependència externa tallada, negacions dins del domini,
+  cap pronom feble ni fragment protegit partit, cap referent pronominal ambigu
+  quan el bloc passa al davant. Sense analitzador o amb un parse dubtós, el
+  motor no proposa res.
+- Els candidats ordenats de manera diferent però amb la mateixa inversió
+  correcta («Encarregat el 1507 i finalitzat el 1516, el monument funerari
+  d'Oddo Altoviti constitueix la primera referència itàlica») són variants
+  acceptables; el test corresponent comprova la propietat (el monument és el
+  subjecte de «constitueix») en lloc de l'inici literal.
+
+### Balanç de cobertura al feix de paràgraf
+
+- `BeamSettings.coverage_balance` (`ScoringWeights.coverage_balance`, 0,06 només
+  al nivell 5 del mode profund): entre arquitectures igualment segures, la que
+  reparteix la reredacció entre les frases que tenen alternatives segures
+  puntua una mica més que la que la concentra en una sola frase. Es calcula
+  sobre les oportunitats segures existents, mai no és una quota i mai no pot
+  compensar una invalidació ni un avís gramatical. Cada alternativa exposa la
+  seva distribució (`ParagraphAlternative.distribution`, `coverage_balance`).
+
+### Puntuació de les fusions segons el ritme real de l'autor
+
+- `style/fusion_rhythm.py`: la frase que resulta d'una fusió es valora contra
+  la distribució real de longituds de l'empremta (mediana, IQR, p90: comença a
+  pagar a `max(p90, mediana + dispersió)` i paga tot a `max(2·mediana, …)`), el
+  nombre de clàusules, les relatives consecutives, la profunditat de
+  subordinació i les comes en una sola frase. Sense empremta, val el perfil
+  d'estil. És una penalització (`ritme_fusio`, component `ritme`), mai una
+  invalidació: una fusió llarga competeix pitjor que una arquitectura amb millor
+  ritme, i una fusió compatible amb el ritme de l'autor no paga res.
+
+### Observabilitat de les oportunitats
+
+- Per frase (`SentenceResult.opportunities`): `opportunities_detected`,
+  `rejected_proposals`, `safe_proposals`, `structural_proposals`,
+  `surface_proposals`, `unsafe_proposals`, `selected_family`,
+  `selected_is_original` i un veredicte que distingeix «sense cap alternativa»,
+  «cap alternativa segura», «l'original ha guanyat» i «transformada». Les
+  transformacions encadenades sobre el resultat d'una altra no hi compten.
+- Per paràgraf (`ParagraphResult.opportunities`): `paragraph_safe_opportunities`,
+  `paragraph_structural_opportunities`, `paragraph_fusion_opportunities`,
+  `paragraph_split_opportunities`, candidats del feix i distribució del canvi.
+  Tot és a l'informe, a `to_dict`, a l'API local i a l'exportació.
+
+### Opció «Llenguatge assertiu»
+
+- Casella a la interfície (al costat de mode, nivell i empremta; desactivada per
+  defecte), `--assertiu` al terminal, `assertive_language` a la configuració, a
+  l'API, al resultat («Llenguatge assertiu: actiu / inactiu»), a l'historial i a
+  l'exportació. Funciona amb text propi i amb esborrany LLM i és ortogonal al
+  mode.
+- Regles noves `resources/ca/transformations/assertiu.yaml` (només actives amb
+  l'opció, família `EPISTEMIC`): reducció de la doble modalització («sembla que
+  podria», «potser podria» → «podria»), hipòtesi explícita («podria
+  interpretar-se com una estratègia» → «permet plantejar la hipòtesi d'una
+  estratègia»), atribució directa («Com detalla X, …» → «X detalla que …»),
+  limitació documental («no es pot demostrar que» → «la documentació disponible
+  no permet demostrar que», només si el text parla de documentació) i
+  plantejament directe («fa pensar que» → «permet plantejar que»). Regla d'or:
+  més clara, mai més certa.
+- `AssertiveEvaluator` (`scoring/assertive.py`): bonus petit (`assertive` 0,15)
+  després de la preservació, l'epistemologia, la terminologia, la gramàtica i
+  la sintaxi, per reduir redundància, fer explícita la categoria o usar el
+  marcador que l'autor prefereix.
+- Perfil epistemològic de l'empremta (`style/epistemic_profile.py`,
+  `features.epistemic_profile`): només recomptes (densitat modal, doble
+  modalització, proporció d'afirmacions directes, marcadors per categoria i
+  formes preferides), amb confiança segons la mida de la mostra. Cap frase del
+  corpus no es desa.
+
+### Preservació epistemològica reforçada
+
+- Categories explícites (`validation/categories.py`): EVIDENCE, INFERENCE,
+  HYPOTHESIS, LIMITATION, UNKNOWN, declarades classe per classe a
+  `epistemologia.yaml`, amb classes noves (`hypothesis`, `inference`,
+  `pointer`, `documentation`, `attribution`) i marcadors explícits.
+- Matriu de transicions (`validation/transitions.py`): hipòtesi → evidència,
+  inferència → evidència, limitació → qualsevol cosa i afirmació → evidència
+  són sempre errors; hipòtesi → inferència, evidència → inferència i afegir una
+  modalització només amb una regla que ho declari; reduir una redundància només
+  amb una regla `reduces_epistemic_redundancy`. Pujar de força dins d'una mateixa
+  categoria («indica» → «demostra», «segons X» → «està demostrat») també és
+  error. El validador epistemològic aplica la matriu a cada transformació i al
+  candidat sencer; cap comparació improvisada dispersa pel codi.
+- `LengthRatioValidator` accepta un marge absolut de 30 caràcters: una frase
+  curta que es reformula («La documentació disponible no permet…») no queda
+  invalidada per la proporció.
+
+### Tests
+
+- `tests/test_cobertura_i_assertiu.py`: els deu tests dels cinc canvis
+  (alternativa inicial d'un connector medial, moviment d'un bloc subordinat
+  intern, parser dubtós bloqueja els blocs, balanç de cobertura només entre
+  oportunitats segures i mai forçat, fusió massa llarga penalitzada, fusió
+  compatible amb el ritme no penalitzada, recomptes d'oportunitats), els tests
+  A–F de l'opció assertiva, la matriu de transicions, el perfil epistemològic
+  sense frases, el text real de deu frases (profund, nivell 5, empremta
+  acadèmica, opció desactivada i activada, onze criteris) i la interfície
+  (casella, API, historial, exportació, terminal).
+
 ## 1.3.2
 
 Correcció d'arquitectura del mode profund al nivell 5, a partir d'un paràgraf

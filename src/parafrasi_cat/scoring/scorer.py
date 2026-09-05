@@ -51,10 +51,12 @@ from typing import Protocol, runtime_checkable
 from parafrasi_cat.candidates.candidate import Candidate
 from parafrasi_cat.core.transformation import Transformation, TransformationFamily
 from parafrasi_cat.preferences.evaluator import PreferenceEvaluator
+from parafrasi_cat.scoring.assertive import AssertiveEvaluator
 from parafrasi_cat.scoring.weights import ScoringWeights
 from parafrasi_cat.style.adaptation import AdaptationContext, AuthorAdaptation
 from parafrasi_cat.style.degradation import StructuralDegradation
 from parafrasi_cat.style.evaluator import StyleEvaluator
+from parafrasi_cat.style.fusion_rhythm import FusionRhythm
 from parafrasi_cat.validation.grammar import WARNING_PENALTY
 from parafrasi_cat.validation.result import ValidationDimension, ValidationResult
 
@@ -70,6 +72,8 @@ DIMENSIONS: tuple[str, ...] = (
     "grau_superficial",
     "grau_estructural",
     "qualitat_sintactica",
+    "ritme_fusio",
+    "assertivitat",
 )
 
 INVALID_TOTAL = -1.0
@@ -86,6 +90,8 @@ _DIMENSION_LABELS = {
     "grau_superficial": "canvi superficial",
     "grau_estructural": "reredacció estructural",
     "qualitat_sintactica": "qualitat sintàctica",
+    "ritme_fusio": "ritme de la fusió",
+    "assertivitat": "llenguatge assertiu",
 }
 
 
@@ -122,6 +128,8 @@ class ScoreBreakdown:
             mode d'esborrany).
         degradation_reasons: Per què el candidat degrada l'estructura local
             (buit si no la degrada).
+        assertive: Valoració del llenguatge assertiu (buit si l'opció no és activa).
+        rhythm: Valoració del ritme de les fusions (buit si no n'hi ha cap).
     """
 
     total: float
@@ -134,6 +142,8 @@ class ScoreBreakdown:
     author_explanation: str = ""
     author_affinity: dict[str, object] = field(default_factory=dict)
     degradation_reasons: tuple[str, ...] = ()
+    assertive: dict[str, object] = field(default_factory=dict)
+    rhythm: dict[str, object] = field(default_factory=dict)
 
     def dimension(self, name: str) -> float | None:
         return self.dimensions.get(name)
@@ -159,6 +169,8 @@ class ScoreBreakdown:
             "author_explanation": self.author_explanation,
             "author_affinity": dict(self.author_affinity),
             "degradation_reasons": list(self.degradation_reasons),
+            "assertive": dict(self.assertive),
+            "rhythm": dict(self.rhythm),
         }
 
 
@@ -189,12 +201,16 @@ class CompositeScorer:
         preference_evaluator: PreferenceEvaluator | None = None,
         adaptation: AuthorAdaptation | None = None,
         degradation: StructuralDegradation | None = None,
+        assertive: AssertiveEvaluator | None = None,
+        rhythm: FusionRhythm | None = None,
     ) -> None:
         self._weights = weights or ScoringWeights()
         self._style = style_evaluator
         self._preferences = preference_evaluator
         self._adaptation = adaptation
         self._degradation = degradation
+        self._assertive = assertive
+        self._rhythm = rhythm
 
     @property
     def weights(self) -> ScoringWeights:
@@ -217,6 +233,16 @@ class CompositeScorer:
     def degradation(self) -> StructuralDegradation | None:
         """Mesura de degradació estructural local (opcional)."""
         return self._degradation
+
+    @property
+    def assertive(self) -> AssertiveEvaluator | None:
+        """Avaluador del llenguatge assertiu (només amb l'opció activa)."""
+        return self._assertive
+
+    @property
+    def rhythm(self) -> FusionRhythm | None:
+        """Avaluador del ritme de les fusions (opcional)."""
+        return self._rhythm
 
     def transformation_gain(self, transformations: Sequence[Transformation]) -> float:
         """Guany per transformacions, conscient de la família.
@@ -334,15 +360,51 @@ class CompositeScorer:
                 )
                 dimensions["qualitat_sintactica"] = round(1.0 - degradation.score, 4)
 
+        assertive_bonus = 0.0
+        assertive_detail: dict[str, object] = {}
+        if self._assertive is not None and candidate.transformations:
+            # Llenguatge assertiu: més directe, mai més cert. Un bonus petit entre
+            # candidats ja validats; la matriu de transicions ha fet la feina abans.
+            assessment_a = self._assertive.assess(candidate.source_text, candidate.text)
+            assertive_bonus = w.assertive * assessment_a.delta * 2.0
+            assertive_detail = assessment_a.to_dict()
+            dimensions["assertivitat"] = assessment_a.score
+            if assessment_a.reasons:
+                components["assertivitat"] = round(assertive_bonus, 4)
+                reasons_a = "; ".join(assessment_a.reasons)
+                parts.append(f"llenguatge assertiu {assertive_bonus:+.3f} ({reasons_a})")
+
+        rhythm_penalty = 0.0
+        rhythm_detail: dict[str, object] = {}
+        rhythm_scale = 1.0
+        if self._rhythm is not None and candidate.transformations:
+            # Una fusió que deixa una frase massa llarga o carregada per al ritme de
+            # l'autor paga una penalització i perd part del bonus estructural.
+            assessment_r = self._rhythm.assess(candidate)
+            if assessment_r.details:
+                # Hi ha una fusió: la dimensió es reporta sempre (1,0 = cap càrrega).
+                dimensions["ritme_fusio"] = round(1.0 - assessment_r.penalty, 4)
+            if assessment_r.penalised:
+                rhythm_penalty = w.rhythm * assessment_r.penalty
+                rhythm_scale = 1.0 - assessment_r.penalty
+                rhythm_detail = assessment_r.to_dict()
+                components["ritme"] = round(-rhythm_penalty, 4)
+                parts.append(
+                    f"ritme de la fusió {-rhythm_penalty:+.3f} ({'; '.join(assessment_r.reasons)})"
+                )
+
         structure_bonus = 0.0
         if w.structure > 0 and degree > 0:
             # Entre candidats igualment segurs, la reredacció estructural real té
             # avantatge; escalat per la gramaticalitat, perquè un avís gramatical
-            # no quedi mai compensat pel grau de canvi, i per la qualitat sintàctica.
+            # no quedi mai compensat pel grau de canvi, i per la qualitat sintàctica
+            # i el ritme.
             grammar_score = dimensions.get("gramaticalitat")
             scale = grammar_score if isinstance(grammar_score, float) else 1.0
             quality = dimensions["qualitat_sintactica"]
-            structure_bonus = w.structure * degree * scale * (quality if quality else 0.0)
+            structure_bonus = (
+                w.structure * degree * scale * (quality if quality else 0.0) * rhythm_scale
+            )
             components["estructura"] = round(structure_bonus, 4)
             parts.append(f"reredacció estructural {structure_bonus:+.3f}")
 
@@ -352,9 +414,11 @@ class CompositeScorer:
             - style_penalty
             - grammar_penalty
             - degradation_penalty
+            - rhythm_penalty
             + preference_bonus
             + affinity_bonus
             + structure_bonus
+            + assertive_bonus
             if valid
             else INVALID_TOTAL
         )
@@ -371,6 +435,8 @@ class CompositeScorer:
             author_explanation=author_explanation,
             author_affinity=author_affinity,
             degradation_reasons=degradation_reasons,
+            assertive=assertive_detail,
+            rhythm=rhythm_detail,
         )
 
 

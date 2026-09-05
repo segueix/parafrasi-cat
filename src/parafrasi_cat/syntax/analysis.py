@@ -46,6 +46,26 @@ UNRESOLVED_DEPS = frozenset({"dep", ""})
 #: Relacions de còpula i d'auxiliar, per trobar el verb d'un predicat nominal.
 COPULA_DEPS = frozenset({"cop", "aux", "aux:pass"})
 
+#: Lemes de tercera persona que depenen d'un referent anterior: un bloc que els
+#: conté no pot passar al davant del que el precedia.
+ANAPHORIC_LEMMAS = frozenset(
+    {"seu", "seva", "seus", "seves", "ell", "ella", "ells", "elles", "aquest", "aquesta",
+     "aquests", "aquestes", "això", "aquell", "aquella", "aquells", "aquelles", "allò",
+     "mateix", "hi", "ho", "li", "els", "les", "en", "ne"}
+)  # fmt: skip
+
+
+@dataclass(frozen=True, slots=True)
+class BlockCheck:
+    """Resultat de comprovar si un bloc es pot moure sencer."""
+
+    head: SyntaxToken | None
+    reasons: tuple[str, ...] = ()
+
+    @property
+    def ok(self) -> bool:
+        return self.head is not None and not self.reasons
+
 
 @dataclass(frozen=True, slots=True)
 class SyntaxToken:
@@ -379,6 +399,55 @@ class SentenceSyntax:
         first, last = self.subtree_span(token)
         return first == start and last == end
 
+    def block_check(
+        self,
+        start: int,
+        end: int,
+        *,
+        to_front: bool = False,
+        clitic_spans: Sequence[object] = (),
+    ) -> BlockCheck:
+        """Pot moure's sencer el bloc de l'interval? Motius en català si no.
+
+        Comprova que sigui un subarbre tancat (dependències internes conservades,
+        cap d'externa tallada; la negació que hi ha dins hi té el nucli i s'hi
+        queda), que no contingui cap pronom feble segur (``clitic_spans``: els
+        intervals que l'analitzador de pronoms ha resolt) i, si el bloc passa
+        al davant del que el precedia (``to_front``), que no contingui cap
+        pronom, possessiu o demostratiu de tercera persona que perdria el
+        referent.
+        """
+        reasons: list[str] = []
+        head = self.closed_subtree(start, end)
+        if head is None:
+            reasons.append("no és un subarbre sintàctic tancat")
+        inside = [t for t in self.tokens_in(start, end) if t.pos != "PUNCT"]
+        for span in clitic_spans:
+            span_start = getattr(span, "start", None)
+            span_end = getattr(span, "end", None)
+            if (
+                isinstance(span_start, int)
+                and isinstance(span_end, int)
+                and span_start < end
+                and span_end > start
+            ):
+                reasons.append("conté un pronom feble")
+                break
+        if to_front:
+            anaphoric = [
+                t.text
+                for t in inside
+                if (t.pos in ("PRON", "DET") and t.lemma.lower() in ANAPHORIC_LEMMAS)
+                or (t.pos == "PRON" and t.pron_type in ("Prs", "Dem") and t.person in (None, "3"))
+            ]
+            if anaphoric:
+                reasons.append(
+                    "conté un pronom o possessiu que perdria el referent («"
+                    + "», «".join(anaphoric[:3])
+                    + "»)"
+                )
+        return BlockCheck(head, tuple(reasons))
+
     def closed_subtree(self, start: int, end: int) -> SyntaxToken | None:
         """Nucli del subarbre tancat que ocupa exactament l'interval, o ``None``.
 
@@ -564,6 +633,7 @@ def empty(text: str = "") -> SentenceSyntax:
 
 
 __all__ = [
+    "ANAPHORIC_LEMMAS",
     "CLAUSE_DEPS",
     "COPULA_DEPS",
     "DEFAULT_FIELDS",
@@ -573,6 +643,7 @@ __all__ = [
     "OBJECT_DEPS",
     "SUBJECT_DEPS",
     "TRUSTED",
+    "BlockCheck",
     "CachedSyntax",
     "NullSyntax",
     "SentenceSyntax",

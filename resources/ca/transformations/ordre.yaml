@@ -343,6 +343,42 @@ rules:
         - "Encara que el vegi, no el saluda."
         - "Si el text és antic, la regla no funciona."
 
+  # --- «però» interposat → connector adversatiu inicial ----------------------------------------
+  # «La hipòtesi no depèn, però, d'una sola coincidència» → «Tanmateix, la hipòtesi no
+  # depèn d'una sola coincidència»: la mateixa relació adversativa, expressada amb un
+  # connector discursiu al davant. Reordenació lleu (structural_weight 0.4).
+  - rule_id: ordre.pero_medial_a_inicial
+    engine: pattern
+    category: ordre
+    structural_weight: 0.4
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.7
+    description: "«S V, però, X» → «Tanmateix, S V X» («però» interposat convertit en connector adversatiu inicial)"
+    pattern:
+      - {start: true}
+      - {seq: true, group: head, no_comma: true, min_tokens: 2}
+      - {text: ","}
+      - {text: però}
+      - {text: ","}
+      - {seq: true, group: rest, greedy: true, min_tokens: 2}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        head: {has_finite_verb: true, not_starts_with: [tanmateix, no obstant això, amb tot, però]}
+        rest: {not_starts_with: [i, o, ni, que, ","]}
+    transformations:
+      - "Tanmateix, {head|lower} {rest}"
+      - "No obstant això, {head|lower} {rest}"
+    examples:
+      positive:
+        - input: "La hipòtesi no depèn, però, d'una sola coincidència, sinó de l'acumulació de diversos elements."
+          output: "Tanmateix, la hipòtesi no depèn d'una sola coincidència, sinó de l'acumulació de diversos elements."
+      negative:
+        - "La hipòtesi, però, no és nova."
+        - "Tanmateix, la hipòtesi no depèn d'una sola coincidència."
+
   # --- Connectors discursius: posició inicial ↔ posició medial ---------------------------
   # Moure un connector és una reordenació lleu (structural_weight 0.4): no
   # reorganitza cap clàusula.

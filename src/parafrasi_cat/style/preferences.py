@@ -59,6 +59,32 @@ class StylePreferences:
             and confidence >= self._min_confidence
         )
 
+    # -- perfil epistemològic ---------------------------------------------------------------
+
+    @property
+    def epistemic_profile(self) -> Mapping[str, object] | None:
+        """Perfil epistemològic de l'empremta, si hi és i té prou mostra (``None`` si no)."""
+        node = self._fingerprint.get("epistemic_profile")
+        if not isinstance(node, Mapping) or node.get("available") is not True:
+            return None
+        if node.get("confidence") == "low":
+            return None
+        return node
+
+    def preferred_epistemic_marker(self, category: str) -> str | None:
+        """Marcador que l'autor fa servir més per a una categoria (``None`` sense dades)."""
+        profile = self.epistemic_profile
+        if profile is None:
+            return None
+        categories = profile.get("categories")
+        if not isinstance(categories, Mapping):
+            return None
+        node = categories.get(category)
+        if not isinstance(node, Mapping):
+            return None
+        preferred = node.get("preferred")
+        return str(preferred) if preferred else None
+
     # -- longitud -------------------------------------------------------------------------
 
     @property

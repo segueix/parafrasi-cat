@@ -124,6 +124,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--assertiu",
+        action="store_true",
+        help=(
+            "llenguatge assertiu: formulació epistemològica més directa (menys doble "
+            "modalització; hipòtesi, inferència i limitació explícites) sense canviar-ne la força"
+        ),
+    )
+    parser.add_argument(
         "--max-risk", choices=[r.value for r in SemanticRisk], help="risc semàntic màxim acceptat"
     )
     parser.add_argument(
@@ -165,6 +173,8 @@ def load_config(args: argparse.Namespace) -> PipelineConfig:
         overrides["preferences"] = args.preferences
     if args.source_mode:
         overrides["source_mode"] = SourceMode.parse(args.source_mode)
+    if getattr(args, "assertiu", False):
+        overrides["assertive_language"] = True
     if args.max_risk:
         overrides["max_semantic_risk"] = SemanticRisk.parse(args.max_risk)
     if args.min_confidence is not None:

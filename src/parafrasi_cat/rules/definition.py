@@ -49,7 +49,7 @@ _KNOWN_KEYS = frozenset(
         "rule_id", "id", "engine", "language", "category", "level", "description",
         "transformation_type", "semantic_risk", "confidence", "pattern", "transformation",
         "transformations", "conditions", "exceptions", "examples", "enabled",
-        "allows_epistemic_change",
+        "allows_epistemic_change", "reduces_epistemic_redundancy", "option",
     }
 )  # fmt: skip
 
@@ -88,6 +88,10 @@ class RuleDefinition:
     enabled: bool = True
     source: str = ""
     allows_epistemic_change: bool = False
+    reduces_epistemic_redundancy: bool = False
+    """Cert si la regla només elimina marcadors epistemològics redundants (mateixa força)."""
+    option: str = ""
+    """Opció de configuració que activa la regla (buit = sempre activa)."""
     """Cert si la regla està autoritzada a canviar la força o la funció epistemològica."""
 
     def __post_init__(self) -> None:
@@ -161,6 +165,8 @@ class RuleDefinition:
             enabled=as_bool(data, "enabled", True),
             source=source,
             allows_epistemic_change=as_bool(data, "allows_epistemic_change", False),
+            reduces_epistemic_redundancy=as_bool(data, "reduces_epistemic_redundancy", False),
+            option=as_str(data, "option", "").strip(),
         )
 
 

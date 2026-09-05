@@ -180,7 +180,8 @@
         },
         "variant_preferences": {"type": "object", "additionalProperties": {"$ref": "#/$defs/variant_group"}},
         "rhythm_profile": {"type": "object", "description": "Ritme de frases (esquema 1.1): longitud, franges, transicions, trigrames, ratxes, alternança i paràgrafs. Només nombres."},
-        "syntactic_profile": {"type": "object", "description": "Perfil sintàctic (esquema 1.1) calculat amb el parser local, o {available: false, reason} si no hi era.", "required": ["available"], "properties": {"available": {"type": "boolean"}}}
+        "syntactic_profile": {"type": "object", "description": "Perfil sintàctic (esquema 1.1) calculat amb el parser local, o {available: false, reason} si no hi era.", "required": ["available"], "properties": {"available": {"type": "boolean"}}},
+        "epistemic_profile": {"type": "object", "description": "Perfil epistemològic (esquema 1.1): marcadors d'evidència, inferència, hipòtesi i limitació per cent frases, marcador preferit per categoria, doble modalització i formulació directa; o {available: false, reason}. Només recomptes.", "required": ["available"], "properties": {"available": {"type": "boolean"}}}
       }
     },
     "validation": {

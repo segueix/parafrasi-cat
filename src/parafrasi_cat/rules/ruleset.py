@@ -124,6 +124,24 @@ class RuleSet:
         """Regles autoritzades explícitament a canviar la força epistemològica."""
         return tuple(d.rule_id for d in self.definitions if d.allows_epistemic_change)
 
+    @property
+    def redundancy_rule_ids(self) -> tuple[str, ...]:
+        """Regles que només redueixen redundàncies epistemològiques (mateixa força)."""
+        return tuple(d.rule_id for d in self.definitions if d.reduces_epistemic_redundancy)
+
+    def for_options(self, options: Iterable[str]) -> RuleSet:
+        """Conjunt sense les regles lligades a una opció que no és activa.
+
+        Una regla amb ``option: llenguatge_assertiu`` només forma part del
+        conjunt quan la configuració activa aquesta opció; la resta no canvia.
+        """
+        active = frozenset(options)
+        optional = {d.rule_id: d.option for d in self.definitions if d.option}
+        rules = tuple(r for r in self.rules if optional.get(r.rule_id, "") in ("", *active))
+        kept = {rule.rule_id for rule in rules}
+        definitions = tuple(d for d in self.definitions if d.rule_id in kept)
+        return RuleSet(self.config, rules, definitions)
+
     def up_to_level(self, level: int | None) -> RuleSet:
         """Conjunt restringit a les regles de nivell ≤ ``level`` (``None`` = totes)."""
         if level is None:

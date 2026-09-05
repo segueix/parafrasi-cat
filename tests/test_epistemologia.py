@@ -149,8 +149,12 @@ def test_validator_accepts_neutral_rewrites(lexicon: EpistemicLexicon) -> None:
 
 
 def test_explicit_rule_authorizes_the_change(lexicon: EpistemicLexicon) -> None:
+    # Des de la 1.3.3 una regla autoritzada només pot fer les transicions que la
+    # matriu marca com a «rule_only» (aquí: canviar la classe dins de la hipòtesi,
+    # «sembla que» → «potser»); eliminar el marcador i deixar una afirmació és una
+    # transició prohibida que cap regla no pot autoritzar.
     source = "Sembla que plou."
-    candidate = rewrite(source, "Sembla que plou", "Plou", rule_id="epist.autoritzada")
+    candidate = rewrite(source, "Sembla que plou", "Potser plou", rule_id="epist.autoritzada")
     blocked = EpistemicValidator(lexicon).validate(candidate, ValidationContext(source))
     assert not blocked.ok
     allowed = EpistemicValidator(lexicon, ["epist.autoritzada"])
@@ -158,9 +162,12 @@ def test_explicit_rule_authorizes_the_change(lexicon: EpistemicLexicon) -> None:
     assert result.ok
     assert result.warnings and "autoritzat" in result.warnings[0].message
     assert allowed.authorized_rules == frozenset({"epist.autoritzada"})
+    dropped = rewrite(source, "Sembla que plou", "Plou", rule_id="epist.autoritzada")
+    forbidden = allowed.validate(dropped, ValidationContext(source))
+    assert not forbidden.ok and "cap regla no pot autoritzar" in forbidden.errors[0].message
     # Una regla encadenada no autoritzada bloqueja el canvi.
     chained = rewrite(
-        source, "Sembla que plou", "Plou", rule_id="epist.autoritzada", chained="lexical.x"
+        source, "Sembla que plou", "Potser plou", rule_id="epist.autoritzada", chained="lexical.x"
     )
     assert rule_ids_of(chained.transformations[0]) == ("epist.autoritzada", "lexical.x")
     assert not allowed.validate(chained, ValidationContext(source)).ok

@@ -79,12 +79,21 @@ def test_hedge_validator(modality: dict[str, tuple[str, ...]]) -> None:
 
 
 def test_length_ratio_validator() -> None:
-    v = LengthRatioValidator(0.5, 2.0)
+    # Des de la 1.3.3 la proporció mana en frases llargues i, en frases curtes,
+    # s'admet una diferència absoluta petita (slack_chars, 30 per defecte): els
+    # invariants de contingut ja vigilen el que s'afegeix o es perd. Amb
+    # slack_chars=0 es recupera la proporció estricta.
+    v = LengthRatioValidator(0.5, 2.0, slack_chars=0)
     ctx = ValidationContext("Una frase de prova.")
     assert v.validate(candidate(ctx.source_text, "Una frase de prova!"), ctx).ok
     assert not v.validate(candidate(ctx.source_text, "Una."), ctx).ok
     assert not v.validate(candidate(ctx.source_text, "Una frase de prova " * 4), ctx).ok
     assert v.validate(candidate("", "qualsevol"), ValidationContext("")).ok
+    lenient = LengthRatioValidator(0.8, 1.25)
+    short = ValidationContext("No es pot demostrar que fossin coetanis.")
+    added = "La documentació disponible no permet demostrar que fossin coetanis."
+    assert lenient.validate(candidate(short.source_text, added), short).ok
+    assert not lenient.validate(candidate(short.source_text, added + " " * 0 + "I " * 20), short).ok
     with pytest.raises(ConfigError):
         LengthRatioValidator(1.5, 2.0)
 

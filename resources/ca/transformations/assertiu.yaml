@@ -1,0 +1,294 @@
+# Família 15: llenguatge assertiu (opció «assertive_language»).
+# Reformulacions epistemològiques més directes que conserven la força expressada
+# pel text: redueixen la doble modalització, fan explícita la hipòtesi, la
+# limitació documental i l'atribució a una font. Cap regla no pot pujar per
+# l'escala de certesa: la matriu de transicions (validation/transitions.py) ho
+# prohibeix a totes, autoritzades o no.
+description: "Llenguatge assertiu: formulacions epistemològiques més directes sense canviar-ne la força."
+language: ca
+rules:
+  # --- doble modalització: es conserva el marcador més feble ---------------------------
+  - rule_id: assertiu.sembla_que_podria
+    engine: pattern
+    category: assertiu
+    option: assertive_language
+    reduces_epistemic_redundancy: true
+    level: 2
+    transformation_type: lexical
+    semantic_risk: low
+    confidence: 0.8
+    description: "«sembla que podria» → «podria» (aparença damunt d'una possibilitat: es conserva la possibilitat)"
+    pattern:
+      - {text: sembla}
+      - {text: que}
+      - {text: [podria, podrien, podríem], group: v}
+    transformation: "{v|sentcase}"
+    examples:
+      positive:
+        - input: "Sembla que podria ser una còpia posterior."
+          output: "Podria ser una còpia posterior."
+        - input: "Això és antic i sembla que podria ser una còpia."
+          output: "Això és antic i podria ser una còpia."
+      negative:
+        - "Sembla que és una còpia posterior."
+        - "Podria ser una còpia posterior."
+
+  - rule_id: assertiu.potser_podria
+    engine: pattern
+    category: assertiu
+    option: assertive_language
+    reduces_epistemic_redundancy: true
+    level: 2
+    transformation_type: lexical
+    semantic_risk: low
+    confidence: 0.8
+    description: "«potser podria» → «podria» (dubte damunt d'una possibilitat: un sol marcador)"
+    pattern:
+      - {text: [potser, possiblement, tal vegada]}
+      - {text: [podria, podrien, podríem], group: v}
+    transformation: "{v|sentcase}"
+    examples:
+      positive:
+        - input: "Potser podria ser una còpia posterior."
+          output: "Podria ser una còpia posterior."
+      negative:
+        - "Potser plou."
+        - "Podria ploure."
+        - "Potser això podria indicar que és antic."
+
+  - rule_id: assertiu.podria_potser
+    engine: pattern
+    category: assertiu
+    option: assertive_language
+    reduces_epistemic_redundancy: true
+    level: 2
+    transformation_type: lexical
+    semantic_risk: low
+    confidence: 0.8
+    description: "«podria potser» → «podria»"
+    pattern:
+      - {text: [podria, podrien, podríem], group: v}
+      - {text: [potser, possiblement, tal vegada]}
+    transformation: "{v}"
+    examples:
+      positive:
+        - input: "Això podria potser indicar una relació."
+          output: "Això podria indicar una relació."
+      negative:
+        - "Això podria indicar una relació."
+
+  - rule_id: assertiu.potser_subjecte_podria
+    engine: pattern
+    category: assertiu
+    option: assertive_language
+    reduces_epistemic_redundancy: true
+    level: 2
+    transformation_type: lexical
+    semantic_risk: low
+    confidence: 0.8
+    description: "«Potser S podria» → «S podria» (el dubte inicial repeteix la possibilitat del verb)"
+    pattern:
+      - {start: true}
+      - {text: [potser, possiblement, tal vegada]}
+      - {seq: true, group: subj, min_tokens: 1, max_tokens: 5, no_punct: true}
+      - {text: [podria, podrien], group: v}
+    conditions:
+      groups:
+        subj: {no_finite_verb: true, not_starts_with: [que, si, "no", i, o]}
+    transformation: "{subj|cap} {v}"
+    examples:
+      positive:
+        - input: "Potser això podria indicar que és antic."
+          output: "Això podria indicar que és antic."
+      negative:
+        - "Potser això indica que és antic."
+
+  - rule_id: assertiu.sembla_que_potser
+    engine: pattern
+    category: assertiu
+    option: assertive_language
+    reduces_epistemic_redundancy: true
+    level: 2
+    transformation_type: lexical
+    semantic_risk: low
+    confidence: 0.8
+    description: "«sembla que potser» → «potser»"
+    pattern:
+      - {text: sembla}
+      - {text: que}
+      - {text: [potser, possiblement], group: v}
+    transformation: "{v|sentcase}"
+    examples:
+      positive:
+        - input: "Sembla que potser plourà."
+          output: "Potser plourà."
+      negative:
+        - "Sembla que plourà."
+
+  - rule_id: assertiu.podria_ser_possible
+    engine: pattern
+    category: assertiu
+    option: assertive_language
+    level: 2
+    transformation_type: lexical
+    semantic_risk: low
+    confidence: 0.8
+    description: "«podria ser possible que» → «podria ser que» (la possibilitat ja és al verb modal)"
+    pattern:
+      - {text: [podria, podrien], group: v}
+      - {text: ser}
+      - {text: possible}
+      - {text: que}
+    transformation: "{v} ser que"
+    examples:
+      positive:
+        - input: "Podria ser possible que plogués."
+          output: "Podria ser que plogués."
+      negative:
+        - "És possible que plogui."
+
+  # --- hipòtesi explícita ---------------------------------------------------------------
+  - rule_id: assertiu.hipotesi_explicita
+    engine: pattern
+    category: assertiu
+    option: assertive_language
+    allows_epistemic_change: true
+    level: 2
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.8
+    description: "«podria interpretar-se com DET N» → «permet plantejar la hipòtesi de DET N» (la hipòtesi queda explícita, amb la mateixa força)"
+    pattern:
+      - {text: podria}
+      - {text: [interpretar, entendre, considerar, llegir], group: v}
+      - {text: ["-se", "'s", "’s"]}
+      - {text: com}
+      - {text: [una, un, el, la, els, les, aquest, aquesta], group: det}
+    transformation: "permet plantejar la hipòtesi {det|de}"
+    examples:
+      positive:
+        - input: "Aquest enfocament podria interpretar-se com una estratègia calculada."
+          output: "Aquest enfocament permet plantejar la hipòtesi d'una estratègia calculada."
+        - input: "El text podria interpretar-se com el resultat d'una reelaboració."
+          output: "El text permet plantejar la hipòtesi del resultat d'una reelaboració."
+      negative:
+        - "Aquest enfocament és una estratègia calculada."
+        - "Aquest enfocament pot interpretar-se com una estratègia."
+
+  # --- evidència directa: la font en posició de subjecte ---------------------------------
+  - rule_id: assertiu.com_detalla_font
+    engine: pattern
+    category: assertiu
+    option: assertive_language
+    level: 2
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.8
+    description: "«Com detalla X, Y» → «X detalla que Y» (mateix verb d'atribució: ni més ni menys força)"
+    pattern:
+      - {start: true}
+      - {text: [com, tal]}
+      - {text: com, optional: true}
+      - {text: [detalla, assenyala, explica, recorda, observa, destaca], group: v}
+      - {np: true, group: src}
+      - {text: ","}
+      - {seq: true, group: rest, greedy: true, min_tokens: 3}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        src: {starts_with: ["@capitalized"], no_finite_verb: true, max_tokens: 6, no_comma: true}
+        rest: {has_finite_verb: true, not_starts_with: [i, o, ni, però, que]}
+    transformation: "{src} {v} que {rest|lower}"
+    examples:
+      positive:
+        - input: "Com detalla Rafael Ramis Barceló, el lul·lisme va gaudir d'una notable protecció."
+          output: "Rafael Ramis Barceló detalla que el lul·lisme va gaudir d'una notable protecció."
+        - input: "Tal com assenyala Coromines, el mot és antic."
+          output: "Coromines assenyala que el mot és antic."
+      negative:
+        - "Com que plou, no sortirem."
+        - "Com detalla el document, el text és antic."
+
+  # --- limitació explícita: què no permet establir la documentació -------------------------
+  - rule_id: assertiu.limitacio_documental_inicial
+    engine: pattern
+    category: assertiu
+    option: assertive_language
+    level: 2
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.8
+    description: "«No es pot demostrar que» → «La documentació disponible no permet demostrar que» (només si el text parla de documentació)"
+    pattern:
+      - {start: true}
+      - {text: "no"}
+      - {text: es}
+      - {text: pot}
+      - {text: [demostrar, establir, determinar, confirmar, provar, afirmar], group: v}
+      - {text: que}
+    conditions:
+      sentence:
+        document_contains_any: &context_documental
+          [documentació, document, documents, fonts, font, testimonis, testimoni, arxiu, arxius,
+           registre, registres, inventari, inventaris, cartes, còdex, manuscrit, manuscrits]
+    transformation: "La documentació disponible no permet {v} que"
+    examples:
+      positive:
+        - input: "No es pot demostrar que els documents fossin contemporanis."
+          output: "La documentació disponible no permet demostrar que els documents fossin contemporanis."
+      negative:
+        - "No es pot demostrar que fossin contemporanis."
+        - "Es pot demostrar que els documents són antics."
+
+  - rule_id: assertiu.limitacio_documental
+    engine: pattern
+    category: assertiu
+    option: assertive_language
+    level: 2
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.8
+    description: "«..., no es pot demostrar que» → «..., la documentació disponible no permet demostrar que» (dins de la frase)"
+    pattern:
+      - {text: "no"}
+      - {text: es}
+      - {text: pot}
+      - {text: [demostrar, establir, determinar, confirmar, provar, afirmar], group: v}
+      - {text: que}
+    conditions:
+      context:
+        preceded_by: ["@word", ","]
+      sentence:
+        document_contains_any: *context_documental
+    transformation: "la documentació disponible no permet {v} que"
+    examples:
+      positive:
+        - input: "En aquest sentit, no es pot demostrar que els documents fossin contemporanis."
+          output: "En aquest sentit, la documentació disponible no permet demostrar que els documents fossin contemporanis."
+      negative:
+        - "En aquest sentit, no es pot demostrar que fossin contemporanis."
+
+  # --- plantejament directe ----------------------------------------------------------------
+  - rule_id: assertiu.plantejament_directe
+    engine: pattern
+    category: assertiu
+    option: assertive_language
+    level: 2
+    transformation_type: lexical
+    semantic_risk: low
+    confidence: 0.8
+    description: "«fa pensar que» / «convida a pensar que» → «permet plantejar que» (mateixa classe: plantejament)"
+    pattern:
+      - {text: [fa, convida], group: a}
+      - {text: a, optional: true}
+      - {text: pensar}
+      - {text: que}
+    transformation: "permet plantejar que"
+    examples:
+      positive:
+        - input: "La coincidència fa pensar que hi ha una relació."
+          output: "La coincidència permet plantejar que hi ha una relació."
+        - input: "Això convida a pensar que hi ha una relació."
+          output: "Això permet plantejar que hi ha una relació."
+      negative:
+        - "Això permet plantejar que hi ha una relació."

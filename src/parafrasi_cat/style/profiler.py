@@ -15,6 +15,7 @@ from pathlib import Path
 from parafrasi_cat.analyzer.analysis import Analyzer
 from parafrasi_cat.core.errors import ResourceError
 from parafrasi_cat.style.corpus import Corpus, CorpusDocument
+from parafrasi_cat.style.epistemic_profile import epistemic_profile
 from parafrasi_cat.style.fingerprint import SCHEMA_VERSION, FeatureStat, StyleFingerprint
 from parafrasi_cat.style.observations import (
     DocumentObservations,
@@ -38,6 +39,7 @@ from parafrasi_cat.style.statistics import (
 )
 from parafrasi_cat.style.syntax_profile import syntactic_profile, unavailable_profile
 from parafrasi_cat.syntax.analysis import SyntaxProvider
+from parafrasi_cat.validation.epistemic import EPISTEMOLOGY_FILE, EpistemicLexicon
 
 #: Proporció mínima i observacions mínimes per declarar una variant «preferida».
 PREFERRED_MIN_SHARE = 0.6
@@ -92,11 +94,14 @@ def build_fingerprint(
     description: str = "",
     language: str = "ca",
     syntax: SyntaxProvider | None = None,
+    epistemic: EpistemicLexicon | None = None,
 ) -> StyleFingerprint:
     """Construeix l'empremta del corpus principal i, si n'hi ha, valida amb el de validació.
 
     Amb ``syntax`` (el parser local, que només analitza) l'empremta inclou el
-    perfil sintàctic; sense, la secció queda marcada com a no disponible.
+    perfil sintàctic; sense, la secció queda marcada com a no disponible. El
+    perfil epistemològic es calcula amb el lexicó epistemològic (``epistemic``,
+    o el de la llengua dels recursos) i només conserva recomptes.
     """
     main_documents = corpus.main
     if not main_documents:
@@ -104,6 +109,8 @@ def build_fingerprint(
     parser = syntax if syntax is not None and syntax.available else None
     main = observe_corpus(main_documents, resources, analyzer, parser)
     features = aggregate(main, resources.settings, resources.variant_groups, parser=parser)
+    lexicon = epistemic if epistemic is not None else _epistemic_lexicon(resources)
+    features["epistemic_profile"] = _epistemic_feature(main_documents, analyzer, lexicon)
     fingerprint = StyleFingerprint(
         name=name,
         description=description,
@@ -118,13 +125,19 @@ def build_fingerprint(
     if not validation_documents:
         return fingerprint
     validation = observe_corpus(validation_documents, resources, analyzer, parser)
+    validation_features = aggregate(
+        validation, resources.settings, resources.variant_groups, parser=parser
+    )
+    validation_features["epistemic_profile"] = _epistemic_feature(
+        validation_documents, analyzer, lexicon
+    )
     validation_fingerprint = StyleFingerprint(
         name=f"{name} (validació)",
         description="",
         language=language,
         generator=_generator(validation_documents, parser),
         corpus=_corpus_summary(validation_documents, validation, None),
-        features=aggregate(validation, resources.settings, resources.variant_groups, parser=parser),
+        features=validation_features,
     )
     from parafrasi_cat.style.compare import compare_fingerprints
 
@@ -156,6 +169,22 @@ def build_fingerprint(
         validation=validation_section,
         schema_version=SCHEMA_VERSION,
     )
+
+
+def _epistemic_lexicon(resources: StyleResources) -> EpistemicLexicon | None:
+    """Lexicó epistemològic de la llengua dels recursos, si hi és."""
+    if resources.language_dir is None:
+        return None
+    file = resources.language_dir / EPISTEMOLOGY_FILE
+    return EpistemicLexicon.load(file) if file.is_file() else None
+
+
+def _epistemic_feature(
+    documents: Sequence[CorpusDocument], analyzer: Analyzer, lexicon: EpistemicLexicon | None
+) -> dict[str, object]:
+    if lexicon is None:
+        return {"available": False, "reason": "sense lexicó epistemològic"}
+    return epistemic_profile((doc.text for doc in documents), analyzer, lexicon)
 
 
 def _generator(

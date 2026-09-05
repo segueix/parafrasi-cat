@@ -32,10 +32,12 @@ from parafrasi_cat.resources import (
 from parafrasi_cat.rules.dictionary import DictionaryPreferenceRule
 from parafrasi_cat.rules.registry import RuleRegistry, default_registry
 from parafrasi_cat.rules.ruleset import RuleSet, RuleSetConfig, build_rule_set
+from parafrasi_cat.scoring.assertive import AssertiveEvaluator
 from parafrasi_cat.scoring.scorer import CompositeScorer
 from parafrasi_cat.style.adaptation import AuthorAdaptation
 from parafrasi_cat.style.degradation import StructuralDegradation
 from parafrasi_cat.style.evaluator import StyleEvaluator
+from parafrasi_cat.style.fusion_rhythm import FusionRhythm
 from parafrasi_cat.style.observations import StyleResources
 from parafrasi_cat.style.profile import load_style_profile
 from parafrasi_cat.syntax.analysis import CachedSyntax, NullSyntax, SyntaxProvider
@@ -59,6 +61,8 @@ from parafrasi_cat.validation.invariants import (
 from parafrasi_cat.validation.verbal import VerbalTransformationValidator
 
 PROTECTED_TERMS_FILE = "dictionaries/termes_protegits.txt"
+#: Nom de l'opció que activa les regles de llenguatge assertiu («option:» a la regla).
+ASSERTIVE_OPTION = "assertive_language"
 KNOWN_NAMES_FILE = "dictionaries/noms_propis.txt"
 
 
@@ -100,8 +104,11 @@ def build_pipeline(
     )
 
     rule_config = RuleSetConfig.load(paths.resolve_rule_set(config.rule_set))
-    rule_set = build_rule_set(rule_config, registry or default_registry(), paths).up_to_level(
-        config.level
+    options = frozenset({ASSERTIVE_OPTION}) if config.assertive_language else frozenset()
+    rule_set = (
+        build_rule_set(rule_config, registry or default_registry(), paths)
+        .for_options(options)
+        .up_to_level(config.level)
     )
     if dictionaries.substitutions and DictionaryPreferenceRule.DEFAULT_ID not in rule_set.rule_ids:
         # Nivell 3: les formes a evitar dels diccionaris generen propostes de substitució.
@@ -180,8 +187,17 @@ def build_pipeline(
     # mesura sempre, comparant cada candidat amb el text que substitueix; amb
     # empremta, la penalització es rebaixa si l'autor mateix encadena subordinades.
     degradation = StructuralDegradation(analyzer, syntax, style_profile.preferences)
+    assertive = None
+    epistemology = lang / EPISTEMOLOGY_FILE
+    if config.assertive_language and epistemology.is_file():
+        # «Llenguatge assertiu»: un bonus petit per la formulació més directa i
+        # explícita, amb el marcador que l'autor prefereix si l'empremta ho diu.
+        assertive = AssertiveEvaluator(
+            EpistemicLexicon.load(epistemology), style_profile.preferences
+        )
+    rhythm = FusionRhythm(analyzer, syntax, style_profile.preferences, style_profile)
     scorer = CompositeScorer(
-        weights, style_evaluator, preference_evaluator, adaptation, degradation
+        weights, style_evaluator, preference_evaluator, adaptation, degradation, assertive, rhythm
     )
 
     return Pipeline(
@@ -210,6 +226,7 @@ def build_pipeline(
         source_mode=config.source_mode.value,
         paragraph_beam_width=config.paragraph_beam_width,
         sentence_candidates_for_paragraph=config.sentence_candidates_for_paragraph,
+        assertive_language=config.assertive_language,
     )
 
 
@@ -250,13 +267,17 @@ def build_validators(
         HedgeValidator(
             as_str_list(modality, "hedges"),
             as_str_list(modality, "certainty"),
-            rule_set.epistemic_rule_ids,
+            (*rule_set.epistemic_rule_ids, *rule_set.redundancy_rule_ids),
         )
     )
     epistemology = lang / EPISTEMOLOGY_FILE
     if epistemology.is_file():
         validators.append(
-            EpistemicValidator(EpistemicLexicon.load(epistemology), rule_set.epistemic_rule_ids)
+            EpistemicValidator(
+                EpistemicLexicon.load(epistemology),
+                rule_set.epistemic_rule_ids,
+                rule_set.redundancy_rule_ids,
+            )
         )
     validators.append(GrammarHeuristicValidator())
     if morphology is not None:

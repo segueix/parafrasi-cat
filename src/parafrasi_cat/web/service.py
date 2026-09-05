@@ -50,6 +50,12 @@ from parafrasi_cat.syntax.spacy_parser import SpacySyntax
 from parafrasi_cat.web.history import DEFAULT_HISTORY_FILE, HistoryLog
 
 DEFAULT_RULE_SET = "parafrasi"
+#: Text d'ajuda de l'opció «Llenguatge assertiu» (el mateix a la interfície).
+ASSERTIVE_HELP = (
+    "Fa més directa la redacció quan el text aporta evidències i explicita quan una "
+    "afirmació és una inferència o una hipòtesi. No converteix inferències en fets ni "
+    "augmenta la certesa del text."
+)
 #: Components opcionals que la interfície pot instal·lar, amb el seu script.
 #: Els scripts són fora del paquet: són l'única part que accedeix a Internet.
 INSTALLERS: dict[str, str] = {
@@ -131,6 +137,8 @@ class RewriteRequest:
     languagetool: bool = False
     source_mode: SourceMode = SourceMode.OWN
     """Origen del text segons l'usuari. Per defecte, text propi: res no canvia."""
+    assertive_language: bool = False
+    """«Llenguatge assertiu»: formulació epistemològica més directa, mai més certa."""
 
     def __post_init__(self) -> None:
         if not self.text.strip():
@@ -162,6 +170,7 @@ class RewriteRequest:
             rule_set=str(data.get("rule_set") or DEFAULT_RULE_SET),
             languagetool=bool(data.get("languagetool", False)),
             source_mode=SourceMode.parse(str(data.get("source_mode") or SourceMode.OWN.value)),
+            assertive_language=_as_flag(data.get("assertive_language")),
         )
 
     def to_config(self, home: Path | None = None) -> PipelineConfig:
@@ -174,6 +183,7 @@ class RewriteRequest:
             preferences=self.preferences or None,
             languagetool=self.languagetool,
             source_mode=self.source_mode,
+            assertive_language=self.assertive_language,
         )
         return mode_settings(self.mode).apply(base, self.level)
 
@@ -207,6 +217,15 @@ class FeedbackRequest:
             preferences=str(data.get("preferences") or ""),
             source_mode=SourceMode.parse(str(data.get("source_mode") or SourceMode.OWN.value)),
         )
+
+
+def _as_flag(value: object) -> bool:
+    """Booleà d'un valor JSON o de formulari («true», «1», «on» compten com a cert)."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "on", "yes", "sí", "si")
+    return bool(value)
 
 
 def _as_names(value: object) -> tuple[str, ...]:
@@ -434,6 +453,11 @@ class RewriteService:
             "preferences": result.preferences_name,
             "preferences_id": request.preferences,
             "mode": settings.to_dict(),
+            "assertive_language": {
+                "active": request.assertive_language,
+                "label": "actiu" if request.assertive_language else "inactiu",
+                "description": ASSERTIVE_HELP,
+            },
             "languagetool": self._languagetool_used(config),
             "level": effective,
             "requested_level": requested,
@@ -504,6 +528,9 @@ class RewriteService:
             "source_text": source,
             "output_text": unit.selected.candidate.text,
             "changed": unit.selected.candidate.text != source,
+            "opportunities": (
+                unit.opportunities.to_dict() if hasattr(unit, "opportunities") else {}
+            ),
             "candidates": [
                 self._candidate(f"{unit_id}-{n}", evaluated, source)
                 for n, evaluated in enumerate(unit.candidates)

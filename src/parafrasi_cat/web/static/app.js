@@ -495,6 +495,7 @@ async function generar(esdeveniment) {
         preferences: $("preferencies").value,
         languagetool: $("languagetool").checked,
         source_mode: origenTriat(),
+        assertive_language: $("assertiu").checked,
       }),
     });
     estat.resultat = resultat;
@@ -518,6 +519,9 @@ function mostrarResultat(resultat) {
   $("resum-nivell").textContent = resultat.level_capped
     ? `${resultat.level_label} (retallat des de ${resultat.requested_level})`
     : resultat.level_label;
+  $("resum-assertiu").textContent = resultat.assertive_language
+    ? resultat.assertive_language.label
+    : "inactiu";
   $("resum-estil").textContent = resultat.style_profile || "cap";
   $("resum-diccionaris").textContent = resultat.dictionaries.join(", ") || "cap";
   $("resum-preferencies").textContent = resultat.preferences || "cap";
@@ -763,6 +767,9 @@ async function desarAlRegistre() {
           dictionaries: resultat.dictionaries,
           preferences: resultat.preferences_id,
           source_mode: resultat.source_mode.id,
+          assertive_language: Boolean(
+            resultat.assertive_language && resultat.assertive_language.active
+          ),
         },
         result: {
           output_text: resultat.output_text,

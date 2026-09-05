@@ -74,6 +74,8 @@ class TransformationFamily(StrEnum):
     CLAUSE_SPLIT = "CLAUSE_SPLIT"
     CLAUSE_MERGE = "CLAUSE_MERGE"
     COPULAR_MERGE = "COPULAR_MERGE"
+    EPISTEMIC = "EPISTEMIC"
+    """Reformulació d'un marcador epistemològic sense canviar-ne la força (llenguatge assertiu)."""
     REPAIR = "REPAIR"
 
     @property
@@ -154,6 +156,7 @@ _SURFACE_WEIGHTS: dict[TransformationFamily, float] = {
     TransformationFamily.CONNECTOR: 0.35,
     TransformationFamily.PUNCTUATION: 0.3,
     TransformationFamily.VERBAL: 0.4,
+    TransformationFamily.EPISTEMIC: 0.35,
 }
 
 #: Família per categoria de regla, quan la regla no la declara a les metadades.
@@ -169,6 +172,7 @@ _FAMILY_BY_CATEGORY: dict[str, TransformationFamily] = {
     "temporal": TransformationFamily.REORDER,
     "subordinada": TransformationFamily.SUBORDINATION,
     "impersonal": TransformationFamily.IMPERSONAL,
+    "assertiu": TransformationFamily.EPISTEMIC,
     "divisio": TransformationFamily.CLAUSE_SPLIT,
     "fusio": TransformationFamily.CLAUSE_MERGE,
     "concordanca": TransformationFamily.REPAIR,

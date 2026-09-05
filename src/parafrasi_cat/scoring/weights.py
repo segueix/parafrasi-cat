@@ -40,6 +40,16 @@ class ScoringWeights:
       consecutives amb el mateix marcador, acumulació de «que», repetició de la
       mateixa estructura). Un candidat que degrada l'estructura perd, a més, el
       premi que tindria com a reredacció.
+    - ``rhythm``: penalització d'una fusió que deixa una frase massa llarga o
+      carregada per al ritme de l'autor (segons l'empremta o el perfil); també
+      rebaixa el bonus estructural de la fusió. Mai no invalida.
+    - ``coverage_balance``: bonus petit, només al nivell 5 del mode profund, per
+      a l'arquitectura de paràgraf que reparteix millor la reredacció entre les
+      frases que tenen alternatives segures (mai una quota: una frase sense
+      alternativa segura no compta).
+    - ``assertive``: pes del llenguatge assertiu quan l'opció és activa: bonus o
+      penalització petits per una formulació epistemològica més directa, sense
+      redundàncies i amb la categoria explícita; mai no rescata cap candidat.
     - ``max_transformations``: nombre de transformacions que normalitza el guany.
 
     Les dimensions de preservació (factual, epistemològica, terminològica) no
@@ -56,6 +66,9 @@ class ScoringWeights:
     structure: float = 0.0
     family_gain_decay: float = 0.5
     degradation: float = 0.5
+    rhythm: float = 0.8
+    coverage_balance: float = 0.0
+    assertive: float = 0.15
     max_transformations: int = 3
 
     def __post_init__(self) -> None:
@@ -73,6 +86,9 @@ class ScoringWeights:
             "author_affinity_own",
             "structure",
             "degradation",
+            "rhythm",
+            "coverage_balance",
+            "assertive",
         ):
             if getattr(self, name) < 0:
                 raise ConfigError(f"El pes «{name}» no pot ser negatiu")
@@ -91,6 +107,9 @@ class ScoringWeights:
             structure=as_float(data, "structure", defaults.structure),
             family_gain_decay=as_float(data, "family_gain_decay", defaults.family_gain_decay),
             degradation=as_float(data, "degradation", defaults.degradation),
+            rhythm=as_float(data, "rhythm", defaults.rhythm),
+            coverage_balance=as_float(data, "coverage_balance", defaults.coverage_balance),
+            assertive=as_float(data, "assertive", defaults.assertive),
             max_transformations=as_int(data, "max_transformations", defaults.max_transformations),
         )
 
@@ -106,5 +125,8 @@ class ScoringWeights:
             "structure": self.structure,
             "family_gain_decay": self.family_gain_decay,
             "degradation": self.degradation,
+            "rhythm": self.rhythm,
+            "coverage_balance": self.coverage_balance,
+            "assertive": self.assertive,
             "max_transformations": self.max_transformations,
         }

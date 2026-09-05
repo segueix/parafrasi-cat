@@ -162,12 +162,19 @@ def test_hypothesis_to_certainty_is_blocked_unless_authorized() -> None:
     assert "rebutjat:" in result.report()
     assert sentence.summary()["n_rejected"] == 1
 
+    # Des de la 1.3.3 una regla autoritzada pot reformular la hipòtesi («potser» →
+    # «podria»), però cap regla no pot eliminar-la i deixar una afirmació.
     authorized = make_pipeline(
+        [ReplaceRule("hedge.soften", "Potser plourà", "Podria ploure")],
+        definitions=[definition("hedge.soften", allows_epistemic_change=True)],
+    )
+    assert authorized.rule_set.epistemic_rule_ids == ("hedge.soften",)
+    assert authorized.run(source).output_text == "Podria ploure demà."
+    dropping = make_pipeline(
         [ReplaceRule("hedge.drop", "Potser plourà", "Plourà")],
         definitions=[definition("hedge.drop", allows_epistemic_change=True)],
     )
-    assert authorized.rule_set.epistemic_rule_ids == ("hedge.drop",)
-    assert authorized.run(source).output_text == "Plourà demà."
+    assert dropping.run(source).output_text == source
 
 
 def test_certainty_to_hypothesis_and_function_changes_are_blocked() -> None:

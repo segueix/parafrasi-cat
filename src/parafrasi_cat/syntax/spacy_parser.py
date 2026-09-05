@@ -125,7 +125,7 @@ class SpacySyntax:
         nlp = self._load()
         if nlp is None or not text.strip():
             return empty(text)
-        document = nlp(text)
+        document = nlp(prepare_text(text))
         return self._analysis(text, document)
 
     def parse_many(self, texts: list[str]) -> list[SentenceSyntax]:
@@ -133,14 +133,20 @@ class SpacySyntax:
         nlp = self._load()
         if nlp is None:
             return [empty(text) for text in texts]
+        prepared = [prepare_text(text) for text in texts]
         return [
             self._analysis(text, document)
-            for text, document in zip(texts, nlp.pipe(texts), strict=True)
+            for text, document in zip(texts, nlp.pipe(prepared), strict=True)
         ]
 
     def _analysis(self, text: str, document: Any) -> SentenceSyntax:
-        """Converteix un document de spaCy i n'avalua la fiabilitat."""
-        tokens = tuple(_convert(token) for token in document if not token.is_space)
+        """Converteix un document de spaCy i n'avalua la fiabilitat.
+
+        Els mots conserven els caràcters del text original (l'apòstrof
+        tipogràfic inclòs): la normalització només serveix perquè el model
+        segmenti bé, i no canvia cap posició.
+        """
+        tokens = tuple(_convert(token, text) for token in document if not token.is_space)
         confidence = assess_confidence(tokens, numbers_of=self._numbers_of)
         return SentenceSyntax(text, tokens, confidence, SOURCE)
 
@@ -161,12 +167,26 @@ class SpacySyntax:
         return numbers
 
 
-def _convert(token: Any) -> SyntaxToken:
+#: Apòstrofs i cometes simples tipogràfics que el model no segmenta com l'apòstrof
+#: recte («d’aquests» sortia com un verb). Cada caràcter es canvia per un altre
+#: d'un sol caràcter: les posicions no es mouen.
+_APOSTROPHES = str.maketrans({"’": "'", "‘": "'", "ʼ": "'"})
+
+
+def prepare_text(text: str) -> str:
+    """Text tal com es passa al model: apòstrofs tipogràfics convertits en rectes."""
+    return text.translate(_APOSTROPHES)
+
+
+def _convert(token: Any, original: str = "") -> SyntaxToken:
     """Converteix un token de spaCy a l'estructura del motor."""
     morph = token.morph
+    start = token.idx
+    end = token.idx + len(token.text)
+    surface = original[start:end] if original and len(original) >= end else token.text
     return SyntaxToken(
         index=token.i,
-        text=token.text,
+        text=surface,
         lemma=token.lemma_ or token.text,
         pos=token.pos_,
         dep=token.dep_,

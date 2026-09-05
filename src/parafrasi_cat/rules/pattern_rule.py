@@ -100,6 +100,7 @@ class PatternRule(Rule):
             frozenset(
                 p.token_index for p in ctx.sentence.pronouns if p.certainty is Certainty.SURE
             ),
+            document_text=ctx.document_text,
         )
 
         def accept(match: Match) -> bool:
@@ -537,7 +538,14 @@ def _sentence_ok(spec: Mapping[str, object], match: Match, state: MatchState) ->
     if isinstance(max_finite, int) and sum(1 for t in tokens if state.is_finite(t)) > max_finite:
         return False
     not_contains = as_str_list(spec, "not_contains")
-    return not (not_contains and phrase_in(state.text, not_contains))
+    if not_contains and phrase_in(state.text, not_contains):
+        return False
+    # El context del document sencer: una reformulació com «la documentació
+    # disponible no permet...» només té sentit si el text parla de documentació.
+    document_contains = as_str_list(spec, "document_contains_any")
+    return not (
+        document_contains and not phrase_in(state.document_text or state.text, document_contains)
+    )
 
 
 def check_conditions(

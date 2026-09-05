@@ -1,0 +1,73 @@
+# Família 16: moviment de blocs sintàctics tancats (motor «block_move»).
+# Només amb analitzador fiable: cada bloc ha de ser un subarbre tancat de
+# l'arbre de dependències (vegeu rules/blocks.py). Sense parser, res.
+description: Moviment de subordinades, complements i participials sencers segons l'arbre sintàctic.
+language: ca
+rules:
+  - rule_id: blocs.subordinada_adverbial
+    engine: block_move
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.7
+    description: "Subordinada adverbial moguda sencera (inici ↔ final, interior → inici) quan és un subarbre tancat, encara que contingui una completiva o una relativa"
+    kind: adverbial
+    markers: [si, quan, mentre, mentre que, encara que, tot i que, malgrat que, per bé que, si bé,
+              perquè, ja que, atès que, com que, després que, abans que, fins que, des que,
+              sempre que, un cop, cada vegada que, sempre i quan]
+    initial_markers: {perquè: com que, ja que: com que}
+    final_markers: {com que: ja que}
+    comma_final: [encara que, tot i que, malgrat que, per bé que, si bé, ja que, atès que, perquè, com que]
+    conditions:
+      syntax:
+        requires_parser: true
+    examples:
+      positive:
+        - input: "Aquesta prudència s’entén encara més si considerem que l’obra era dedicada a Mateo Vázquez de Leca."
+          output: "Si considerem que l’obra era dedicada a Mateo Vázquez de Leca, aquesta prudència s’entén encara més."
+        - input: "Si considerem conjuntament la terminologia, l’estructura del text i el context en què apareix, aquesta possibilitat adquireix una consistència més gran."
+          output: "Aquesta possibilitat adquireix una consistència més gran si considerem conjuntament la terminologia, l’estructura del text i el context en què apareix."
+      negative:
+        - "No sap si vindrà."
+        - "Ho expliquem perquè ho entenguin."
+
+  - rule_id: blocs.complement_del_verb
+    engine: block_move
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.65
+    description: "Complement circumstancial preposicional del verb principal avantposat sencer (interior o final → inici)"
+    kind: adjunct
+    min_words: 3
+    conditions:
+      syntax:
+        requires_parser: true
+    examples:
+      positive:
+        - input: "Aquest enfocament, en el text de les edicions madrilenyes, podria interpretar-se com una estratègia."
+          output: "En el text de les edicions madrilenyes, aquest enfocament podria interpretar-se com una estratègia."
+      negative:
+        - "El monument fou encarregat pel mercader Oddo Altoviti."
+
+  - rule_id: blocs.participial_del_subjecte
+    engine: block_move
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.65
+    description: "Modificador participial del subjecte, interposat entre comes, avantposat al començament de la seva clàusula"
+    kind: participial
+    min_words: 2
+    conditions:
+      syntax:
+        requires_parser: true
+    examples:
+      positive:
+        - input: "Cap d’aquests elements, considerat de manera aïllada, permet arribar a una conclusió definitiva."
+          output: "Considerat de manera aïllada, cap d’aquests elements permet arribar a una conclusió definitiva."
+      negative:
+        - "El monument, antic i sever, és a Florència."

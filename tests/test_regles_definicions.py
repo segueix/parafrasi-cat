@@ -13,7 +13,7 @@ from parafrasi_cat.rules.examples import verify_examples
 
 REQUIRED_CATEGORIES = {
     "lexic", "connector", "verbal", "nominalitzacio", "copula", "agent", "presencia", "ordre",
-    "temporal", "subordinada", "impersonal", "fusio", "divisio", "puntuacio",
+    "temporal", "subordinada", "impersonal", "fusio", "divisio", "puntuacio", "assertiu",
 }  # fmt: skip
 
 #: Regles de paràgraf (nivell 5): la fusió genèrica i la fusió copulativa.
@@ -97,6 +97,13 @@ RULE_IDS = [
     "fusio.frases_compatibles", "fusio.copulativa", "divisio.coordinada_i",
     "divisio.coordinada_pero", "puntuacio.punt_i_coma_a_punt", "puntuacio.parentesi_a_comes",
     "puntuacio.parentesi_final_a_coma", "puntuacio.guions_a_comes",
+    "assertiu.sembla_que_podria", "assertiu.potser_podria", "assertiu.podria_potser",
+    "assertiu.potser_subjecte_podria", "assertiu.sembla_que_potser", "assertiu.podria_ser_possible",
+    "assertiu.hipotesi_explicita", "assertiu.com_detalla_font",
+    "assertiu.limitacio_documental_inicial", "assertiu.limitacio_documental",
+    "assertiu.plantejament_directe",
+    "blocs.subordinada_adverbial", "blocs.complement_del_verb", "blocs.participial_del_subjecte",
+    "ordre.pero_medial_a_inicial",
 ]  # fmt: skip
 
 
