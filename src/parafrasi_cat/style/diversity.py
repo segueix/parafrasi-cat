@@ -13,15 +13,19 @@ del ``syntactic_profile`` i no exigeix recrear l'empremta.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
+from parafrasi_cat.analyzer.analysis import Analyzer
 from parafrasi_cat.style.adaptation import (
     COMPONENT_WEIGHTS,
     AdaptationContext,
     AuthorAffinity,
     AuthorAdaptation,
 )
+from parafrasi_cat.style.observations import StyleResources
+from parafrasi_cat.style.preferences import StylePreferences
 from parafrasi_cat.style.syntax_profile import SentenceSyntaxStats
+from parafrasi_cat.syntax.analysis import SyntaxProvider
 
 MIN_SENTENCES = 3
 #: La diversitat és una part del component sintàctic, no un criteri dominant.
@@ -33,8 +37,22 @@ MIN_DENOMINATOR = 0.25
 class DiversifiedAuthorAdaptation(AuthorAdaptation):
     """Adaptació autoral que també compara la diversitat de patrons del paràgraf."""
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
-        super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+    def __init__(
+        self,
+        preferences: StylePreferences,
+        analyzer: Analyzer,
+        resources: StyleResources,
+        *,
+        explicit_forms: Iterable[str] = (),
+        syntax: SyntaxProvider | None = None,
+    ) -> None:
+        super().__init__(
+            preferences,
+            analyzer,
+            resources,
+            explicit_forms=explicit_forms,
+            syntax=syntax,
+        )
         self._diversity_cache: dict[
             tuple[str, AdaptationContext | None, str | None], AuthorAffinity
         ] = {}
@@ -146,7 +164,8 @@ def structural_diversity_similarity(
     )
 
     candidate_repeats = sum(
-        1 for previous, current in zip(stats, stats[1:], strict=False)
+        1
+        for previous, current in zip(stats, stats[1:], strict=False)
         if previous.pattern == current.pattern
     ) / (n - 1)
     # Amb empremtes antigues no tenim una taxa de ratxes explícita. La suma de
