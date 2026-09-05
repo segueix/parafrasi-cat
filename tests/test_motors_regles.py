@@ -176,18 +176,16 @@ def test_fusion_strategies(paths: ProjectPaths, outputs) -> None:  # type: ignor
     definition = load_rule_definitions(paths.language() / "transformations" / "fusio.yaml")[0]
     rule = default_registry().create_from_definition(definition, paths)
     assert isinstance(rule, ParagraphRule) and isinstance(rule, SentenceFusionRule)
-    # Des de la 1.3.2 hi ha una cinquena estratègia: la integració d'un fragment
-    # nominal anafòric («... Un fet que obligava...»), que només actua amb analitzador.
+    # Les fusions que només canvien una frontera de puntuació ja no compten com
+    # reredacció profunda. Es conserven les fusions de dues frases realment curtes
+    # i la integració d'un fragment nominal anafòric.
     assert [s.strategy_id for s in rule.strategies] == [
-        "contrast_pero",
-        "connector_punt_i_coma",
-        "anafora_demostrativa",
         "frases_curtes",
         "aposicio_anaforica",
     ]
     assert rule.strategies[-1].nominal_fragment and not rule.strategies[0].nominal_fragment
-    assert outputs(rule, "Plou molt. Però sortirem.") == ["Plou molt, però sortirem."]
-    assert outputs(rule, "Plou molt. A més, fa fred.") == ["Plou molt; a més, fa fred."]
+    assert outputs(rule, "Plou molt. Però sortirem.") == []
+    assert outputs(rule, "Plou molt. A més, fa fred.") == []
     assert outputs(rule, "Plou. Fa fred. Sortirem.") == [
         "Plou i fa fred. Sortirem.",
         "Plou. Fa fred i sortirem.",

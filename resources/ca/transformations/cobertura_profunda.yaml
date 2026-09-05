@@ -1,0 +1,148 @@
+# Cobertura addicional per al mode profund.
+#
+# Aquestes regles no intenten «inventar» reformulacions: només obren
+# alternatives deterministes en construccions que quedaven sense cap candidat.
+# Totes conserven el contingut lexical de les clàusules i, quan hi ha moviment,
+# exigeixen parser fiable.
+description: Alternatives segures addicionals per a causals, incisos temporals i explicacions amb dos punts.
+language: ca
+rules:
+  # «perquè» amb indicatiu és causal. Canviar només el marcador per «ja que»
+  # permet obtenir una alternativa fins i tot quan la clàusula conté clítics o
+  # la principal conté una relativa, casos en què no convé moure el bloc.
+  - rule_id: cobertura.causal_perque_a_ja_que
+    engine: pattern
+    category: connector
+    level: 3
+    transformation_type: connector
+    semantic_risk: low
+    confidence: 0.75
+    description: "«perquè Y» → «ja que Y» quan «perquè» és causal i el verb és indicatiu"
+    pattern:
+      - {text: perquè}
+      - {seq: true, group: clause, greedy: true, min_tokens: 2}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        clause:
+          has_finite_verb: true
+          mood: ind
+      syntax:
+        requires_parser: true
+    transformation: "ja que {clause}"
+    examples:
+      positive:
+        - input: "Hi ha peces que han conservat el nom perquè la seva funció era clara."
+          output: "Hi ha peces que han conservat el nom ja que la seva funció era clara."
+        - input: "El cavaller és reconeixible perquè el cavall el fa transparent."
+          output: "El cavaller és reconeixible ja que el cavall el fa transparent."
+      negative:
+        - "Ho explico perquè ho entenguin."
+        - "No sé per què ho fa."
+
+  # Incís temporal doble: es mou sencer, sense separar els dos membres
+  # coordinats. És una estructura freqüent que el block_move genèric no sempre
+  # pot considerar un únic subarbre tancat.
+  - rule_id: cobertura.temporals_coordinades_interposades_a_inicial
+    engine: pattern
+    category: ordre
+    structural_weight: 0.75
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.65
+    description: "«S, quan A o quan B, V...» → «Quan A o quan B, S V...»"
+    pattern:
+      - {start: true}
+      - {np: true, group: subj}
+      - {text: ","}
+      - {text: quan}
+      - {seq: true, group: a, min_tokens: 1, no_comma: true}
+      - {text: o}
+      - {text: quan}
+      - {seq: true, group: b, min_tokens: 1, no_comma: true}
+      - {text: ","}
+      - {seq: true, group: rest, greedy: true, min_tokens: 2}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        subj: {is_subject: true, no_finite_verb: true}
+        a: {has_finite_verb: true, no_clitic: true}
+        b: {has_finite_verb: true, no_clitic: true}
+        rest: {has_finite_verb: true}
+      syntax:
+        requires_parser: true
+        max_coordinations: 2
+    transformation: "Quan {a} o quan {b}, {subj|lower} {rest}"
+    examples:
+      positive:
+        - input: "La reina, quan apareix o quan es consolida, tampoc no necessita una explicació excessiva."
+          output: "Quan apareix o quan es consolida, la reina tampoc no necessita una explicació excessiva."
+      negative:
+        - "La reina, quan el veu o quan el sent, somriu."
+        - "La reina, que apareix o que es consolida, no necessita cap explicació."
+
+  # Un «però» que ja obre una frase és un connector discursiu, no una
+  # conjunció que uneixi dues clàusules dins la mateixa frase. La substitució
+  # per «Tanmateix,» conserva explícitament el contrast i evita que el nivell 5
+  # hagi de fingir una gran reescriptura fusionant només el punt.
+  - rule_id: cobertura.pero_inicial_a_tanmateix
+    engine: pattern
+    category: connector
+    level: 2
+    transformation_type: connector
+    semantic_risk: low
+    confidence: 0.8
+    description: "«Però X.» → «Tanmateix, X.» quan «però» obre la frase"
+    pattern:
+      - {start: true}
+      - {text: però}
+      - {seq: true, group: rest, greedy: true, min_tokens: 2}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        rest: {has_finite_verb: true}
+    transformation: "Tanmateix, {rest}"
+    examples:
+      positive:
+        - input: "Però hi ha una peça que no encaixa: l'orfil."
+          output: "Tanmateix, hi ha una peça que no encaixa: l'orfil."
+      negative:
+        - "Ho vol, però no pot."
+
+  # Dos punts entre dues clàusules verbals: el segon membre és una explicació
+  # autònoma. La divisió no afegeix cap connector ni cap relació nova; només
+  # converteix el límit explicatiu en dues frases. No actua en llistes o
+  # definicions nominals perquè el segon costat ha de contenir un verb finit.
+  - rule_id: cobertura.dos_punts_explicatius_a_dues_frases
+    engine: pattern
+    category: divisio
+    level: 4
+    transformation_type: sentence_split
+    semantic_risk: medium
+    confidence: 0.6
+    description: "«A: B.» → «A. B.» quan A i B són clàusules verbals completes"
+    pattern:
+      - {start: true}
+      - {seq: true, group: a, min_tokens: 4, no_comma: false}
+      - {text: ":"}
+      - {seq: true, group: b, greedy: true, min_tokens: 3}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        a: {has_finite_verb: true}
+        b: {has_finite_verb: true, not_starts_with: ["\"", "“", "«", i, o, ni, que]}
+      syntax:
+        requires_parser: true
+      sentence:
+        min_tokens: 10
+    transformation: "{a}. {b|cap}"
+    examples:
+      positive:
+        - input: "El rei no necessita gaire justificació: és el centre del tauler i el centre del regne."
+          output: "El rei no necessita gaire justificació. És el centre del tauler i el centre del regne."
+        - input: "La reina no necessita una explicació excessiva: ocupa el lloc immediat del poder."
+          output: "La reina no necessita una explicació excessiva. Ocupa el lloc immediat del poder."
+      negative:
+        - "Les peces són tres: rei, reina i cavaller."
+        - "La categoria és aquesta: un home pròxim al rei."
