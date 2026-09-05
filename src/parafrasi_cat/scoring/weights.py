@@ -29,6 +29,10 @@ class ScoringWeights:
       quan el mode d'origen és ``llm_draft``: entre candidats ja validats, dona
       un bonus pel grau de canvi i sobretot per la reestructuració real. No pot
       compensar errors factuals, epistemològics, terminològics o gramaticals.
+    - ``connector_repetition``: penalització petita, només quan hi ha pressió de
+      reescriptura i empremta d'autor, per repetir el mateix connector en una
+      seqüència curta. Serveix de microdesempat entre alternatives segures; no
+      inventa cap connector ni força una substitució si no hi ha candidat.
     - ``structure``: pes del grau de reredacció estructural (famílies de
       transformació ponderades: un canvi sintàctic segur pesa més que un
       connector, i un canvi entre frases més que un de dins de la frase). Val 0
@@ -68,6 +72,7 @@ class ScoringWeights:
     author_affinity: float = 2.0
     author_affinity_own: float = 0.5
     rewrite_pressure: float = 0.0
+    connector_repetition: float = 0.18
     structure: float = 0.0
     family_gain_decay: float = 0.5
     degradation: float = 0.5
@@ -90,6 +95,7 @@ class ScoringWeights:
             "author_affinity",
             "author_affinity_own",
             "rewrite_pressure",
+            "connector_repetition",
             "structure",
             "degradation",
             "rhythm",
@@ -111,6 +117,9 @@ class ScoringWeights:
             author_affinity=as_float(data, "author_affinity", defaults.author_affinity),
             author_affinity_own=as_float(data, "author_affinity_own", defaults.author_affinity_own),
             rewrite_pressure=as_float(data, "rewrite_pressure", defaults.rewrite_pressure),
+            connector_repetition=as_float(
+                data, "connector_repetition", defaults.connector_repetition
+            ),
             structure=as_float(data, "structure", defaults.structure),
             family_gain_decay=as_float(data, "family_gain_decay", defaults.family_gain_decay),
             degradation=as_float(data, "degradation", defaults.degradation),
@@ -130,6 +139,7 @@ class ScoringWeights:
             "author_affinity": self.author_affinity,
             "author_affinity_own": self.author_affinity_own,
             "rewrite_pressure": self.rewrite_pressure,
+            "connector_repetition": self.connector_repetition,
             "structure": self.structure,
             "family_gain_decay": self.family_gain_decay,
             "degradation": self.degradation,
