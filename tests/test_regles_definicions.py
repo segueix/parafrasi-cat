@@ -16,8 +16,12 @@ REQUIRED_CATEGORIES = {
     "temporal", "subordinada", "impersonal", "fusio", "divisio", "puntuacio", "assertiu",
 }  # fmt: skip
 
-#: Regles de paràgraf (nivell 5): la fusió genèrica i la fusió copulativa.
-PARAGRAPH_RULES = {"fusio.frases_compatibles", "fusio.copulativa"}
+#: Regles de paràgraf (nivell 5): fusions i reparació anafòrica amb context.
+PARAGRAPH_RULES = {
+    "fusio.frases_compatibles",
+    "fusio.repara_fragment_anaforic",
+    "fusio.copulativa",
+}
 
 
 @pytest.fixture(scope="module")
@@ -93,9 +97,9 @@ RULE_IDS = [
     "ordre.complement_interposat_a_inicial", "ordre.concessiva_inicial_a_final",
     "ordre.connector_medial_a_inicial", "ordre.connector_inicial_a_medial",
     "impersonal.es_a_hom", "impersonal.hom_a_es",
-    "fusio.frases_compatibles", "fusio.copulativa", "divisio.coordinada_i",
-    "divisio.coordinada_pero", "puntuacio.punt_i_coma_a_punt", "puntuacio.parentesi_a_comes",
-    "puntuacio.parentesi_final_a_coma", "puntuacio.guions_a_comes",
+    "fusio.frases_compatibles", "fusio.repara_fragment_anaforic", "fusio.copulativa",
+    "divisio.coordinada_i", "divisio.coordinada_pero", "puntuacio.punt_i_coma_a_punt",
+    "puntuacio.parentesi_a_comes", "puntuacio.parentesi_final_a_coma", "puntuacio.guions_a_comes",
     "assertiu.normalitza_modalitzacio", "assertiu.hipotesi_explicita", "assertiu.com_detalla_font",
     "assertiu.limitacio_documental_inicial", "assertiu.limitacio_documental",
     "assertiu.plantejament_directe",
