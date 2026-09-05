@@ -7,9 +7,10 @@ una fusió segura amb la frase següent o el que dona al paràgraf sencer el
 ritme de l'autor, i el nivell 5 no arribava a veure-ho.
 
 Aquí, en lloc d'un sol text intermedi, es conserven uns quants candidats
-**segurs i diversos** de cada frase (l'original, el millor local i el millor de
-cada signatura estructural) i es construeixen arquitectures de paràgraf amb
-una cerca en feix determinista i acotada:
+**segurs i diversos** de cada frase (l'original, el millor local, el millor de
+cada signatura estructural i, quan hi ha marge, més d'una variant segura de
+connector) i es construeixen arquitectures de paràgraf amb una cerca en feix
+determinista i acotada:
 
 1. es parteix del paràgraf buit;
 2. per a cada frase, cada estat viu s'estén amb cada candidat conservat de la
@@ -61,6 +62,9 @@ RejectionReason = Callable[[Transformation, str, ProtectedConflict], str | None]
 ContextFactory = Callable[[str], ParagraphContext]
 
 AFFINITY_COMPONENT = "afinitat_autor"
+CONNECTOR_SIGNATURE = "CONNECTOR"
+CONNECTOR_VARIANTS_PER_SENTENCE = 2
+"""Màxim de candidats transformats de connector que el feix conserva per frase."""
 _SHORT = 60
 
 
@@ -288,13 +292,16 @@ class ParagraphBeam:
     # --- candidats locals -------------------------------------------------------------------
 
     def local_options(self, result: SentenceResult) -> tuple[LocalOption, ...]:
-        """Candidats segurs i diversos d'una frase: l'original, el millor i un per signatura.
+        """Candidats segurs i diversos d'una frase, sense perdre variants de connector.
 
-        Es prefereix la diversitat de signatures a la puntuació: un cop conservat el
-        millor candidat, entren els millors de cada signatura estructural (una
-        reordenació, una subordinació, una divisió...) i, si queda lloc, els de les
-        signatures superficials. Mai més de ``candidates_per_sentence`` alternatives
-        a més de l'original.
+        L'original sempre es conserva. Entre els candidats transformats entren el
+        millor local, les signatures estructurals diferents i, si hi ha marge, fins
+        a dues redaccions de connector diferents encara que comparteixin la mateixa
+        signatura ``CONNECTOR``. Això evita que, per exemple, «ja que» desaparegui
+        abans que el paràgraf pugui comparar-lo amb «atès que» i penalitzar-ne la
+        repetició. Després s'omplen els llocs restants amb altres signatures
+        superficials. Mai més de ``candidates_per_sentence`` alternatives a més de
+        l'original.
         """
         accepted = [e for e in result.candidates if e.accepted]
         identity = next((e for e in accepted if e.candidate.is_identity), None)
@@ -314,21 +321,60 @@ class ParagraphBeam:
             ),
         )
         room = self._settings.candidates_per_sentence
-        seen: set[str] = set()
+        seen_signatures: set[str] = set()
+        connector_variants: set[str] = set()
         chosen: list[LocalOption] = []
+
+        def remember_connector(candidate: Candidate) -> None:
+            if candidate.signature == CONNECTOR_SIGNATURE:
+                connector_variants.add(candidate.normalized_text())
+
         if ranked and room > 0:
             best = ranked[0]
             chosen.append(LocalOption(result.index, best, "millor local"))
-            seen.add(best.candidate.signature)
-        for structural in (True, False):
-            for evaluated in ranked:
-                if len(chosen) >= room:
-                    break
-                candidate = evaluated.candidate
-                if candidate.is_structural is not structural or candidate.signature in seen:
-                    continue
-                seen.add(candidate.signature)
-                chosen.append(LocalOption(result.index, evaluated, f"millor {candidate.signature}"))
+            seen_signatures.add(best.candidate.signature)
+            remember_connector(best.candidate)
+
+        # La diversitat estructural continua tenint prioritat: no sacrifiquem una
+        # reordenació o una divisió segura només per conservar un sinònim de connector.
+        for evaluated in ranked:
+            if len(chosen) >= room:
+                break
+            candidate = evaluated.candidate
+            if not candidate.is_structural or candidate.signature in seen_signatures:
+                continue
+            seen_signatures.add(candidate.signature)
+            chosen.append(LocalOption(result.index, evaluated, f"millor {candidate.signature}"))
+
+        # Excepció deliberada a «un candidat per signatura»: dos connectors
+        # equivalents poden necessitar arribar al paràgraf complet perquè la
+        # no-repetició i l'empremta decideixin quin combina millor amb els veïns.
+        connector_count = sum(
+            1 for option in chosen if option.candidate.signature == CONNECTOR_SIGNATURE
+        )
+        for evaluated in ranked:
+            if len(chosen) >= room or connector_count >= CONNECTOR_VARIANTS_PER_SENTENCE:
+                break
+            candidate = evaluated.candidate
+            if candidate.signature != CONNECTOR_SIGNATURE:
+                continue
+            variant = candidate.normalized_text()
+            if variant in connector_variants:
+                continue
+            connector_variants.add(variant)
+            seen_signatures.add(candidate.signature)
+            connector_count += 1
+            chosen.append(LocalOption(result.index, evaluated, "variant segura de connector"))
+
+        # Finalment, una alternativa per cada altra signatura superficial.
+        for evaluated in ranked:
+            if len(chosen) >= room:
+                break
+            candidate = evaluated.candidate
+            if candidate.is_structural or candidate.signature in seen_signatures:
+                continue
+            seen_signatures.add(candidate.signature)
+            chosen.append(LocalOption(result.index, evaluated, f"millor {candidate.signature}"))
         return (*options, *chosen)
 
     # --- cerca ------------------------------------------------------------------------------
