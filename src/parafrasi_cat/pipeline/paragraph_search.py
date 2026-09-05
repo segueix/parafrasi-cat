@@ -33,6 +33,7 @@ rescatar un candidat que la validació hagi invalidat.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 
@@ -43,6 +44,7 @@ from parafrasi_cat.core.spans import Span
 from parafrasi_cat.core.transformation import Transformation
 from parafrasi_cat.pipeline.result import (
     EvaluatedCandidate,
+    ParagraphOpportunities,
     ParagraphResult,
     RejectedProposal,
     SentenceResult,
@@ -160,6 +162,10 @@ class ParagraphAlternative:
     paragraph_total: float
     affinity_delta: float | None
     global_total: float
+    distribution: tuple[float, ...] = ()
+    """Grau estructural del candidat triat a cada frase (0 = original)."""
+    coverage_balance: float | None = None
+    """Repartiment de la reredacció entre les frases amb alternatives segures (0-1)."""
 
     @property
     def valid(self) -> bool:
@@ -183,6 +189,8 @@ class ParagraphAlternative:
             "paragraph_total": self.paragraph_total,
             "affinity_delta": self.affinity_delta,
             "global_total": self.global_total,
+            "distribution_of_change": list(self.distribution),
+            "coverage_balance": self.coverage_balance,
             "valid": self.valid,
             "rejection_reason": self.evaluated.rejection_reason,
             "text": self.evaluated.candidate.text,
@@ -200,6 +208,17 @@ class ParagraphSearch:
     selected: int
     explored: int
     pruned: tuple[PrunedState, ...] = ()
+    fusions: int = 0
+    """Fusions de paràgraf que han superat la validació provisional dins del feix."""
+
+    @property
+    def structural_opportunities(self) -> tuple[int, ...]:
+        """Índexs (dins del paràgraf) de les frases amb alguna alternativa estructural segura."""
+        return tuple(
+            n
+            for n, group in enumerate(self.options)
+            if any(o.candidate.is_structural for o in group)
+        )
 
     @property
     def winner(self) -> ParagraphAlternative:
@@ -222,6 +241,8 @@ class ParagraphSearch:
             "selected": self.selected,
             "explored": self.explored,
             "pruned": [p.to_dict() for p in self.pruned],
+            "fusions": self.fusions,
+            "structural_opportunities": list(self.structural_opportunities),
         }
 
 
@@ -230,6 +251,8 @@ class BeamSettings:
     beam_width: int = 6
     candidates_per_sentence: int = 3
     max_pruned_recorded: int = 24
+    coverage_balance: float = 0.0
+    """Pes del balanç de cobertura a la puntuació global (0 = cap)."""
 
 
 class ParagraphBeam:
@@ -331,6 +354,7 @@ class ParagraphBeam:
         pruned: list[PrunedState] = []
         rejected: dict[str, RejectedProposal] = {}
         notes: dict[str, None] = {}
+        fusions = 0
         beam: list[BeamState] = [
             BeamState((), Candidate(paragraph.index, "", "", ()), 0.0, kept_for="inici")
         ]
@@ -338,9 +362,10 @@ class ParagraphBeam:
             extended: list[BeamState] = []
             for state in beam:
                 for option in group:
-                    extended.extend(
-                        self._extend(state, option, gaps[index], paragraph, rejected, notes)
-                    )
+                    grown = self._extend(state, option, gaps[index], paragraph, rejected, notes)
+                    already = len(state.paragraph.transformations)
+                    fusions += sum(1 for g in grown if len(g.paragraph.transformations) > already)
+                    extended.extend(grown)
             explored += len(extended)
             beam = self._prune(extended, group, pruned)
 
@@ -358,6 +383,22 @@ class ParagraphBeam:
             selected=selected,
             explored=explored,
             pruned=tuple(pruned[: self._settings.max_pruned_recorded]),
+            fusions=fusions,
+        )
+        opportunities = ParagraphOpportunities(
+            safe=sum(r.opportunities.safe for r in inner) + fusions,
+            structural=len(search.structural_opportunities) + fusions,
+            fusion=fusions,
+            split=sum(
+                1
+                for group in options
+                if any(
+                    any(t.family.cross_sentence for t in o.candidate.transformations) for o in group
+                )
+            ),
+            beam_candidates=len(alternatives),
+            distribution_of_change=winner.distribution,
+            coverage_balance=winner.coverage_balance,
         )
         evaluated = tuple(
             replace(a.evaluated, selected=(n == selected)) for n, a in enumerate(alternatives)
@@ -373,6 +414,7 @@ class ParagraphBeam:
             protected_spans=protected,
             notes=final_notes,
             search=search,
+            opportunities=opportunities,
         )
         return result, self._remark(inner, winner)
 
@@ -512,6 +554,11 @@ class ParagraphBeam:
         seen: dict[str, None] = {}
         alternatives: list[ParagraphAlternative] = []
         baseline = self._affinity(paragraph.text, paragraph.text, document)
+        # Frases amb alguna alternativa estructural segura: només aquestes compten
+        # per al balanç de cobertura (una frase sense alternativa no hi resta res).
+        structural_sentences = [
+            n for n, group in enumerate(options) if any(o.candidate.is_structural for o in group)
+        ]
         for origin, state in states:
             final_paragraph = Candidate(
                 paragraph.index,
@@ -538,10 +585,16 @@ class ParagraphBeam:
                 affinity = self._affinity(final_paragraph.text, paragraph.text, document)
                 if affinity is not None:
                     affinity_delta = round(affinity - baseline, 4)
+            distribution = tuple(o.candidate.structural_degree() for o in state.options)
+            balance = _coverage_balance(distribution, structural_sentences)
+            balance_bonus = (
+                self._settings.coverage_balance * balance if balance is not None else 0.0
+            )
             global_total = (
                 local_total
                 + paragraph_total
                 + (self._affinity_weight * affinity_delta if affinity_delta is not None else 0.0)
+                + balance_bonus
             )
             if not score.valid:
                 global_total = score.total
@@ -556,6 +609,9 @@ class ParagraphBeam:
             if affinity_delta is not None:
                 components["afinitat_paragraf"] = round(self._affinity_weight * affinity_delta, 4)
                 explanation += f"; afinitat del paràgraf sencer {affinity_delta:+.3f}"
+            if balance is not None and self._settings.coverage_balance > 0:
+                components["balanc_cobertura"] = round(balance_bonus, 4)
+                explanation += f"; balanç de cobertura {balance:.2f}"
             explanation += f" → {score.explanation}"
             global_score = replace(
                 score,
@@ -573,6 +629,8 @@ class ParagraphBeam:
                     paragraph_total=round(paragraph_total, 4),
                     affinity_delta=affinity_delta,
                     global_total=round(global_total, 4),
+                    distribution=distribution,
+                    coverage_balance=balance,
                 )
             )
         return alternatives
@@ -660,6 +718,21 @@ class ParagraphBeam:
                 )
             )
         return tuple(updated)
+
+
+def _coverage_balance(distribution: Sequence[float], sentences: Sequence[int]) -> float | None:
+    """Repartiment de la reredacció entre les frases amb alternatives segures (0-1).
+
+    Mitjana de l'arrel del grau estructural de cada frase amb oportunitats,
+    elevada al quadrat: amb el mateix canvi total, repartir-lo entre més frases
+    puntua més que concentrar-lo en una. Sense cap frase amb oportunitats no
+    hi ha res a repartir (``None``), i una frase sense alternativa segura no
+    hi entra mai.
+    """
+    if not sentences:
+        return None
+    total = sum(math.sqrt(max(0.0, min(1.0, distribution[n]))) for n in sentences)
+    return round((total / len(sentences)) ** 2, 4)
 
 
 def _rank(state: BeamState) -> tuple[float, int]:

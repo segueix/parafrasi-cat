@@ -164,26 +164,41 @@ class HedgeValidator:
         return ValidationResult.passed()
 
 
+#: Diferència absoluta (en caràcters) que sempre s'admet, sigui quina sigui la
+#: proporció: en una frase curta, «la documentació disponible no permet» o un
+#: connector explícit disparen la proporció sense afegir-hi cap contingut nou.
+LENGTH_SLACK_CHARS = 30
+
+
 class LengthRatioValidator:
     """La longitud del candidat ha de mantenir-se dins d'un marge raonable.
 
     Un candidat molt més curt probablement ha perdut contingut; un de molt
-    més llarg probablement n'ha afegit.
+    més llarg probablement n'ha afegit. La proporció mana en frases llargues;
+    en frases curtes s'admet una diferència absoluta petita
+    (:data:`LENGTH_SLACK_CHARS`), perquè els invariants de contingut (dades,
+    negació, modalitat, terminologia) ja vigilen el que s'hi afegeix o s'hi perd.
     """
 
     validator_id = "length_ratio"
 
-    def __init__(self, min_ratio: float = 0.6, max_ratio: float = 1.6) -> None:
+    def __init__(
+        self, min_ratio: float = 0.6, max_ratio: float = 1.6, slack_chars: int = LENGTH_SLACK_CHARS
+    ) -> None:
         if not 0.0 < min_ratio <= 1.0 <= max_ratio:
             raise ConfigError("Cal 0 < min_ratio <= 1 <= max_ratio")
         self._min = min_ratio
         self._max = max_ratio
+        self._slack = max(0, slack_chars)
 
     def validate(self, candidate: Candidate, ctx: ValidationContext) -> ValidationResult:
         source_length = len(ctx.source_text.strip())
         if source_length == 0:
             return ValidationResult.passed()
-        ratio = len(candidate.text.strip()) / source_length
+        candidate_length = len(candidate.text.strip())
+        if abs(candidate_length - source_length) <= self._slack:
+            return ValidationResult.passed()
+        ratio = candidate_length / source_length
         if ratio < self._min or ratio > self._max:
             return ValidationResult.error(
                 self.validator_id,

@@ -107,6 +107,10 @@ class PipelineConfig:
         source_mode: Origen del text, tal com l'ha indicat l'usuari: ``own`` (per
             defecte, comportament de sempre) o ``llm_draft`` (esborrany generat amb un
             LLM, que s'adapta a l'empremta de l'autor; l'empremta és obligatòria).
+        assertive_language: «Llenguatge assertiu»: activa les regles que fan més
+            directa la formulació epistemològica (menys doble modalització, hipòtesi,
+            inferència i limitació explícites) sense canviar mai la força expressada.
+            Per defecte és fals i és ortogonal al mode.
     """
 
     home: Path | None = None
@@ -133,6 +137,7 @@ class PipelineConfig:
     syntax: str = "auto"
     languagetool: bool = False
     source_mode: SourceMode = SourceMode.OWN
+    assertive_language: bool = False
 
     def __post_init__(self) -> None:
         if self.level is not None and not 1 <= self.level <= 5:
@@ -219,6 +224,7 @@ class PipelineConfig:
             syntax=as_str(data, "syntax", defaults.syntax),
             languagetool=as_bool(data, "languagetool", defaults.languagetool),
             source_mode=SourceMode.parse(as_str(data, "source_mode", defaults.source_mode.value)),
+            assertive_language=as_bool(data, "assertive_language", defaults.assertive_language),
             dictionaries=tuple(
                 _maybe_path(item, base_dir) for item in as_str_list(data, "dictionaries")
             ),
@@ -262,6 +268,7 @@ class PipelineConfig:
             "syntax": self.syntax,
             "languagetool": self.languagetool,
             "source_mode": self.source_mode.value,
+            "assertive_language": self.assertive_language,
             "dictionaries": list(self.dictionaries),
             "preferences": self.preferences,
             "feedback": None if self.feedback is None else str(self.feedback),

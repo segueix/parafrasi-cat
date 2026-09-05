@@ -8,7 +8,7 @@ que s'executa al mateix ordinador.
 > morfològica i sintàctica, validació gramatical i selecció determinista de
 > candidats.**
 
-**Versió 1.3.2.** Un cop instal·lats els recursos, tot funciona sense connexió.
+**Versió 1.3.3.** Un cop instal·lats els recursos, tot funciona sense connexió.
 Parafrasi-cat no envia text a serveis d'Internet: en mode local, el text no surt
 del dispositiu; en mode de xarxa local, només circula entre el navegador client
 i el servidor Parafrasi-cat dins de la LAN.
@@ -205,6 +205,7 @@ parafrasi-cat rewrite text.txt --level 5
 parafrasi-cat rewrite text.txt --style style/autor.json \
   --dictionary dictionaries/historia.yml --preferences preferences/author.yml
 parafrasi-cat --rules parafrasi --explain "Gairebé sempre plou, tot i que avui no."
+parafrasi-cat --assertiu "Potser podria ser una còpia posterior."   # Llenguatge assertiu
 ```
 
 ## Origen del text
@@ -266,7 +267,7 @@ els diccionaris, les preferències i la llista de validadors són idèntics.
 |---|---|---|
 | 1 | Lèxic | 3 |
 | 2 | Connectors | 7 |
-| 3 | Sintaxi: còpula, agent, presència, ordre, temporals, subordinades, impersonals | 40 |
+| 3 | Sintaxi: còpula, agent, presència, ordre, blocs sintàctics, temporals, subordinades, impersonals | 44 |
 | 4 | Entre frases: divisió i puntuació | 3 |
 | 5 | **Reestructuració controlada de paràgraf** | 2 |
 
@@ -304,7 +305,74 @@ la més restrictiva. Si se'n va, la fusió no es proposa i el resultat ho diu:
 
 Amb un autor de frase curta, la reestructuració del nivell 5 recau en la
 divisió i la reordenació; amb un autor de períodes llargs, la fusió continua
-disponible dins dels límits observats.
+disponible dins dels límits observats. A més d'aquest límit previ, la frase que
+resulta d'una fusió es **puntua contra el ritme real de l'autor** (distribució
+de longituds de l'empremta, clàusules, relatives, profunditat, comes): una
+fusió massa llarga o massa carregada no queda invalidada, però competeix pitjor
+que una arquitectura amb millor ritme.
+
+### Cobertura d'alternatives segures (1.3.3)
+
+Un paràgraf on només dues frases canvien i les altres queden intactes no és un
+resultat prudent: sovint és que el motor no hi veia cap alternativa. Al nivell
+5 del mode profund la cobertura ve de tres capes, cap de les quals no augmenta
+l'agressivitat:
+
+- **Transformacions intermèdies**, sintàctiques i discursives, sense inventar
+  cap substitució lèxica: «La hipòtesi no depèn, però, d'una sola coincidència»
+  → «Tanmateix, la hipòtesi no depèn d'una sola coincidència».
+- **Blocs sintàctics complets** (motor `block_move`), només amb l'analitzador
+  fiable: subordinades condicionals, causals, concessives i temporals, complements
+  circumstanciales del verb i participials del subjecte es mouen sencers quan
+  són un subarbre tancat, sense tallar cap dependència, sense partir cap pronom
+  feble ni cap fragment protegit i sense deixar cap referent pronominal ambigu.
+  Si el parser dubta, no es proposa res.
+- **Balanç de cobertura** al feix de paràgraf: entre arquitectures igualment
+  segures, repartir la reredacció entre les frases que tenen alternatives
+  puntua una mica més que concentrar-la en una. No és cap quota: es calcula
+  sobre les oportunitats segures que existeixen, i mai no pot compensar una
+  invalidació ni un avís gramatical.
+
+El resultat diu, per a cada frase, quantes **oportunitats** s'han detectat,
+quantes eren segures (estructurals o superficials), quantes no ho eren i què ha
+guanyat: «sense cap alternativa» no és el mateix que «l'original ha guanyat».
+Per paràgraf, hi ha el recompte d'oportunitats segures, estructurals, de fusió
+i de divisió. Tot és a l'informe, a l'API local i a l'exportació.
+
+## Llenguatge assertiu
+
+La casella **Llenguatge assertiu** (desactivada per defecte; `--assertiu` al
+terminal) fa més directa la redacció quan el text aporta evidències i explicita
+quan una afirmació és una inferència o una hipòtesi. **No converteix
+inferències en fets ni augmenta la certesa del text.** Funciona amb text propi
+i amb esborrany LLM, i és independent del mode.
+
+Cada marcador epistemològic té una categoria explícita: **evidència** («segons
+X», «consta que», «està documentat»), **inferència** («permet inferir», «sembla
+indicar», «apunta a»), **hipòtesi** («podria», «potser», «hipòtesi»),
+**limitació** («no es pot demostrar», «no hi ha constància») o **afirmació no
+marcada**. Una matriu de transicions decideix què pot passar entre l'original i
+el candidat: hipòtesi → evidència, inferència → evidència, limitació → qualsevol
+altra cosa i afirmació → evidència són sempre errors; hipòtesi → inferència
+només si una regla ho declara i la força no puja; reduir una doble modalització
+només amb una regla que la declari com a redundància. Pujar de força dins d'una
+categoria («indica» → «demostra») també és un error. L'indicatiu gramatical no
+és cap evidència: no s'hi afegeix cap marcador.
+
+| Abans | Després (opció activa) |
+|---|---|
+| Potser podria ser una còpia posterior. | Podria ser una còpia posterior. |
+| Aquest enfocament podria interpretar-se com una estratègia calculada. | Aquest enfocament permet plantejar la hipòtesi d'una estratègia calculada. |
+| Com detalla Rafael Ramis Barceló, el lul·lisme va gaudir d'una notable protecció. | Rafael Ramis Barceló detalla que el lul·lisme va gaudir d'una notable protecció. |
+| No es pot demostrar que els documents fossin contemporanis. | La documentació disponible no permet demostrar que els documents fossin contemporanis. |
+
+«Podria interpretar-se» no esdevé mai «era» ni «demostra»; «no es pot
+demostrar» continua sent una limitació; una atribució no esdevé «documenta»
+si el context no ho fa compatible. L'empremta de l'autor incorpora un perfil
+epistemològic (només recomptes: densitat modal, doble modalització, proporció
+d'afirmacions directes, marcador preferit per categoria) que un bonus petit fa
+servir després de la preservació, l'epistemologia, la terminologia, la
+gramàtica i la sintaxi.
 
 ## Morfologia
 
@@ -498,9 +566,18 @@ make check       # tot
 
 ## Limitacions conegudes
 
-- **La cobertura és limitada.** Amb 40 regles, moltes frases no encaixen amb cap
-  i es retornen sense canvis. La v1.0 prefereix no transformar abans que
+- **La cobertura és limitada.** Amb una seixantena de regles, moltes frases no
+  encaixen amb cap i es retornen sense canvis: el resultat diu quan és perquè
+  no hi havia cap alternativa. El motor prefereix no transformar abans que
   arriscar el significat.
+- **Els blocs sintàctics només es mouen amb el parser fiable.** Sense
+  analitzador, o amb una anàlisi dubtosa (frase fragmentària, arrel poc clara),
+  cap subordinada, complement ni participial no canvia de lloc.
+- **L'opció «Llenguatge assertiu» només actua sobre marcadors coneguts.** Les
+  regles reformulen les construccions que l'inventari epistemològic declara
+  (doble modalització, «podria interpretar-se com», «com detalla X», «no es pot
+  demostrar que» amb context documental, «fa pensar que»); una formulació que
+  no hi és es queda com està.
 - **El parser no és infal·lible.** És un model estadístic entrenat sobre AnCora:
   encerta la majoria de casos, però no tots. Per això les regles que el fan
   servir exigeixen confiança i, quan no n'hi ha, no transformen.

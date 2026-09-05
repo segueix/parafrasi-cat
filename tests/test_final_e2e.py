@@ -136,13 +136,22 @@ def test_altoviti_never_reverses_the_copula(
 def test_altoviti_offers_the_correct_constitueix_variant(
     results: dict[RewriteMode, JsonDict],
 ) -> None:
-    # La variant amb «constitueix» només és acceptable amb els sintagmes invertits.
+    # La variant amb «constitueix» només és acceptable amb els sintagmes invertits: el
+    # monument és el subjecte i «la primera referència itàlica» l'atribut.
     texts = [text for _source, text in accepted_candidates(results[RewriteMode.DEEP])]
     correct = [text for text in texts if RIGHT_COPULA in text]
     assert correct, "cap variant correcta amb «constitueix»"
+    canonical = "El monument funerari d’Oddo Altoviti"
+    assert any(text.startswith(canonical) for text in correct), correct
     for text in correct:
-        assert text.startswith("El monument funerari d’Oddo Altoviti"), text
         assert "Oddo Altoviti" in text
+        assert not text.startswith(WRONG_COPULA), text
+        subject = text.index("monument funerari d’Oddo Altoviti")
+        assert subject < text.index("constitueix") < text.index("la primera referència itàlica")
+        # Des de la 1.3.3 el bloc participial pot anar al davant («Encarregat el 1507 i
+        # finalitzat el 1516, el monument… constitueix…»): és la mateixa inversió correcta.
+        if not text.startswith(canonical):
+            assert text.startswith("Encarregat el 1507 i finalitzat el 1516, el monument"), text
 
 
 def test_altoviti_protects_the_expected_spans(

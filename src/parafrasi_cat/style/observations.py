@@ -15,6 +15,7 @@ import re
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from parafrasi_cat.analyzer.analysis import Analysis
@@ -218,6 +219,8 @@ class StyleResources:
     settings: StyleSettings
     variant_groups: tuple[VariantGroup, ...]
     connector_info: dict[str, tuple[str, str]]
+    language_dir: Path | None = None
+    """Directori dels recursos de la llengua (per carregar-hi el lexicó epistemològic)."""
 
     @classmethod
     def load(
@@ -246,7 +249,7 @@ class StyleResources:
         for entry in lexicon.entries:
             if entry.word_class in _CONNECTOR_CLASSES:
                 info.setdefault(normalize_form(entry.form), (entry.function, entry.register))
-        return cls(lexicon, hints, settings, groups, info)
+        return cls(lexicon, hints, settings, groups, info, lang)
 
     def variant_group(self, group_id: str) -> VariantGroup | None:
         return next((g for g in self.variant_groups if g.id == group_id), None)

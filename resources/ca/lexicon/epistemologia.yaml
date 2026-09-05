@@ -1,70 +1,145 @@
-# Classificació explícita de la força i la funció epistemològica de les
-# expressions. El validador epistemològic bloqueja qualsevol transformació que
-# canviï el recompte d'expressions d'una classe (augmenta o redueix el grau de
-# certesa, o canvia la funció) si cap regla no ho autoritza explícitament
-# (clau «allows_epistemic_change: true» a la definició de la regla).
+# Classificació explícita de la força, la funció i la categoria epistemològica
+# de les expressions. El validador epistemològic bloqueja qualsevol
+# transformació que canviï el recompte d'expressions d'una classe (augmenta o
+# redueix el grau de certesa, o canvia la funció) si cap regla no ho autoritza
+# explícitament (clau «allows_epistemic_change: true» a la definició de la
+# regla), i prohibeix sempre les transicions de categoria que augmenten la
+# certesa (vegeu validation/transitions.py).
 #
 # strength: 0 impossibilitat · 1 possibilitat / dubte / plantejament ·
 #           2 probabilitat / aparença / creença / indici / suggeriment ·
-#           3 afirmació (forma no marcada) · 4 certesa / demostració / confirmació
+#           3 afirmació (forma no marcada) i evidència documentada o atribuïda ·
+#           4 certesa / demostració / confirmació
+# category: LIMITATION (què no es pot establir) · HYPOTHESIS (possibilitat) ·
+#           INFERENCE (el que es pot plantejar o deduir) · EVIDENCE (el que el
+#           text documenta, atribueix o dona per establert) · UNKNOWN.
+# explicit_markers: formes que fan explícita la categoria; el llenguatge
+#           assertiu les prefereix a igual força.
 # Dues classes amb la mateixa força NO són equivalents: «indica» no és
-# «suggereix», «demostra» no és «confirma», «potser» no és «podria».
-description: Força i funció epistemològica de les expressions (marcadors per classe).
+# «suggereix», «demostra» no és «confirma», «potser» no és «podria», i
+# «documenta» no és «indica» ni «demostra».
+description: Força, funció i categoria epistemològica de les expressions (marcadors per classe).
 language: ca
 classes:
   - id: impossibility
     label: impossibilitat de demostrar
+    category: LIMITATION
     strength: 0
     markers: [no es pot demostrar, no es pot afirmar, no es pot confirmar, no es pot saber,
-              no es pot determinar, no és possible demostrar, no és demostrable, no hi ha proves,
-              no ha estat demostrat, no s'ha pogut demostrar, no s'ha demostrat, resta sense demostrar]
+              no es pot determinar, no es pot establir, no es pot provar, no és possible demostrar,
+              no és possible provar, no és demostrable, no hi ha proves, no hi ha constància,
+              no consta, no ha estat demostrat, no s'ha pogut demostrar, no s'ha demostrat,
+              resta sense demostrar, no permet demostrar, no permet establir, no permet determinar,
+              no permet confirmar, no permet provar, no permet saber, no permet afirmar,
+              no permeten demostrar, no permeten establir, la documentació no permet,
+              les fonts no permeten]
+    explicit_markers: [no permet demostrar, no permet establir, no permet determinar,
+                       no permet confirmar, no permet provar, no permet saber, no permet afirmar,
+                       no permeten demostrar, no permeten establir, la documentació no permet,
+                       les fonts no permeten, no hi ha constància]
   - id: doubt
     label: dubte
+    category: HYPOTHESIS
     strength: 1
-    markers: [potser, tal vegada, qui sap si, hipotèticament, per ventura]
+    markers: [potser, tal vegada, qui sap si, per ventura]
   - id: modal_possibility
     label: possibilitat modal
+    category: HYPOTHESIS
     strength: 1
     markers: [podria, podrien, podria ser, pot ser que, podria haver]
   - id: possibility
     label: possibilitat
+    category: HYPOTHESIS
     strength: 1
     markers: [és possible, possiblement, cabria la possibilitat, hi ha la possibilitat,
-              no es descarta]
-  - id: proposal
-    label: plantejament d'hipòtesi
+              no es descarta, no es pot descartar, seria possible]
+  - id: hypothesis
+    label: hipòtesi explícita
+    category: HYPOTHESIS
     strength: 1
-    markers: [permet plantejar, permet suposar, permet pensar, permet imaginar, permet hipotetitzar,
-              es pot plantejar, es podria plantejar, fa pensar, convida a pensar, hipòtesi]
+    markers: [hipòtesi, hipòtesis, hipotèticament, hipotètica, hipotètic, plantejar la hipòtesi,
+              es podria plantejar, cabria plantejar]
+    explicit_markers: [hipòtesi, hipòtesis, plantejar la hipòtesi]
+  - id: proposal
+    label: plantejament
+    category: INFERENCE
+    strength: 1
+    markers: [permet plantejar, permeten plantejar, permet suposar, permet pensar, permet imaginar,
+              permet hipotetitzar, permet interpretar, permeten interpretar, es pot plantejar,
+              es pot interpretar, fa pensar, convida a pensar]
+    explicit_markers: [permet plantejar, permeten plantejar, permet interpretar, permeten interpretar]
+  - id: inference
+    label: inferència
+    category: INFERENCE
+    strength: 2
+    markers: [permet inferir, permeten inferir, permet deduir, permeten deduir, es pot inferir,
+              es pot deduir, se'n dedueix, es dedueix, sembla indicar, semblen indicar,
+              és compatible amb, són compatibles amb]
+    explicit_markers: [permet inferir, permeten inferir, permet deduir, permeten deduir]
   - id: probability
     label: probabilitat
+    category: INFERENCE
     strength: 2
     markers: [probablement, versemblantment, presumiblement, presumptament, suposadament,
               segurament, amb tota probabilitat]
   - id: probable_assessment
     label: valoració de probabilitat
+    category: INFERENCE
     strength: 2
     markers: [és probable, és versemblant, resulta probable, sembla probable]
   - id: appearance
     label: aparença
+    category: HYPOTHESIS
     strength: 2
     markers: [sembla, semblen, sembla que, semblaria, semblava, aparentment, a primera vista,
               es diria, fa l'efecte, té l'aparença]
   - id: belief
     label: creença o consideració
+    category: INFERENCE
     strength: 2
     markers: [es creu, es considera, es pensa, es suposa, hom creu, hom considera, es té per]
   - id: indication
     label: indici
+    category: EVIDENCE
     strength: 2
-    markers: [indica, indiquen, indicaria, indicarien, apunta a, apunten a, apunta que, apunten que,
-              assenyala que, assenyalen que]
+    markers: [indica, indiquen, indicaria, indicarien, mostra que, mostren que, reflecteix,
+              reflecteixen]
+  - id: pointer
+    label: indici orientatiu
+    category: INFERENCE
+    strength: 2
+    markers: [apunta a, apunten a, apunta que, apunten que]
   - id: suggestion
     label: suggeriment
+    category: INFERENCE
     strength: 2
     markers: [suggereix, suggereixen, suggeriria, insinua, insinuen, deixa entreveure]
+  - id: documentation
+    label: evidència documentada
+    category: EVIDENCE
+    strength: 3
+    markers: [documenta, documenten, consta que, consten, registra, registren, testifica,
+              testifiquen, testimonia, testimonien, es conserva, es conserven, es troba documentat,
+              es troba documentada, està documentat, està documentada, queda documentat,
+              queda documentada, hi ha constància]
+    explicit_markers: [documenta, documenten, consta que, registra, registren, testifica,
+                       testimonia, es troba documentat, es troba documentada, està documentat,
+                       està documentada, hi ha constància]
+  - id: attribution
+    label: atribució a una font
+    category: EVIDENCE
+    strength: 3
+    markers: [segons, com detalla, com assenyala, com explica, com recorda, com observa,
+              com destaca, com documenta, com indica, com mostra, com apunta, tal com detalla,
+              tal com assenyala, tal com explica, tal com indica, tal com mostra, detalla que,
+              detallen que, assenyala que, assenyalen que, explica que, expliquen que,
+              recorda que, recorden que, observa que, observen que, destaca que, destaquen que]
+    explicit_markers: [detalla que, detallen que, assenyala que, assenyalen que, explica que,
+                       expliquen que, recorda que, recorden que, observa que, observen que,
+                       destaca que, destaquen que]
   - id: assertion
     label: afirmació
+    category: UNKNOWN
     strength: 3
     # Forma no marcada: no es compta (afegir o treure una còpula no canvia la
     # certesa), però sí que identifica una hipòtesi convertida en afirmació.
@@ -74,24 +149,28 @@ classes:
               representa, representen]
   - id: certainty
     label: certesa
+    category: EVIDENCE
     strength: 4
     markers: [certament, sens dubte, sense cap dubte, sense cap mena de dubte, indubtablement,
               inqüestionablement, innegablement, evidentment, òbviament, clarament, és evident,
               és clar, és cert, és obvi, és indubtable, definitivament, necessàriament,
-              amb tota seguretat]
+              amb tota seguretat, està demostrat, està provat]
   - id: demonstration
     label: demostració
+    category: EVIDENCE
     strength: 4
     markers: [demostra, demostren, demostrà, demostraren, ha demostrat, han demostrat,
               queda demostrat, prova que, proven que, evidencia, evidencien, posa de manifest,
               posen de manifest, estableix que, estableixen que]
   - id: confirmation
     label: confirmació
+    category: EVIDENCE
     strength: 4
     markers: [confirma, confirmen, confirmà, confirmaren, ha confirmat, han confirmat, corrobora,
               corroboren, ratifica, ratifiquen, verifica, verifiquen, constata, constaten]
   - id: necessity
     label: necessitat (deòntica, fora de l'escala de certesa)
+    category: UNKNOWN
     strength: null
     markers: [cal, calia, caldrà, caldria, calgui, és necessari, és necessària, és imprescindible,
               és obligatori, és indispensable]

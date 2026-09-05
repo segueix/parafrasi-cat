@@ -106,6 +106,8 @@ class ModeSettings:
     structure_gain: float = 0.0
     paragraph_beam_width: int = 1
     sentence_candidates_for_paragraph: int = 3
+    coverage_balance: float = 0.0
+    """Bonus petit per l'arquitectura que reparteix millor la reredacció (només nivell 5)."""
 
     @property
     def label(self) -> str:
@@ -129,7 +131,11 @@ class ModeSettings:
             max_candidates_per_sentence=self.max_candidates_per_sentence,
             level=effective,
             length_ratio=self.length_ratio,
-            scoring=replace(config.scoring, structure=self.structure_gain),
+            scoring=replace(
+                config.scoring,
+                structure=self.structure_gain,
+                coverage_balance=self.coverage_balance if effective >= MAX_LEVEL else 0.0,
+            ),
             # La cerca d'arquitectures de paràgraf només té sentit al nivell 5.
             paragraph_beam_width=self.paragraph_beam_width if effective >= MAX_LEVEL else 1,
             sentence_candidates_for_paragraph=self.sentence_candidates_for_paragraph,
@@ -153,6 +159,7 @@ class ModeSettings:
             "structure_gain": self.structure_gain,
             "paragraph_beam_width": self.paragraph_beam_width,
             "sentence_candidates_for_paragraph": self.sentence_candidates_for_paragraph,
+            "coverage_balance": self.coverage_balance,
         }
 
 
@@ -188,6 +195,7 @@ DEEP = ModeSettings(
     structure_gain=0.35,
     paragraph_beam_width=6,
     sentence_candidates_for_paragraph=3,
+    coverage_balance=0.06,
 )
 
 MODES: dict[RewriteMode, ModeSettings] = {

@@ -11,7 +11,7 @@ from parafrasi_cat.analyzer.lexicon import ClosedClassLexicon
 from parafrasi_cat.analyzer.paragraphs import Paragraph
 from parafrasi_cat.analyzer.sentences import Sentence
 from parafrasi_cat.candidates.candidate import Candidate
-from parafrasi_cat.candidates.generator import CandidateGenerator
+from parafrasi_cat.candidates.generator import CHAINED_RULES_KEY, CandidateGenerator
 from parafrasi_cat.candidates.repair import AgreementRepair
 from parafrasi_cat.core.spans import Span
 from parafrasi_cat.core.transformation import SemanticRisk, Transformation
@@ -19,6 +19,8 @@ from parafrasi_cat.morphology.provider import MorphologyProvider, NullMorphology
 from parafrasi_cat.pipeline.paragraph_search import BeamSettings, ParagraphBeam
 from parafrasi_cat.pipeline.result import (
     EvaluatedCandidate,
+    OpportunityStats,
+    ParagraphOpportunities,
     ParagraphResult,
     ParaphraseResult,
     RejectedProposal,
@@ -105,6 +107,7 @@ class Pipeline:
         source_mode: str = "own",
         paragraph_beam_width: int = 1,
         sentence_candidates_for_paragraph: int = 3,
+        assertive_language: bool = False,
     ) -> None:
         self._analyzer = analyzer
         self._protector = protector
@@ -137,6 +140,7 @@ class Pipeline:
             beam_width=max(1, paragraph_beam_width),
             candidates_per_sentence=max(1, sentence_candidates_for_paragraph),
         )
+        self._assertive_language = assertive_language
 
     @property
     def analyzer(self) -> Analyzer:
@@ -145,6 +149,11 @@ class Pipeline:
     @property
     def beam_settings(self) -> BeamSettings:
         return self._beam_settings
+
+    @property
+    def assertive_language(self) -> bool:
+        """Cert si l'opció «Llenguatge assertiu» és activa en aquesta canonada."""
+        return self._assertive_language
 
     @property
     def searches_paragraphs(self) -> bool:
@@ -265,6 +274,7 @@ class Pipeline:
             dictionary_names=self._dictionary_names,
             preferences_name=self._preferences_name,
             source_mode=self._source_mode,
+            assertive_language=self._assertive_language,
         )
 
     def _unit_stats(self, sentences: Sequence[Sentence]) -> dict[int, UnitStats]:
@@ -350,6 +360,7 @@ class Pipeline:
             rejected_proposals=tuple(rejected),
             protected_spans=ctx.protected_spans,
             notes=tuple(ctx.notes),
+            opportunities=_opportunities(len(proposals), len(rejected), evaluated, best),
         )
 
     def _repaired(
@@ -407,8 +418,9 @@ class Pipeline:
     def _paragraph_beam(self) -> ParagraphBeam:
         weights = getattr(self._scorer, "weights", None)
         affinity_weight = float(getattr(weights, "author_affinity", 0.0)) if weights else 0.0
+        balance_weight = float(getattr(weights, "coverage_balance", 0.0)) if weights else 0.0
         return ParagraphBeam(
-            settings=self._beam_settings,
+            settings=replace(self._beam_settings, coverage_balance=balance_weight),
             generator=self._generator,
             scorer=self._scorer,
             validators=self._validators,
@@ -457,6 +469,11 @@ class Pipeline:
         candidates = self._generator.generate(paragraph.index, intermediate, proposals)
         validation_ctx = ValidationContext(paragraph.text, original_protected)
         evaluated, best = self._evaluate(candidates, validation_ctx, document)
+        fusions = sum(
+            1
+            for e in evaluated
+            if e.accepted and e.candidate.n_transformations == 1 and e.candidate.is_structural
+        )
         return ParagraphResult(
             index=paragraph.index,
             source_text=paragraph.text,
@@ -467,6 +484,23 @@ class Pipeline:
             rejected_proposals=tuple(rejected),
             protected_spans=original_protected,
             notes=tuple(ctx.notes),
+            opportunities=ParagraphOpportunities(
+                safe=sum(r.opportunities.safe for r in inner) + fusions,
+                structural=sum(1 for r in inner if r.opportunities.structural) + fusions,
+                fusion=fusions,
+                split=sum(
+                    1
+                    for r in inner
+                    for e in r.candidates
+                    if e.accepted
+                    and e.candidate.n_transformations == 1
+                    and any(t.family.cross_sentence for t in e.candidate.transformations)
+                ),
+                beam_candidates=len(evaluated),
+                distribution_of_change=tuple(
+                    r.selected.candidate.structural_degree() for r in inner
+                ),
+            ),
         )
 
     # --- comú -------------------------------------------------------------------------------
@@ -529,6 +563,37 @@ def _context(stats: Mapping[int, UnitStats], own: set[int]) -> AdaptationContext
     return AdaptationContext(
         before=UnitStats.total(value for index, value in sorted(stats.items()) if index < first),
         after=UnitStats.total(value for index, value in sorted(stats.items()) if index > last),
+    )
+
+
+def _opportunities(
+    n_proposals: int,
+    n_rejected: int,
+    evaluated: Sequence[EvaluatedCandidate],
+    best: EvaluatedCandidate,
+) -> OpportunityStats:
+    """Recompte d'oportunitats d'una frase a partir dels candidats d'una sola transformació.
+
+    Una transformació encadenada (una regla reaplicada sobre el resultat d'una
+    altra) no és cap oportunitat nova de l'original: no hi compta.
+    """
+    singles = [
+        e
+        for e in evaluated
+        if e.candidate.n_transformations == 1
+        and not e.candidate.transformations[0].metadata.get(CHAINED_RULES_KEY)
+    ]
+    safe = [e for e in singles if e.accepted]
+    structural = sum(1 for e in safe if e.candidate.is_structural)
+    return OpportunityStats(
+        detected=n_proposals + n_rejected,
+        rejected_proposals=n_rejected,
+        safe=len(safe),
+        structural=structural,
+        surface=len(safe) - structural,
+        unsafe=len(singles) - len(safe),
+        selected_family=best.candidate.signature,
+        selected_is_original=best.candidate.is_identity,
     )
 
 

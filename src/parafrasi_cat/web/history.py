@@ -95,6 +95,7 @@ class HistoryEntry:
             "dictionaries": config.get("dictionaries", []),
             "preferences": config.get("preferences", ""),
             "source_mode": config.get("source_mode", "own"),
+            "assertive_language": bool(config.get("assertive_language", False)),
             "n_feedback": len(self.feedback),
         }
 

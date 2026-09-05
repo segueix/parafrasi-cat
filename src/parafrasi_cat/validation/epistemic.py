@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from parafrasi_cat.candidates.candidate import Candidate
@@ -27,11 +27,17 @@ from parafrasi_cat.core.text import phrase_pattern
 from parafrasi_cat.core.transformation import Transformation
 from parafrasi_cat.resources import as_bool, as_mapping_list, as_str, as_str_list, load_mapping
 from parafrasi_cat.validation.base import ValidationContext
+from parafrasi_cat.validation.categories import EpistemicCategory
 from parafrasi_cat.validation.result import (
     ValidationDimension,
     ValidationIssue,
     ValidationResult,
     ValidationSeverity,
+)
+from parafrasi_cat.validation.transitions import (
+    Transition,
+    TransitionVerdict,
+    check_categories,
 )
 
 EPISTEMOLOGY_FILE = "lexicon/epistemologia.yaml"
@@ -50,6 +56,13 @@ class EpistemicClass:
     strength: int | None
     markers: tuple[str, ...]
     counted: bool = True
+    category: EpistemicCategory = EpistemicCategory.UNKNOWN
+    """Categoria (evidència, inferència, hipòtesi, limitació) de la classe."""
+    explicit_markers: tuple[str, ...] = ()
+    """Formes que fan explícita la categoria (el llenguatge assertiu les prefereix)."""
+
+    def is_explicit(self, marker: str) -> bool:
+        return marker.lower().strip() in {m.lower() for m in self.explicit_markers}
 
     @property
     def on_scale(self) -> bool:
@@ -64,6 +77,8 @@ class EpistemicMatch:
     class_id: str
     label: str
     strength: int | None
+    category: EpistemicCategory = EpistemicCategory.UNKNOWN
+    explicit: bool = False
 
     def describe(self) -> str:
         force = "" if self.strength is None else f", força {self.strength}"
@@ -72,14 +87,27 @@ class EpistemicMatch:
 
 @dataclass(frozen=True, slots=True)
 class EpistemicProfile:
-    """Marcadors trobats en un text i recompte per classe (només les comptades)."""
+    """Marcadors trobats en un text i recomptes per classe i per categoria (només les comptades)."""
 
     matches: tuple[EpistemicMatch, ...]
     counts: Counter[str]
+    categories: Counter[EpistemicCategory] = field(default_factory=Counter)
 
     @property
     def strengths(self) -> tuple[int, ...]:
         return tuple(m.strength for m in self.matches if m.strength is not None)
+
+    @property
+    def dominant(self) -> EpistemicCategory:
+        """Categoria que governa el text: la més feble present (una limitació mana sobre tot)."""
+        ranked = [c for c, n in self.categories.items() if n > 0 and c.rank is not None]
+        if not ranked:
+            return EpistemicCategory.UNKNOWN
+        return min(ranked, key=lambda c: c.rank or 0)
+
+    @property
+    def explicit_markers(self) -> tuple[str, ...]:
+        return tuple(m.text for m in self.matches if m.explicit)
 
     def describe(self) -> str:
         return ", ".join(m.describe() for m in self.matches) or "(cap marcador)"
@@ -136,7 +164,13 @@ class EpistemicLexicon:
                 start, end = match.span()
                 matches.append(
                     EpistemicMatch(
-                        text[start:end], Span(start, end), cls.id, cls.label, cls.strength
+                        text[start:end],
+                        Span(start, end),
+                        cls.id,
+                        cls.label,
+                        cls.strength,
+                        cls.category,
+                        cls.is_explicit(_marker),
                     )
                 )
                 masked = masked[:start] + " " * (end - start) + masked[end:]
@@ -144,7 +178,45 @@ class EpistemicLexicon:
         counts: Counter[str] = Counter(
             m.class_id for m in matches if self._by_id[m.class_id].counted
         )
-        return EpistemicProfile(tuple(matches), counts)
+        categories: Counter[EpistemicCategory] = Counter(
+            m.category
+            for m in matches
+            if self._by_id[m.class_id].counted and m.category is not EpistemicCategory.UNKNOWN
+        )
+        return EpistemicProfile(tuple(matches), counts, categories)
+
+    def categorize(self, text: str) -> EpistemicCategory:
+        """Categoria que governa un text: la més feble dels seus marcadors comptats."""
+        return self.profile(text).dominant
+
+    def verdict(
+        self, before: str, after: str, *, redundancy: bool = False
+    ) -> TransitionVerdict | None:
+        """Transició de categoria entre dos textos segons la matriu (``None`` si no n'hi ha).
+
+        Dins d'una mateixa categoria, augmentar la força (una atribució «segons
+        X» convertida en «està demostrat», un indici en demostració) també és
+        una transició prohibida: cap regla no pot fer-la.
+        """
+        profile_before = self.profile(before)
+        profile_after = self.profile(after)
+        verdict = check_categories(
+            profile_before.categories, profile_after.categories, redundancy=redundancy
+        )
+        if verdict is not None:
+            return verdict
+        strongest_before = max(profile_before.strengths, default=UNMARKED_STRENGTH)
+        strongest_after = max(profile_after.strengths, default=UNMARKED_STRENGTH)
+        if profile_before.counts != profile_after.counts and strongest_after > strongest_before:
+            category = profile_after.dominant
+            return TransitionVerdict(
+                Transition.FORBIDDEN,
+                profile_before.dominant,
+                category,
+                f"augmenta la força expressada dins de la categoria ({strongest_before} → "
+                f"{strongest_after})",
+            )
+        return None
 
     def change(self, before: str, after: str) -> EpistemicChange | None:
         """Canvi de perfil entre ``before`` i ``after``; ``None`` si són equivalents."""
@@ -182,6 +254,10 @@ class EpistemicLexicon:
                     strength=strength,
                     markers=tuple(m.strip() for m in as_str_list(item, "markers") if m.strip()),
                     counted=as_bool(item, "counted", True),
+                    category=EpistemicCategory.parse(item.get("category")),
+                    explicit_markers=tuple(
+                        m.strip() for m in as_str_list(item, "explicit_markers") if m.strip()
+                    ),
                 )
             )
         if not classes:
@@ -217,6 +293,12 @@ def _direction(lost: tuple[EpistemicMatch, ...], gained: tuple[EpistemicMatch, .
     return "canvia la funció epistemològica sense canviar-ne la força"
 
 
+def _who_could(verdict: TransitionVerdict) -> str:
+    if verdict.transition is Transition.FORBIDDEN:
+        return "cap regla no pot autoritzar aquesta transició"
+    return "caldria una regla que ho declarés"
+
+
 def rule_ids_of(transformation: Transformation) -> tuple[str, ...]:
     """Regla principal i regles encadenades d'una transformació."""
     chained = transformation.metadata.get(CHAINED_RULES_KEY, "")
@@ -227,18 +309,36 @@ class EpistemicValidator:
     """Bloqueja els canvis de força o funció epistemològica no autoritzats.
 
     Cada transformació ha de conservar el perfil epistemològic del fragment
-    que reescriu; si el canvia, totes les regles implicades (la principal i
-    les encadenades) han de figurar a ``authorized_rules``. A més, el candidat
-    sencer ha de conservar el perfil de la frase original llevat que alguna
-    transformació autoritzada l'hagi canviat.
+    que reescriu. Si el canvia:
+
+    - la matriu de transicions (:mod:`parafrasi_cat.validation.transitions`)
+      decideix si el canvi de categoria és impossible (mai cap regla no pot
+      convertir una hipòtesi o una inferència en evidència, ni fer desaparèixer
+      una limitació o un marcador);
+    - un canvi de classe dins del que la matriu permet només passa si totes les
+      regles implicades (la principal i les encadenades) figuren a
+      ``authorized_rules``;
+    - una reducció de redundància (un marcador repetit de la mateixa
+      categoria, o una aparença damunt d'una possibilitat) només passa si
+      totes les regles figuren a ``redundancy_rules`` i la categoria més feble
+      es conserva.
+
+    A més, el candidat sencer ha de conservar el perfil de la frase original
+    llevat que alguna transformació autoritzada l'hagi canviat.
     """
 
     validator_id = "epistemic"
     dimension = ValidationDimension.EPISTEMIC
 
-    def __init__(self, lexicon: EpistemicLexicon, authorized_rules: Iterable[str] = ()) -> None:
+    def __init__(
+        self,
+        lexicon: EpistemicLexicon,
+        authorized_rules: Iterable[str] = (),
+        redundancy_rules: Iterable[str] = (),
+    ) -> None:
         self._lexicon = lexicon
         self._authorized = frozenset(authorized_rules)
+        self._redundancy = frozenset(redundancy_rules)
 
     @property
     def lexicon(self) -> EpistemicLexicon:
@@ -248,6 +348,10 @@ class EpistemicValidator:
     def authorized_rules(self) -> frozenset[str]:
         return self._authorized
 
+    @property
+    def redundancy_rules(self) -> frozenset[str]:
+        return self._redundancy
+
     def validate(self, candidate: Candidate, ctx: ValidationContext) -> ValidationResult:
         issues: list[ValidationIssue] = []
         authorized_change = False
@@ -256,7 +360,35 @@ class EpistemicValidator:
             if change is None:
                 continue
             rules = rule_ids_of(transformation)
-            if all(rule in self._authorized for rule in rules):
+            authorized = all(rule in self._authorized for rule in rules)
+            redundancy = all(rule in self._redundancy for rule in rules)
+            verdict = self._lexicon.verdict(
+                transformation.text_before, transformation.text_after, redundancy=redundancy
+            )
+            if verdict is not None and not verdict.allowed(authorized=authorized):
+                issues.append(
+                    ValidationIssue(
+                        self.validator_id,
+                        ValidationSeverity.ERROR,
+                        f"La regla «{transformation.rule_id}» {change.describe()} sense cap regla "
+                        f"que ho autoritzi: {verdict.describe()} ({_who_could(verdict)})",
+                        self.dimension,
+                    )
+                )
+                continue
+            if verdict is None and redundancy and not authorized:
+                authorized_change = True
+                issues.append(
+                    ValidationIssue(
+                        self.validator_id,
+                        ValidationSeverity.WARNING,
+                        f"Redundància epistemològica reduïda per la regla "
+                        f"«{transformation.rule_id}»: {change.describe()}",
+                        self.dimension,
+                    )
+                )
+                continue
+            if authorized:
                 authorized_change = True
                 issues.append(
                     ValidationIssue(
@@ -277,19 +409,30 @@ class EpistemicValidator:
                     self.dimension,
                 )
             )
-        if (
-            not any(i.severity is ValidationSeverity.ERROR for i in issues)
-            and not authorized_change
-        ):
+        if not any(i.severity is ValidationSeverity.ERROR for i in issues):
             whole = self._lexicon.change(ctx.source_text, candidate.text)
             if whole is not None:
-                issues.append(
-                    ValidationIssue(
-                        self.validator_id,
-                        ValidationSeverity.ERROR,
-                        "El candidat canvia el perfil epistemològic de la frase: "
-                        f"{whole.describe()}",
-                        self.dimension,
-                    )
+                verdict = self._lexicon.verdict(
+                    ctx.source_text, candidate.text, redundancy=authorized_change
                 )
+                if verdict is not None and not verdict.allowed(authorized=authorized_change):
+                    issues.append(
+                        ValidationIssue(
+                            self.validator_id,
+                            ValidationSeverity.ERROR,
+                            "El candidat canvia el perfil epistemològic de la frase: "
+                            f"{whole.describe()}; {verdict.describe()} ({_who_could(verdict)})",
+                            self.dimension,
+                        )
+                    )
+                elif not authorized_change:
+                    issues.append(
+                        ValidationIssue(
+                            self.validator_id,
+                            ValidationSeverity.ERROR,
+                            "El candidat canvia el perfil epistemològic de la frase: "
+                            f"{whole.describe()}",
+                            self.dimension,
+                        )
+                    )
         return ValidationResult(tuple(issues))

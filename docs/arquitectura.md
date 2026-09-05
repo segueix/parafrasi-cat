@@ -16,7 +16,8 @@ text d'entrada
 [protected] detecció de fragments intocables (dates, xifres, noms, cometes, citacions, termes)
    │
    ▼  per a cada frase
-[rules]     cada regla activa proposa Transformation(s) explicables
+[rules]     cada regla activa proposa Transformation(s) explicables (patrons, diccionaris,
+   │        connectors, morfologia verbal, nominalitzacions, blocs sintàctics amb parser fiable)
    │        ├─ filtre: toca un fragment protegit?      → descartada
    │        ├─ filtre: risc semàntic > màxim?           → descartada
    │        └─ filtre: confiança < mínima?              → descartada
@@ -24,14 +25,17 @@ text d'entrada
 [candidates] candidat identitat + un candidat per transformació + combinacions compatibles
    │
    ▼
-[validation] invariants de contingut (fragments protegits, xifres, negació, modalitat, longitud)
+[validation] invariants de contingut (fragments protegits, xifres, negació, modalitat, longitud,
+   │        matriu de transicions epistemològiques per categoria)
    │        └─ candidat que falla → rebutjat (mai no se selecciona)
    ▼
 [scoring]   puntuació composta (guany per canvis segurs, conscient de la família; grau estructural
-   │        i superficial; penalització de degradació − distància d'estil) i selecció determinista
+   │        i superficial; penalització de degradació i del ritme de les fusions − distància
+   │        d'estil; bonus assertiu petit si l'opció és activa) i selecció determinista
    ▼
 [pipeline]  fase de paràgraf: regles entre frases i, al nivell 5 del mode profund, cerca en feix
-   │        d'arquitectures alternatives de paràgraf (paragraph_search)
+   │        d'arquitectures alternatives de paràgraf (paragraph_search) amb balanç de cobertura;
+   │        recompte d'oportunitats per frase i per paràgraf
    ▼
 [pipeline]  reconstrucció del document conservant espais i salts de línia
    │
@@ -47,11 +51,11 @@ ParaphraseResult (text resultant + informe complet)
 | `analyzer` | Anàlisi superficial basada en regles | `Tokenizer`, `SentenceSplitter`, `RuleBasedAnalyzer`, protocol `Analyzer` |
 | `morphology` | Lemes i trets flexius | `MorphFeatures`, `LexicalEntry`, `DictionaryMorphology`, protocol `MorphologyProvider` |
 | `protected` | Fragments intocables | `ProtectedSpan`, `ProtectionKind`, detectors, `Protector` |
-| `rules` | Regles que proposen transformacions | `Rule`, `RuleContext`, `LexicalSubstitutionRule`, `RuleRegistry`, `RuleSetConfig` |
+| `rules` | Regles que proposen transformacions | `Rule`, `RuleContext`, `LexicalSubstitutionRule`, `BlockMoveRule`, `RuleRegistry`, `RuleSetConfig` |
 | `candidates` | Construcció de versions alternatives | `Candidate`, `CandidateGenerator` |
-| `validation` | Invariants de contingut | `Validator`, `ValidationResult`, validadors concrets |
-| `style` | Estilometria i perfils | `StyleProfile`, `StyleMetrics`, `StyleEvaluator`, `estimate_profile` |
-| `scoring` | Puntuació i selecció | `ScoringWeights`, `CompositeScorer`, `select_best` |
+| `validation` | Invariants de contingut | `Validator`, `ValidationResult`, validadors concrets, `EpistemicCategory`, matriu `TRANSITIONS` |
+| `style` | Estilometria i perfils | `StyleProfile`, `StyleMetrics`, `StyleEvaluator`, `estimate_profile`, `FusionRhythm`, `epistemic_profile` |
+| `scoring` | Puntuació i selecció | `ScoringWeights`, `CompositeScorer`, `AssertiveEvaluator`, `select_best` |
 | `pipeline` | Orquestració i configuració | `Pipeline`, `PipelineConfig`, `build_pipeline`, `ParaphraseResult`, `ParagraphBeam` |
 | `resources` (mòdul) | Localització i lectura de YAML/JSON | `ProjectPaths`, `load_mapping`, accessors tipats |
 | `cli` (mòdul) | Interfície de línia d'ordres | `main` |

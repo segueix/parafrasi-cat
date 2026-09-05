@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from parafrasi_cat.candidates.candidate import Candidate
@@ -54,6 +54,83 @@ class EvaluatedCandidate:
             "selected": self.selected,
             "accepted": self.accepted,
             "rejection_reason": self.rejection_reason,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class OpportunityStats:
+    """Oportunitats de transformació d'una frase: què hi havia i què ha passat.
+
+    Serveix per distingir «no hi havia cap alternativa» de «l'original ha
+    guanyat»: ``detected`` són les propostes de totes les regles;
+    ``rejected_proposals`` les descartades abans de generar candidats (risc,
+    confiança, fragment protegit); ``safe`` les propostes que, soles, han
+    donat un candidat que supera la validació (``structural`` i ``surface``
+    les reparteixen per família); ``unsafe`` les que la validació ha rebutjat.
+    """
+
+    detected: int = 0
+    rejected_proposals: int = 0
+    safe: int = 0
+    structural: int = 0
+    surface: int = 0
+    unsafe: int = 0
+    selected_family: str = "ORIGINAL"
+    selected_is_original: bool = True
+
+    @property
+    def verdict(self) -> str:
+        if self.detected == 0:
+            return "sense cap alternativa"
+        if self.safe == 0:
+            return "cap alternativa segura"
+        if self.selected_is_original:
+            return "l'original ha guanyat"
+        return "transformada"
+
+    def describe(self) -> str:
+        return (
+            f"{self.detected} oportunitats detectades · {self.safe} segures "
+            f"({self.structural} estructurals, {self.surface} superficials) · "
+            f"{self.unsafe} insegures · {self.rejected_proposals} descartades abans · "
+            f"seleccionat {self.selected_family}: {self.verdict}"
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "opportunities_detected": self.detected,
+            "rejected_proposals": self.rejected_proposals,
+            "safe_proposals": self.safe,
+            "structural_proposals": self.structural,
+            "surface_proposals": self.surface,
+            "unsafe_proposals": self.unsafe,
+            "selected_family": self.selected_family,
+            "selected_is_original": self.selected_is_original,
+            "verdict": self.verdict,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ParagraphOpportunities:
+    """Oportunitats d'un paràgraf: locals conservades, fusions i divisions possibles."""
+
+    safe: int = 0
+    structural: int = 0
+    fusion: int = 0
+    split: int = 0
+    beam_candidates: int = 0
+    distribution_of_change: tuple[float, ...] = ()
+    coverage_balance: float | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "paragraph_safe_opportunities": self.safe,
+            "paragraph_structural_opportunities": self.structural,
+            "paragraph_fusion_opportunities": self.fusion,
+            "paragraph_split_opportunities": self.split,
+            "paragraph_beam_candidates": self.beam_candidates,
+            "distribution_of_change": list(self.distribution_of_change),
+            "coverage_balance": self.coverage_balance,
         }
 
 
@@ -188,6 +265,8 @@ class SentenceResult(_UnitResult):
     protected_spans: tuple[ProtectedSpan, ...]
     notes: tuple[str, ...] = ()
     """Per què el motor no ha transformat (o ha limitat) aquesta frase."""
+    opportunities: OpportunityStats = field(default_factory=OpportunityStats)
+    """Quantes alternatives hi havia, quantes eren segures i què s'ha triat."""
 
     @property
     def changed(self) -> bool:
@@ -201,6 +280,7 @@ class SentenceResult(_UnitResult):
             "output_text": self.output_text,
             "changed": self.changed,
             "notes": list(self.notes),
+            "opportunities": self.opportunities.to_dict(),
             "transformations": [t.to_dict() for t in self.transformations],
             "alternatives": list(self.alternatives),
             "summary": self.summary(),
@@ -233,6 +313,8 @@ class ParagraphResult(_UnitResult):
     """Per què no s'han fusionat frases del paràgraf, quan és rellevant."""
     search: ParagraphSearch | None = None
     """Traça de la cerca en feix d'arquitectures (``None`` sense cerca)."""
+    opportunities: ParagraphOpportunities = field(default_factory=ParagraphOpportunities)
+    """Oportunitats del paràgraf: locals, fusions, divisions i distribució del canvi."""
 
     @property
     def changed(self) -> bool:
@@ -258,6 +340,7 @@ class ParagraphResult(_UnitResult):
             "candidates": [c.to_dict() for c in self.candidates],
             "rejected_proposals": [r.to_dict() for r in self.rejected_proposals],
             "search": None if self.search is None else self.search.to_dict(),
+            "opportunities": self.opportunities.to_dict(),
         }
 
 
@@ -277,6 +360,8 @@ class ParaphraseResult:
     preferences_name: str = ""
     source_mode: str = "own"
     """Origen del text segons l'usuari: ``own`` o ``llm_draft``."""
+    assertive_language: bool = False
+    """Cert si l'opció «Llenguatge assertiu» era activa."""
 
     @property
     def notes(self) -> tuple[str, ...]:
@@ -374,6 +459,7 @@ class ParaphraseResult:
             lines.append("")
             lines.append(f"Frase {sentence.index + 1}: «{sentence.source_text}»")
             _report_unit(lines, sentence, max_discarded)
+            lines.append(f"  Oportunitats: {sentence.opportunities.describe()}")
             lines.extend(f"  ℹ {note}" for note in sentence.notes)
         for paragraph in self.paragraphs:
             if not paragraph.changed and len(paragraph.candidates) <= 1 and not paragraph.notes:
@@ -395,6 +481,7 @@ class ParaphraseResult:
             lines.append(f"Preferències de l'autor: {self.preferences_name}")
         if self.source_mode != "own":
             lines.append("Origen del text: esborrany generat amb LLM (adaptació a l'empremta)")
+        lines.append(f"Llenguatge assertiu: {'actiu' if self.assertive_language else 'inactiu'}")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -407,6 +494,7 @@ class ParaphraseResult:
             "dictionaries": list(self.dictionary_names),
             "preferences": self.preferences_name,
             "source_mode": self.source_mode,
+            "assertive_language": self.assertive_language,
             "transformations": [t.to_dict() for t in self.transformations],
             "protected_spans": [p.to_dict() for p in self.protected_spans],
             "notes": list(self.notes),

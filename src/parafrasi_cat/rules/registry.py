@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from parafrasi_cat.core.errors import ConfigError
 from parafrasi_cat.resources import ProjectPaths, as_str, as_str_list
 from parafrasi_cat.rules.base import AnyRule
+from parafrasi_cat.rules.blocks import BlockMoveRule
 from parafrasi_cat.rules.connectors import ConnectorEquivalenceRule
 from parafrasi_cat.rules.definition import RuleDefinition, definition_from_params
 from parafrasi_cat.rules.fusion import CopularFusionRule, SentenceFusionRule
@@ -148,6 +149,10 @@ def _fusion_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPa
     )
 
 
+def _block_move_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPaths) -> AnyRule:
+    return BlockMoveRule(definition_from_params(params, rule_id))
+
+
 def _copular_fusion_factory(
     rule_id: str, params: Mapping[str, object], paths: ProjectPaths
 ) -> AnyRule:
@@ -190,6 +195,14 @@ def default_registry() -> RuleRegistry:
         "fusion",
         _fusion_factory,
         description="Fusió de frases consecutives compatibles (regla de paràgraf)",
+    )
+    registry.register(
+        "block_move",
+        _block_move_factory,
+        description=(
+            "Moviment de blocs sintàctics tancats amb analitzador fiable "
+            "(paràmetres «kind», «markers», «prepositions»)"
+        ),
     )
     registry.register(
         "copular_fusion",
