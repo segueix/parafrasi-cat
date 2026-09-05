@@ -1,5 +1,5 @@
 # Família 8: canvi controlat d'ordre de complements.
-description: Inversió de la còpula identificativa i reubicació de «segons X».
+description: Inversió de la còpula identificativa i reubicació de complements segurs.
 language: ca
 rules:
   - rule_id: ordre.inversio_copula
@@ -59,62 +59,11 @@ rules:
       negative:
         - "La primera referència itàlica és el monument funerari, que fou encarregat el 1507."
 
-  - rule_id: ordre.segons_inicial_a_final
-    engine: pattern
-    category: ordre
-    level: 3
-    transformation_type: syntactic
-    semantic_risk: low
-    confidence: 0.75
-    description: "«Segons X, Y» → «Y, segons X»"
-    pattern:
-      - {start: true}
-      - {text: segons}
-      - {np: true, group: src}
-      - {text: ","}
-      - {seq: true, group: rest, greedy: true, min_tokens: 3}
-      - {sentence_end: true}
-    conditions:
-      groups:
-        rest: {has_finite_verb: true}
-    transformation: "{rest|cap}, segons {src}"
-    examples:
-      positive:
-        - input: "Segons Fabra, la norma és clara."
-          output: "La norma és clara, segons Fabra."
-      negative:
-        - "Segons ell."
+  # No es mou «Segons X» entre posició inicial i final. És un marcador
+  # d'atribució epistemològica i el seu abast pot quedar ambigu si es desplaça.
+  # Si en el futur es recupera aquesta alternança, haurà d'exigir una comprovació
+  # explícita d'abast amb el parser i el validador epistemològic.
 
-  - rule_id: ordre.segons_final_a_inicial
-    engine: pattern
-    category: ordre
-    level: 3
-    transformation_type: syntactic
-    semantic_risk: low
-    confidence: 0.75
-    description: "«Y, segons X» → «Segons X, Y»"
-    pattern:
-      - {start: true}
-      - {seq: true, group: rest, min_tokens: 3, no_comma: true}
-      - {text: ","}
-      - {text: segons}
-      - {np: true, group: src}
-      - {sentence_end: true}
-    conditions:
-      groups:
-        rest: {has_finite_verb: true}
-    transformation: "Segons {src}, {rest|lower}"
-    examples:
-      positive:
-        - input: "La norma és clara, segons Fabra."
-          output: "Segons Fabra, la norma és clara."
-      negative:
-        - "La norma, segons Fabra, és clara."
-
-  # --- Complements circumstancials interposats -------------------------------------------
-  # «S, en el text de les edicions, V...» → «En el text de les edicions, S V...».
-  # Només amb analitzador: el complement ha de ser un subarbre tancat que pengi
-  # del nucli de l'oració (obl); un complement del nom no es mou.
   - rule_id: ordre.complement_interposat_a_inicial
     engine: pattern
     category: ordre
@@ -135,7 +84,7 @@ rules:
       groups:
         subj: {is_subject: true, no_finite_verb: true}
         comp:
-          starts_with: [en, a, durant, des de, dins, sota, davant, després de, abans de, al llarg de, arran de, a partir de, amb, segons]
+          starts_with: [en, a, durant, des de, dins, sota, davant, després de, abans de, al llarg de, arran de, a partir de, amb]
           no_finite_verb: true
           no_clitic: true
           is_adjunct: true
@@ -150,16 +99,8 @@ rules:
       negative:
         - "Aquest enfocament, per tant, podria interpretar-se com una estratègia calculada."
         - "El text, que és antic, podria interpretar-se com una estratègia."
+        - "La hipòtesi, segons l'investigador, continua oberta."
 
-  # --- Subordinades adverbials: posició dins de l'oració ---------------------------------
-  # Amb analitzador sintàctic, «is_subject» i «is_adverbial_clause» comproven
-  # l'arbre de dependències (el subjecte del nucli i una subordinada adverbial
-  # que en depèn directament); sense analitzador, recorren a les heurístiques
-  # de sempre. «no_clitic» evita que un pronom feble quedi davant del seu
-  # antecedent, i «movable_subtree» que es mogui un bloc que no sigui un
-  # subarbre tancat: amb analitzador fiable, una subordinada complexa (amb una
-  # completiva o una relativa a dins) es pot moure sencera; sense, només una
-  # clàusula simple.
   - rule_id: ordre.adverbial_interposada_a_inicial
     engine: pattern
     category: ordre
@@ -343,10 +284,6 @@ rules:
         - "Encara que el vegi, no el saluda."
         - "Si el text és antic, la regla no funciona."
 
-  # --- «però» interposat → connector adversatiu inicial ----------------------------------------
-  # «La hipòtesi no depèn, però, d'una sola coincidència» → «Tanmateix, la hipòtesi no
-  # depèn d'una sola coincidència»: la mateixa relació adversativa, expressada amb un
-  # connector discursiu al davant. Reordenació lleu (structural_weight 0.4).
   - rule_id: ordre.pero_medial_a_inicial
     engine: pattern
     category: ordre
@@ -379,9 +316,6 @@ rules:
         - "La hipòtesi, però, no és nova."
         - "Tanmateix, la hipòtesi no depèn d'una sola coincidència."
 
-  # --- Connectors discursius: posició inicial ↔ posició medial ---------------------------
-  # Moure un connector és una reordenació lleu (structural_weight 0.4): no
-  # reorganitza cap clàusula.
   - rule_id: ordre.connector_medial_a_inicial
     engine: pattern
     category: ordre
@@ -401,22 +335,16 @@ rules:
       - {sentence_end: true}
     conditions:
       groups:
-        subj: {is_subject: true, no_finite_verb: true}
-        conn:
-          exact: &connectors_mobils
-            [per tant, tanmateix, en canvi, a més, a més a més, així doncs, no obstant això,
-             d'altra banda, en conseqüència, finalment, així mateix, per exemple, en definitiva,
-             en efecte, de fet, doncs, això sí, en principi, en realitat, per consegüent,
-             amb tot, així i tot, malgrat tot, en aquest sentit, en aquest cas]
+        subj: {no_finite_verb: true}
+        conn: {contains_any: [per tant, així doncs, tanmateix, no obstant això, en canvi, amb tot, d'altra banda, de fet, en efecte, per això]}
         rest: {has_finite_verb: true}
     transformation: "{conn|cap}, {subj|lower} {rest}"
     examples:
       positive:
-        - input: "La qüestió, per tant, no és només etimològica."
-          output: "Per tant, la qüestió no és només etimològica."
+        - input: "La hipòtesi, per tant, continua oberta."
+          output: "Per tant, la hipòtesi continua oberta."
       negative:
-        - "La qüestió, segons Fabra, no és només etimològica."
-        - "Per tant, la qüestió no és només etimològica."
+        - "La hipòtesi, segons l'autor, continua oberta."
 
   - rule_id: ordre.connector_inicial_a_medial
     engine: pattern
@@ -426,27 +354,23 @@ rules:
     transformation_type: syntactic
     semantic_risk: low
     confidence: 0.65
-    description: "«Per tant, S V...» → «S, per tant, V...» (connector inicial darrere del subjecte)"
+    description: "«Per tant, S V...» → «S, per tant, V...» (connector inicial a posició medial)"
     pattern:
       - {start: true}
       - {seq: true, group: conn, max_tokens: 3, no_punct: true}
       - {text: ","}
-      - {np: true, group: subj, min_tokens: 2}
+      - {np: true, group: subj}
       - {seq: true, group: rest, greedy: true, min_tokens: 2}
       - {sentence_end: true}
     conditions:
       groups:
-        conn: {exact: *connectors_mobils}
-        subj:
-          is_subject: true
-          no_finite_verb: true
-          not_ends_with: [el, la, els, les, "l'", un, una, uns, unes]
-        rest: {has_finite_verb: true, not_starts_with: [",", i, o, ni, que]}
+        conn: {contains_any: [per tant, així doncs, tanmateix, no obstant això, en canvi, amb tot, d'altra banda, de fet, en efecte, per això]}
+        subj: {no_finite_verb: true}
+        rest: {has_finite_verb: true}
     transformation: "{subj|cap}, {conn|lower}, {rest}"
     examples:
       positive:
-        - input: "Per tant, la qüestió no és només etimològica."
-          output: "La qüestió, per tant, no és només etimològica."
+        - input: "Per tant, la hipòtesi continua oberta."
+          output: "La hipòtesi, per tant, continua oberta."
       negative:
-        - "Per tant, no és només etimològica."
-        - "Segons Fabra, la norma és clara."
+        - "Segons l'autor, la hipòtesi continua oberta."
