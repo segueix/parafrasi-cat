@@ -1,5 +1,5 @@
 # Família 3: canvis verbals segurs.
-description: Passat perifràstic ↔ passat simple; «cal» ↔ «és necessari».
+description: Passat perifràstic ↔ passat simple; normalització concisa de «és necessari» → «cal».
 language: ca
 rules:
   - rule_id: verbal.perifrastic_a_simple
@@ -48,55 +48,18 @@ rules:
         - "El sofà és al menjador."
         - "Demà vindrà."
 
-  - rule_id: verbal.cal_inf_a_es_necessari
-    engine: pattern
-    category: verbal
-    level: 2
-    transformation_type: syntactic
-    semantic_risk: low
-    confidence: 0.8
-    description: "«cal INF» → «és necessari INF»"
-    pattern:
-      - {text: [cal, calia, caldrà, caldria], group: v}
-      - {infinitive: true, group: inf}
-    transformation: "{v|map(cal=és necessari,calia=era necessari,caldrà=serà necessari,caldria=seria necessari)} {inf}"
-    examples:
-      positive:
-        - input: "Cal revisar el capítol IV."
-          output: "És necessari revisar el capítol IV."
-        - input: "Probablement caldria revisar la datació."
-          output: "Probablement seria necessari revisar la datació."
-      negative:
-        - "Cal que vinguis."
-        - "Cal a casa."
-
-  - rule_id: verbal.cal_que_a_es_necessari_que
-    engine: pattern
-    category: verbal
-    level: 2
-    transformation_type: syntactic
-    semantic_risk: low
-    confidence: 0.8
-    description: "«cal que» → «és necessari que»"
-    pattern:
-      - {text: [cal, calia, caldrà, caldria], group: v}
-      - {text: que}
-    transformation: "{v|map(cal=és necessari,calia=era necessari,caldrà=serà necessari,caldria=seria necessari)} que"
-    examples:
-      positive:
-        - input: "Cal que revisem el capítol IV."
-          output: "És necessari que revisem el capítol IV."
-      negative:
-        - "Cal revisar el capítol IV."
-
+  # La direcció «cal» → «és necessari» s'ha retirat del conjunt general:
+  # allarga sistemàticament la frase sense cap benefici estructural ni semàntic
+  # i en les proves reals empitjorava la naturalitat. La forma perifràstica sí
+  # que es pot escurçar de manera segura quan ja és present a l'entrada.
   - rule_id: verbal.es_necessari_inf_a_cal
     engine: pattern
     category: verbal
     level: 2
     transformation_type: syntactic
     semantic_risk: low
-    confidence: 0.8
-    description: "«és necessari INF» → «cal INF»"
+    confidence: 0.85
+    description: "«és necessari INF» → «cal INF» (forma més concisa)"
     pattern:
       - {text: [és, era, serà, seria], group: v}
       - {text: necessari}
@@ -119,8 +82,8 @@ rules:
     level: 2
     transformation_type: syntactic
     semantic_risk: low
-    confidence: 0.8
-    description: "«és necessari que» → «cal que»"
+    confidence: 0.85
+    description: "«és necessari que» → «cal que» (forma més concisa)"
     pattern:
       - {text: [és, era, serà, seria], group: v}
       - {text: necessari}
