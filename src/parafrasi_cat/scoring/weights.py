@@ -25,6 +25,10 @@ class ScoringWeights:
       l'empremta de l'autor més que l'original.
     - ``author_affinity_own``: el mateix pes amb text propi i empremta: un
       desempat lleu entre candidats segurs, no una pressió per imitar.
+    - ``rewrite_pressure``: pressió de reescriptura segura. Només es fa servir
+      quan el mode d'origen és ``llm_draft``: entre candidats ja validats, dona
+      un bonus pel grau de canvi i sobretot per la reestructuració real. No pot
+      compensar errors factuals, epistemològics, terminològics o gramaticals.
     - ``structure``: pes del grau de reredacció estructural (famílies de
       transformació ponderades: un canvi sintàctic segur pesa més que un
       connector, i un canvi entre frases més que un de dins de la frase). Val 0
@@ -63,6 +67,7 @@ class ScoringWeights:
     preferences: float = 0.5
     author_affinity: float = 2.0
     author_affinity_own: float = 0.5
+    rewrite_pressure: float = 0.0
     structure: float = 0.0
     family_gain_decay: float = 0.5
     degradation: float = 0.5
@@ -84,6 +89,7 @@ class ScoringWeights:
             "preferences",
             "author_affinity",
             "author_affinity_own",
+            "rewrite_pressure",
             "structure",
             "degradation",
             "rhythm",
@@ -104,6 +110,7 @@ class ScoringWeights:
             preferences=as_float(data, "preferences", defaults.preferences),
             author_affinity=as_float(data, "author_affinity", defaults.author_affinity),
             author_affinity_own=as_float(data, "author_affinity_own", defaults.author_affinity_own),
+            rewrite_pressure=as_float(data, "rewrite_pressure", defaults.rewrite_pressure),
             structure=as_float(data, "structure", defaults.structure),
             family_gain_decay=as_float(data, "family_gain_decay", defaults.family_gain_decay),
             degradation=as_float(data, "degradation", defaults.degradation),
@@ -122,6 +129,7 @@ class ScoringWeights:
             "preferences": self.preferences,
             "author_affinity": self.author_affinity,
             "author_affinity_own": self.author_affinity_own,
+            "rewrite_pressure": self.rewrite_pressure,
             "structure": self.structure,
             "family_gain_decay": self.family_gain_decay,
             "degradation": self.degradation,
