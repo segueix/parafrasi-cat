@@ -61,9 +61,12 @@ from parafrasi_cat.validation.invariants import (
 from parafrasi_cat.validation.verbal import VerbalTransformationValidator
 
 PROTECTED_TERMS_FILE = "dictionaries/termes_protegits.txt"
-#: Nom de l'opció que activa les regles de llenguatge assertiu («option:» a la regla).
 ASSERTIVE_OPTION = "assertive_language"
 KNOWN_NAMES_FILE = "dictionaries/noms_propis.txt"
+#: Pressió de canvi segura per als esborranys generats amb LLM. És deliberadament
+#: inferior al pes d'afinitat autoral: la finalitat és preferir una alternativa
+#: segura, no canviar per quota ni sacrificar l'estil de l'autor.
+LLM_REWRITE_PRESSURE = 0.9
 
 
 def build_pipeline(
@@ -71,16 +74,6 @@ def build_pipeline(
     *,
     registry: RuleRegistry | None = None,
 ) -> Pipeline:
-    """Munta la canonada completa amb els recursos del projecte.
-
-    Tots els components es creen aquí de manera explícita perquè sigui fàcil
-    substituir-ne qualsevol (un altre analitzador, més validadors, etc.).
-
-    Jerarquia de prioritats terminològiques que en resulta: fragments
-    protegits explícitament > termes protegits dels diccionaris > formes
-    preferides dels diccionaris > preferències explícites de l'autor (fitxer
-    i feedback) > empremta estadística > preferències generals del motor.
-    """
     config = config or PipelineConfig()
     paths = ProjectPaths.discover(config.home)
     lang = paths.language(config.language)
@@ -92,7 +85,6 @@ def build_pipeline(
     author = load_author_preferences(config, paths)
     feedback = load_feedback(config, author)
 
-    # Nivells 1 i 2: proteccions absolutes (protector i validadors).
     user_terms = _collect_user_terms(config, paths)
     dictionary_terms = dictionaries.protected_terms
     protector = default_protector(
@@ -111,15 +103,12 @@ def build_pipeline(
         .up_to_level(config.level)
     )
     if dictionaries.substitutions and DictionaryPreferenceRule.DEFAULT_ID not in rule_set.rule_ids:
-        # Nivell 3: les formes a evitar dels diccionaris generen propostes de substitució.
         rule_set = rule_set.with_extra_rules([DictionaryPreferenceRule(dictionaries)])
 
     all_terms = tuple(dict.fromkeys((*user_terms, *dictionary_terms)))
     morphology = create_morphology_provider(config.morphology, lang, lexicon=lexicon)
     syntax = build_syntax_provider(config, morphology)
     if syntax.available and not isinstance(syntax, CachedSyntax):
-        # Una sola memòria cau d'anàlisis per a la canonada, els validadors, l'empremta
-        # i la degradació: la mateixa frase no s'analitza dues vegades.
         syntax = CachedSyntax(syntax)
     validators = build_validators(
         config, paths, analyzer, lexicon, rule_set, all_terms, syntax, morphology
@@ -129,12 +118,10 @@ def build_pipeline(
         paths.resolve_style_profile(config.style_profile), paths=paths
     )
     if author is not None and author.preferred_sentence_length is not None:
-        # La longitud de frase explícita de l'autor mana sobre la del perfil o l'empremta.
         style_profile = replace(
             style_profile, target_sentence_length=float(author.preferred_sentence_length)
         )
 
-    # Nivells 3 i 4 (per a la puntuació) i deferència de l'empremta (nivell 5).
     resolver = PreferenceResolver(
         dictionaries=dictionaries,
         author=author,
@@ -143,9 +130,6 @@ def build_pipeline(
     )
     style_evaluator = None
     if config.use_style:
-        # Si el perfil referencia una empremta de l'autor, l'avaluador també mesura
-        # la distància respecte de les seves preferències (variants, connectors, comes),
-        # excepte per a les formes que ja tenen una preferència explícita.
         style_resources = (
             StyleResources.load(paths, config.language, lexicon=lexicon)
             if style_profile.preferences is not None
@@ -165,15 +149,12 @@ def build_pipeline(
             max_sentence_length=author.max_sentence_length if author is not None else None,
             analyzer=analyzer,
         )
+
     adaptation = None
     weights = config.scoring
     if config.source_mode.adapts_to_author and style_profile.preferences is None:
-        # Esborrany generat amb LLM: l'adaptació exigeix l'empremta real de l'autor.
-        # Sense empremta no s'executa cap pseudomode autoral: es diu clarament.
         raise ConfigError(FINGERPRINT_REQUIRED)
     if style_profile.preferences is not None:
-        # Amb empremta, l'afinitat amb l'autor entra a la puntuació: amb tot el pes
-        # per a un esborrany generat amb LLM, i com un desempat lleu amb text propi.
         adaptation = AuthorAdaptation(
             style_profile.preferences,
             analyzer,
@@ -181,17 +162,26 @@ def build_pipeline(
             explicit_forms=resolver.explicit_forms(),
             syntax=syntax,
         )
-        if not config.source_mode.adapts_to_author:
-            weights = replace(weights, author_affinity=weights.author_affinity_own)
-    # La degradació estructural local (relatives encadenades, «que» acumulats) es
-    # mesura sempre, comparant cada candidat amb el text que substitueix; amb
-    # empremta, la penalització es rebaixa si l'autor mateix encadena subordinades.
+        if config.source_mode.adapts_to_author:
+            # Un esborrany LLM ja pot estar molt ben redactat. No exigim que la
+            # transformació sigui una "millora" absoluta: entre alternatives que
+            # han superat els validadors, premiem la reescriptura real i l'afinitat
+            # amb l'autor. El valor explícit de configuració mana si és més alt.
+            weights = replace(
+                weights,
+                rewrite_pressure=max(weights.rewrite_pressure, LLM_REWRITE_PRESSURE),
+            )
+        else:
+            weights = replace(
+                weights,
+                author_affinity=weights.author_affinity_own,
+                rewrite_pressure=0.0,
+            )
+
     degradation = StructuralDegradation(analyzer, syntax, style_profile.preferences)
     assertive = None
     epistemology = lang / EPISTEMOLOGY_FILE
     if config.assertive_language and epistemology.is_file():
-        # «Llenguatge assertiu»: un bonus petit per la formulació més directa i
-        # explícita, amb el marcador que l'autor prefereix si l'empremta ho diu.
         assertive = AssertiveEvaluator(
             EpistemicLexicon.load(epistemology), style_profile.preferences
         )
@@ -240,17 +230,6 @@ def build_validators(
     syntax: SyntaxProvider | None = None,
     morphology: MorphologyProvider | None = None,
 ) -> list[Validator]:
-    """Validadors en ordre de prioritat: contingut, terminologia, epistemologia, gramàtica.
-
-    - fragments protegits, xifres i números romans, noms propis, dates, citacions,
-      text entre cometes i negació (preservació factual);
-    - terminologia protegida per l'usuari i pels diccionaris del projecte;
-    - marcadors d'atenuació i certesa, i classificació epistemològica explícita
-      (només les regles amb ``allows_epistemic_change`` poden canviar-la);
-    - gramaticalitat heurística, validació per classe de les transformacions
-      verbals (amb morfologia i parser), concordança subjecte-verb (amb parser) i
-      marge de longitud.
-    """
     lang = paths.language(config.language)
     modality = load_mapping(lang / "lexicon" / "modalitat.yaml")
     validators: list[Validator] = [
@@ -281,12 +260,8 @@ def build_validators(
         )
     validators.append(GrammarHeuristicValidator())
     if morphology is not None:
-        # Una transformació verbal ha de partir d'un verb i produir-ne un: LanguageTool
-        # no detecta «va sobirar», i el recurs morfològic local sí.
         validators.append(VerbalTransformationValidator(morphology, syntax))
     if syntax is not None and syntax.available:
-        # Concordança subjecte-verb amb el parser local: només les discordances
-        # que hagi introduït el motor descarten un candidat.
         validators.append(AgreementValidator(syntax))
     validators.append(LengthRatioValidator(*config.length_ratio))
     languagetool = build_languagetool_validator(config, paths)
@@ -298,15 +273,6 @@ def build_validators(
 def build_syntax_provider(
     config: PipelineConfig, morphology: MorphologyProvider | None = None
 ) -> SyntaxProvider:
-    """Analitzador sintàctic local segons la configuració.
-
-    ``auto`` fa servir el parser si està instal·lat i, si no, no en fa servir
-    cap: el motor continua amb les heurístiques de sempre. El parser només
-    analitza; la generació continua sent exclusivament de les regles.
-
-    Si se li passa el proveïdor morfològic, el criteri de confiança també
-    comprova que morfologia i sintaxi no es contradiguin.
-    """
     if config.syntax in ("none", "null", ""):
         return NullSyntax()
     if config.syntax in ("auto", "spacy"):
@@ -318,11 +284,6 @@ def build_syntax_provider(
 def build_languagetool_validator(
     config: PipelineConfig, paths: ProjectPaths
 ) -> LanguageToolValidator | None:
-    """Validador de LanguageTool si s'ha demanat i hi ha una instal·lació local.
-
-    Mai no és obligatori: sense Java o sense LanguageTool, es retorna ``None`` i
-    la canonada continua amb els validadors interns.
-    """
     if not config.languagetool:
         return None
     client = LanguageToolClient.discover(paths.root)
@@ -330,7 +291,6 @@ def build_languagetool_validator(
 
 
 def load_dictionaries(config: PipelineConfig, paths: ProjectPaths) -> DictionarySet:
-    """Diccionaris actius segons la configuració (noms dins de ``dictionaries/`` o rutes)."""
     return DictionarySet.load(
         paths.resolve_dictionary(reference) for reference in config.dictionaries
     )
@@ -345,7 +305,6 @@ def load_author_preferences(
 
 
 def load_feedback(config: PipelineConfig, author: AuthorPreferences | None) -> FeedbackStore | None:
-    """Feedback manual: el fitxer de la configuració o el que indica el fitxer de preferències."""
     file = config.feedback
     if file is None and author is not None:
         file = author.feedback_file
@@ -354,34 +313,30 @@ def load_feedback(config: PipelineConfig, author: AuthorPreferences | None) -> F
     return FeedbackStore.load(file)
 
 
-def _load_abbreviations(lang: Path) -> frozenset[str]:
-    file = lang / "lexicon" / "abreviatures.yaml"
-    if not file.is_file():
-        return DEFAULT_ABBREVIATIONS
-    data = load_mapping(file)
-    return DEFAULT_ABBREVIATIONS | frozenset(as_str_list(data, "abbreviations"))
+def _load_abbreviations(lang: Path) -> tuple[str, ...]:
+    data = load_mapping(lang / "lexicon" / "abreviatures.yaml")
+    values = as_str_list(data, "abbreviations")
+    return tuple(values) or DEFAULT_ABBREVIATIONS
 
 
 def _load_connectors(lang: Path) -> tuple[str, ...]:
-    file = lang / "connectors" / "connectors.yaml"
-    if not file.is_file():
-        return ()
-    data = load_mapping(file)
-    forms: list[str] = []
-    for group in as_mapping_list(data, "groups"):
-        for connector in as_mapping_list(group, "connectors"):
-            forms.append(as_str(connector, "form"))
-    return tuple(dict.fromkeys(forms))
+    data = load_mapping(lang / "lexicon" / "connectors.yaml")
+    connectors: list[str] = []
+    for key in ("causal", "consequence", "contrast", "addition", "reformulation", "ordering"):
+        connectors.extend(as_str_list(data, key))
+    return tuple(dict.fromkeys(connectors))
 
 
 def _read_optional_terms(paths: ProjectPaths, relative: str) -> tuple[str, ...]:
-    file = paths.optional(relative)
-    return read_term_list(file) if file is not None else ()
+    file = paths.root / relative
+    return read_term_list(file) if file.is_file() else ()
 
 
 def _collect_user_terms(config: PipelineConfig, paths: ProjectPaths) -> tuple[str, ...]:
-    terms: list[str] = list(config.protected_terms)
+    terms = list(config.protected_terms)
+    default_file = paths.root / PROTECTED_TERMS_FILE
+    if default_file.is_file():
+        terms.extend(read_term_list(default_file))
     for file in config.protected_terms_files:
         terms.extend(read_term_list(file))
-    terms.extend(_read_optional_terms(paths, PROTECTED_TERMS_FILE))
-    return tuple(dict.fromkeys(terms))
+    return tuple(dict.fromkeys(term for term in terms if term))
