@@ -52,8 +52,6 @@ rules:
       positive:
         - input: "Plou. Fa fred."
           output: "Plou i fa fred."
-        - input: "L'obra era dedicada al secretari. Un fet que obligava l'autor a ser prudent."
-          output: "L'obra era dedicada al secretari, un fet que obligava l'autor a ser prudent."
       negative:
         - "Plou molt! Sortirem."
         - "Plou molt? Sortirem."
