@@ -1,8 +1,8 @@
-# Família 11: fusió de frases compatibles (regla de paràgraf, nivell 5).
+# Família 11: operacions entre frases (nivell 5).
 # Nivell 5: reestructuració controlada de paràgraf. A diferència del nivell 4,
-# que treballa dins d'una frase, aquesta fase reorganitza frases senceres i
-# només s'activa quan el nivell demanat arriba a 5.
-description: Fusió de dues frases consecutives segons el senyal inicial de la segona.
+# que treballa dins d'una frase, aquesta fase reorganitza o repara relacions
+# entre frases senceres i només s'activa quan el nivell demanat arriba a 5.
+description: Fusió de frases consecutives i reparació segura de fragments anafòrics.
 language: ca
 rules:
   - rule_id: fusio.frases_compatibles
@@ -60,6 +60,31 @@ rules:
         - "Plou molt? Sortirem."
         - "Vegeu la pàg. Després tornarem."
 
+  # Si la fusió anterior no és possible perquè la frase resultant seria massa
+  # llarga per a l'autor, un fragment anafòric pot continuar sent una frase
+  # pròpia: «Un fet que obligava...» → «Aquest fet obligava...». La forma
+  # demostrativa només es proposa si hi ha una frase anterior i el parser
+  # confirma que la segona és realment un fragment nominal amb relativa.
+  - rule_id: fusio.repara_fragment_anaforic
+    engine: anaphoric_fragment_repair
+    category: fusio
+    level: 5
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.9
+    description: "Reparació d'un fragment nominal anafòric com a frase autònoma"
+    conditions:
+      syntax:
+        requires_parser: true
+    examples:
+      positive:
+        - input: "L'obra era dedicada al secretari de la Inquisició. Un fet que obligava l'autor a mantenir un equilibri subtil."
+          output: "L'obra era dedicada al secretari de la Inquisició. Aquest fet obligava l'autor a mantenir un equilibri subtil."
+      negative:
+        - "Un fet que cal considerar és la data de l'edició."
+        - "Aquest fet obligava l'autor a mantenir un equilibri subtil."
+        - "Un document que explica la decisió va aparèixer més tard."
+
   # Fusió de dues frases copulatives amb el mateix subjecte: la segona no en
   # té cap i la còpula és la mateixa. «no és només A. És B.» dona «no és només
   # A, sinó també B.»; «és A. És B.» dona «és A i B.». Amb analitzador, la
@@ -71,7 +96,7 @@ rules:
     transformation_type: sentence_merge
     semantic_risk: low
     confidence: 0.8
-    description: "Fusió de dues frases copulatives amb el mateix subjecte («no és només A. És B.» → «no és només A, sinó també B.»)"
+    description: "Fusió de dues frases copulatives amb el mateix subjecte («no és només A. És B.» → «…, sinó també B.»)"
     examples:
       positive:
         - input: "La qüestió, per tant, no és només etimològica. És institucional."

@@ -48,12 +48,16 @@ def levels(project_root: Path) -> dict[int, Any]:
 def test_level_five_adds_the_paragraph_phase(levels: dict[int, Any]) -> None:
     """Cas 1: el nivell 4 treballa dins de la frase; el 5 reestructura el paràgraf."""
     assert levels[4].rule_set.paragraph_rules == ()
-    assert len(levels[5].rule_set.paragraph_rules) == 2
+    assert len(levels[5].rule_set.paragraph_rules) == 3
     assert {r.level for r in levels[5].rule_set.paragraph_rules} == {5}
     only_five = set(levels[5].rule_set.rule_ids) - set(levels[4].rule_set.rule_ids)
-    # Des de la 1.3.1 la fusió copulativa («no és només A. És B.» → «…, sinó també B») és la
-    # segona regla de paràgraf exclusiva del nivell 5.
-    assert only_five == {"fusio.frases_compatibles", "fusio.copulativa"}
+    # El nivell 5 incorpora les dues fusions i la reparació contextual d'un fragment
+    # nominal anafòric («... . Un fet que...» → «... . Aquest fet...»).
+    assert only_five == {
+        "fusio.frases_compatibles",
+        "fusio.repara_fragment_anaforic",
+        "fusio.copulativa",
+    }
 
 
 def test_level_five_produces_paragraph_candidates(levels: dict[int, Any]) -> None:
