@@ -26,6 +26,7 @@ DIMENSIONS: tuple[str, ...] = (
     "semblanca_estil",
     "preferencies_autor",
     "afinitat_autor",
+    "varietat_connectors",
     "grau_de_canvi",
     "grau_superficial",
     "grau_estructural",
@@ -44,6 +45,7 @@ _DIMENSION_LABELS = {
     "semblanca_estil": "semblança amb l'estil",
     "preferencies_autor": "preferències de l'autor",
     "afinitat_autor": "afinitat amb l'estil de l'autor",
+    "varietat_connectors": "varietat de connectors",
     "grau_de_canvi": "grau de canvi",
     "grau_superficial": "canvi superficial",
     "grau_estructural": "reredacció estructural",
@@ -220,7 +222,9 @@ class CompositeScorer:
                 preference_bonus = w.preferences * assessment.score
                 preference_explanation = assessment.explanation
                 components["preferencies"] = round(preference_bonus, 4)
-                parts.append(f"preferències de l'autor {preference_bonus:+.3f} ({preference_explanation})")
+                parts.append(
+                    f"preferències de l'autor {preference_bonus:+.3f} ({preference_explanation})"
+                )
                 dimensions["preferencies_autor"] = round((assessment.score + 1.0) / 2.0, 4)
 
         affinity_bonus = 0.0
@@ -236,8 +240,28 @@ class CompositeScorer:
                 author_explanation = self._adaptation.explain(affinity, baseline)
                 author_affinity = {**affinity.to_dict(), "baseline": baseline.score}
                 components["afinitat_autor"] = round(affinity_bonus, 4)
-                parts.append(f"afinitat amb l'autor {affinity_bonus:+.3f} ({author_explanation})")
+                parts.append(
+                    f"afinitat amb l'autor {affinity_bonus:+.3f} ({author_explanation})"
+                )
                 dimensions["afinitat_autor"] = affinity.score
+
+        connector_repetition_penalty = 0.0
+        if (
+            self._adaptation is not None
+            and w.rewrite_pressure > 0
+            and w.connector_repetition > 0
+        ):
+            own_connectors = self._adaptation.stats_of(candidate.text).connectors
+            document = ctx.document if ctx is not None else None
+            severity, repeated = _connector_repetition_severity(own_connectors, document)
+            dimensions["varietat_connectors"] = round(1.0 - severity, 4)
+            if severity > 0:
+                connector_repetition_penalty = w.connector_repetition * severity
+                components["repeticio_connectors"] = round(-connector_repetition_penalty, 4)
+                forms = ", ".join(f"«{form}»" for form in repeated)
+                parts.append(
+                    f"repetició local de connectors {-connector_repetition_penalty:+.3f} ({forms})"
+                )
 
         change = candidate.change_ratio()
         dimensions["grau_de_canvi"] = round(change, 4)
@@ -256,7 +280,10 @@ class CompositeScorer:
                 gain *= 1.0 - degradation.score
                 components["transformacions"] = round(gain, 4)
                 components["degradacio"] = round(-degradation_penalty, 4)
-                parts.append(f"degradació estructural {-degradation_penalty:+.3f} ({'; '.join(degradation.reasons)})")
+                parts.append(
+                    f"degradació estructural {-degradation_penalty:+.3f} "
+                    f"({'; '.join(degradation.reasons)})"
+                )
                 dimensions["qualitat_sintactica"] = round(1.0 - degradation.score, 4)
 
         assertive_bonus = 0.0
@@ -268,7 +295,10 @@ class CompositeScorer:
             dimensions["assertivitat"] = assessment_a.score
             if assessment_a.reasons:
                 components["assertivitat"] = round(assertive_bonus, 4)
-                parts.append(f"llenguatge assertiu {assertive_bonus:+.3f} ({'; '.join(assessment_a.reasons)})")
+                parts.append(
+                    f"llenguatge assertiu {assertive_bonus:+.3f} "
+                    f"({'; '.join(assessment_a.reasons)})"
+                )
 
         rhythm_penalty = 0.0
         rhythm_detail: dict[str, object] = {}
@@ -282,14 +312,23 @@ class CompositeScorer:
                 rhythm_scale = 1.0 - assessment_r.penalty
                 rhythm_detail = assessment_r.to_dict()
                 components["ritme"] = round(-rhythm_penalty, 4)
-                parts.append(f"ritme de la fusió {-rhythm_penalty:+.3f} ({'; '.join(assessment_r.reasons)})")
+                parts.append(
+                    f"ritme de la fusió {-rhythm_penalty:+.3f} "
+                    f"({'; '.join(assessment_r.reasons)})"
+                )
 
         structure_bonus = 0.0
         if w.structure > 0 and degree > 0:
             grammar_score = dimensions.get("gramaticalitat")
             scale = grammar_score if isinstance(grammar_score, float) else 1.0
             quality = dimensions["qualitat_sintactica"]
-            structure_bonus = w.structure * degree * scale * (quality if quality else 0.0) * rhythm_scale
+            structure_bonus = (
+                w.structure
+                * degree
+                * scale
+                * (quality if quality else 0.0)
+                * rhythm_scale
+            )
             components["estructura"] = round(structure_bonus, 4)
             parts.append(f"reredacció estructural {structure_bonus:+.3f}")
 
@@ -301,7 +340,12 @@ class CompositeScorer:
             grammar_score = dimensions.get("gramaticalitat")
             safe_scale = grammar_score if isinstance(grammar_score, float) else 1.0
             rewrite_degree = min(1.0, 0.35 * change + 0.65 * degree)
-            rewrite_bonus = w.rewrite_pressure * rewrite_degree * safe_scale * (quality if quality else 0.0)
+            rewrite_bonus = (
+                w.rewrite_pressure
+                * rewrite_degree
+                * safe_scale
+                * (quality if quality else 0.0)
+            )
             components["pressio_reescriptura"] = round(rewrite_bonus, 4)
             parts.append(f"pressió de reescriptura {rewrite_bonus:+.3f}")
 
@@ -312,6 +356,7 @@ class CompositeScorer:
             - grammar_penalty
             - degradation_penalty
             - rhythm_penalty
+            - connector_repetition_penalty
             + preference_bonus
             + affinity_bonus
             + structure_bonus
@@ -336,6 +381,36 @@ class CompositeScorer:
             assertive=assertive_detail,
             rhythm=rhythm_detail,
         )
+
+
+def _connector_repetition_severity(
+    forms: Sequence[str], document: AdaptationContext | None = None
+) -> tuple[float, tuple[str, ...]]:
+    """Severitat 0-1 de repetir exactament el mateix connector en el veïnat local.
+
+    Una repetició dins de la unitat pesa més que una coincidència amb el connector
+    immediat del context anterior o posterior. És una preferència de selecció, no
+    una invalidació: si no existeix cap alternativa segura, el text es conserva.
+    """
+    if not forms:
+        return 0.0, ()
+    severity = 0.0
+    repeated: list[str] = []
+    for left, right in zip(forms, forms[1:], strict=False):
+        if left != right:
+            continue
+        severity += 0.75
+        repeated.append(right)
+    if document is not None:
+        before = document.before.connectors
+        after = document.after.connectors
+        if before and before[-1] == forms[0]:
+            severity += 0.35
+            repeated.append(forms[0])
+        if after and forms[-1] == after[0]:
+            severity += 0.35
+            repeated.append(forms[-1])
+    return min(1.0, severity), tuple(dict.fromkeys(repeated))
 
 
 def _binary(validation: ValidationResult, dimension: ValidationDimension) -> float:
