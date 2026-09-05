@@ -28,14 +28,17 @@ rules:
         semantic_risk: medium
         # No absorbeix els inicis que abans tenien una estratègia específica:
         # si ho fes, «Però...» acabaria en «i però...» i una anàfora demostrativa
-        # tornaria a comptar com una gran fusió. Tampoc toca una còpula inicial.
+        # tornaria a comptar com una gran fusió. Els fragments anafòrics es
+        # reserven igualment per a l'estratègia específica. Tampoc toca una còpula.
         skip_if_second_starts_with:
           [és, són, era, eren, però, tanmateix, no obstant això, a més, a més a més,
            així mateix, per tant, en conseqüència, així doncs, d'altra banda, en canvi,
            finalment, després, aleshores, llavors, també, així i tot, amb tot, malgrat tot,
            en efecte, de fet, a continuació, tot seguit, per aquest motiu, per això,
            en aquest, en aquesta, en aquests, en aquestes, aquest, aquesta, aquests,
-           aquestes, això, hi]
+           aquestes, això, hi, un fet que, fet que, cosa que, una cosa que, la qual cosa,
+           circumstància que, una circumstància que, un aspecte que, aspecte que,
+           situació que, una situació que, un element que]
       # Fragment nominal anafòric que reprèn tota la frase anterior («... de la
       # Santa Inquisició. Un fet que obligava...» → «..., un fet que obligava...»).
       # Només amb analitzador: la segona frase ha de ser un sintagma nominal amb
