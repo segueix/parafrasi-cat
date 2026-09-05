@@ -26,9 +26,16 @@ rules:
         max_words: 16
         max_words_each: 8
         semantic_risk: medium
-        # Una segona frase que comença per una còpula («És B.») és cosa de la
-        # fusió copulativa, que en conserva el subjecte compartit.
-        skip_if_second_starts_with: [és, són, era, eren]
+        # No absorbeix els inicis que abans tenien una estratègia específica:
+        # si ho fes, «Però...» acabaria en «i però...» i una anàfora demostrativa
+        # tornaria a comptar com una gran fusió. Tampoc toca una còpula inicial.
+        skip_if_second_starts_with:
+          [és, són, era, eren, però, tanmateix, no obstant això, a més, a més a més,
+           així mateix, per tant, en conseqüència, així doncs, d'altra banda, en canvi,
+           finalment, després, aleshores, llavors, també, així i tot, amb tot, malgrat tot,
+           en efecte, de fet, a continuació, tot seguit, per aquest motiu, per això,
+           en aquest, en aquesta, en aquests, en aquestes, aquest, aquesta, aquests,
+           aquestes, això, hi]
       # Fragment nominal anafòric que reprèn tota la frase anterior («... de la
       # Santa Inquisició. Un fet que obligava...» → «..., un fet que obligava...»).
       # Només amb analitzador: la segona frase ha de ser un sintagma nominal amb
