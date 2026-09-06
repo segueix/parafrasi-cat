@@ -22,6 +22,7 @@ from parafrasi_cat.rules.fusion import CopularFusionRule, SentenceFusionRule
 from parafrasi_cat.rules.lexical import LexicalSubstitutionRule
 from parafrasi_cat.rules.nominal import nominalization_rule_from_params
 from parafrasi_cat.rules.pattern_rule import HintsCache, PatternRule
+from parafrasi_cat.rules.relative import RelativeArchitectureRule
 from parafrasi_cat.rules.verbal import periphrastic_rule_from_params
 
 RuleFactory = Callable[[str, Mapping[str, object], ProjectPaths], AnyRule]
@@ -120,6 +121,11 @@ def _block_move_factory(rule_id: str, params: Mapping[str, object], paths: Proje
     return BlockMoveRule(definition_from_params(params, rule_id))
 
 
+def _relative_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPaths) -> AnyRule:
+    del paths
+    return RelativeArchitectureRule(definition_from_params(params, rule_id))
+
+
 def _copular_fusion_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPaths) -> AnyRule:
     return CopularFusionRule(definition_from_params(params, rule_id), hints=_Hints.for_paths(paths))
 
@@ -145,6 +151,11 @@ def default_registry() -> RuleRegistry:
     registry.register("nominalization", _nominalization_factory, description="Verb ↔ construcció nominal")
     registry.register("fusion", _fusion_factory, description="Fusió de frases consecutives compatibles")
     registry.register("block_move", _block_move_factory, description="Moviment de blocs sintàctics tancats")
+    registry.register(
+        "relative_architecture",
+        _relative_factory,
+        description="Relativa passiva explicativa ↔ participial, guiada pel parser",
+    )
     registry.register("copular_fusion", _copular_fusion_factory, description="Fusió de frases copulatives")
     registry.register("epistemic_normalize", _assertive_factory, description="Normalització determinista de piles de modalització")
     registry.register(
