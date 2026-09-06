@@ -8,8 +8,14 @@ Estratègia:
    ``max_transformations`` per candidat.
 4. Opcionalment (``max_depth`` ≥ 2), els millors candidats es reanalitzen i
    les regles s'hi tornen a aplicar (``expand``): les noves transformacions es
-   reprojecten sobre el text original o s'encadenen amb la transformació que
-   va produir el segment afectat.
+   reprojecten sobre el text original, s'encadenen dins d'un fragment ja
+   transformat o poden **englobar diversos fragments transformats** quan els
+   límits de la nova operació es poden projectar exactament sobre l'original.
+
+La composició profunda conserva la procedència completa: regles, famílies,
+tipus i arquitectura concreta de cada operació. Una reestructuració posterior
+pot absorbir físicament dos fragments en una sola substitució sobre l'original,
+però no fa desaparèixer les operacions que hi han portat.
 
 Garanties: els candidats es dedupliquen pel text (i pel text normalitzat,
 per no oferir dos candidats gairebé idèntics), es descarten els que superen
@@ -18,10 +24,10 @@ mateix segment.
 
 Diversitat: la generació treballa sobre una reserva més ampla que el límit de
 candidats, i la selecció final conserva primer el millor candidat de cada
-signatura estructural (``REORDER``, ``CLAUSE_SPLIT``, ``COPULAR_MERGE``,
-``MULTI_TRANSFORM(...)``...) abans d'omplir amb la resta. Així un canvi
-sintàctic no queda fora per culpa de vint variants lèxiques, i el límit de
-transformacions per candidat continua acotant la combinatòria.
+**arquitectura estructural**. Dues reordenacions de la mateixa família poden
+ocupar places diferents si mouen blocs o direccions diferents; en canvis
+superficials es continua agrupant per família perquè variants lèxiques no
+ofeguin l'estructura.
 
 Pressupostos explícits (per no ofegar la reredacció estructural):
 
@@ -30,12 +36,9 @@ Pressupostos explícits (per no ofegar la reredacció estructural):
 - L'expansió de segon nivell té un **pressupost propi** (``expansion_budget``)
   per damunt d'aquesta reserva: encara que les combinacions inicials la
   saturin, sempre queda marge per reaplicar regles sobre els millors candidats.
-  Sense això, un text amb prou retocs lèxics deixava el segon nivell sense cap
-  crida.
 - El feix d'expansió s'ordena per **diversitat estructural** (grau estructural,
   després confiança acumulada, després ordre de generació) i reserva un lloc a
-  cada signatura abans de repetir-ne cap: una reordenació prometedora ja no
-  queda fora del feix perquè tres retocs lèxics sumin més confiança.
+  cada arquitectura abans de repetir-ne cap.
 
 Admissió: si qui crida el generador li dona una funció d'admissió
 (``admissible``), la selecció final la consulta abans d'ocupar cada plaça. La
@@ -51,15 +54,22 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 
-from parafrasi_cat.candidates.candidate import Candidate
+from parafrasi_cat.candidates.candidate import CHAINED_ARCHITECTURES_KEY, Candidate
 from parafrasi_cat.core.errors import ConfigError, TransformationError
 from parafrasi_cat.core.spans import Span
-from parafrasi_cat.core.transformation import SemanticRisk, Transformation
+from parafrasi_cat.core.transformation import (
+    CHAINED_FAMILIES_KEY,
+    CHAINED_RULES_KEY,
+    CHAINED_TYPES_KEY,
+    OPERATION_COUNT_KEY,
+    SemanticRisk,
+    Transformation,
+    TransformationFamily,
+    TransformationType,
+)
 
 ExpandFn = Callable[[str], Iterable[Transformation]]
 """Donat el text d'un candidat, retorna les transformacions que les regles hi proposen."""
-
-CHAINED_RULES_KEY = "chained_rules"
 
 DUPLICATE = "duplicat"
 EXCESSIVE = "canvi excessiu"
@@ -132,7 +142,7 @@ class GenerationTrace:
 
 @dataclass(frozen=True, slots=True)
 class GenerationResult:
-    """Candidats triats, els que ha rebutjat la validació i la traça de la cerca."""
+    """Candidats triats, els que ha rebutjat la validació i la traça del que ha caigut."""
 
     candidates: tuple[Candidate, ...]
     rejected: tuple[Candidate, ...] = ()
@@ -240,9 +250,14 @@ class CandidateGenerator:
         # Nivell 1: un candidat per transformació.
         for transformation in ordered:
             self._add(
-                candidates, seen, sentence_index, source_text, (transformation,),
-                self._pool_limit, trace,
-            )  # fmt: skip
+                candidates,
+                seen,
+                sentence_index,
+                source_text,
+                (transformation,),
+                self._pool_limit,
+                trace,
+            )
 
         # Nivell 1b: combinacions de transformacions compatibles.
         frontier: list[tuple[int, ...]] = [(i,) for i in range(len(ordered))]
@@ -297,13 +312,7 @@ class CandidateGenerator:
         return self._select(candidates, admissible, trace)
 
     def _expansion_beam(self, candidates: Sequence[Candidate]) -> tuple[Candidate, ...]:
-        """Candidats que val la pena reanalitzar, per diversitat abans que per confiança.
-
-        Primer el millor de cada signatura estructural i després la resta per
-        ordre de qualitat. Amb l'ordenació antiga (només la suma de confiances),
-        tres retocs lèxics sempre desplaçaven una reordenació segura, que és
-        justament la que més pot guanyar amb una segona passada.
-        """
+        """Candidats que val la pena reanalitzar, per arquitectura abans que per confiança."""
         others = [c for c in candidates if not c.is_identity]
         if not others:
             return ()
@@ -314,9 +323,10 @@ class CandidateGenerator:
         for candidate in ranked:
             if len(beam) >= self._beam_width:
                 break
-            if candidate.signature in signatures:
+            key = candidate.diversity_signature
+            if key in signatures:
                 continue
-            signatures.add(candidate.signature)
+            signatures.add(key)
             beam.append(candidate)
         for candidate in ranked:
             if len(beam) >= self._beam_width:
@@ -337,14 +347,10 @@ class CandidateGenerator:
     ) -> GenerationResult:
         """Tria final: diversitat, admissió i límit explícit.
 
-        Per ordre: l'identitat; el millor candidat de cada signatura estructural
-        (per grau estructural i confiança acumulada); cada transformació solta
-        (un candidat per regla, perquè cada canvi es pugui veure per separat); i
-        la resta per la mateixa ordenació, fins al límit. L'ordre final és el
-        de generació, i tot és determinista: només depèn dels candidats.
-
-        Amb funció d'admissió, cada plaça es dona a un candidat que ja ha passat
-        la reparació i la validació: els que no la passen no en gasten cap.
+        Per ordre: l'identitat; el millor candidat de cada arquitectura
+        estructural; cada transformació realment solta (un candidat per regla);
+        i la resta per qualitat. Els retocs superficials continuen agrupats per
+        família a través de ``diversity_signature``.
         """
         identity = [c for c in candidates if c.is_identity][:1]
         others = [c for c in candidates if not c.is_identity]
@@ -366,7 +372,6 @@ class CandidateGenerator:
                 return False
             handled.add(id(candidate))
             if len(kept) >= room:
-                # Ha entrat a la reserva, però l'han desplaçat candidats millors.
                 trace.discard(SCORE)
                 return False
             final = candidate
@@ -384,22 +389,19 @@ class CandidateGenerator:
                 trace.discard(DUPLICATE)
                 return False
             texts.add(final.text)
-            signatures.add(candidate.signature)
+            signatures.add(candidate.diversity_signature)
             if candidate.n_transformations == 1:
-                rules.add(candidate.transformations[0].rule_id)
+                rules.add(candidate.rule_ids[0])
             kept.append((position[id(candidate)], final))
             return True
 
-        for candidate in ranked:  # una alternativa de cada signatura estructural
-            if candidate.signature not in signatures:
+        for candidate in ranked:
+            if candidate.diversity_signature not in signatures:
                 admit(candidate)
-        for candidate in ranked:  # una alternativa de cada regla, vista per separat
-            if (
-                candidate.n_transformations == 1
-                and candidate.transformations[0].rule_id not in rules
-            ):
+        for candidate in ranked:
+            if candidate.n_transformations == 1 and candidate.rule_ids[0] not in rules:
                 admit(candidate)
-        for candidate in ranked:  # la resta, per qualitat
+        for candidate in ranked:
             admit(candidate)
 
         if identity and admissible is not None:
@@ -413,34 +415,43 @@ class CandidateGenerator:
     # --- composició en profunditat ---------------------------------------------------
 
     def compose(self, base: Candidate, proposal: Transformation) -> Candidate | None:
-        """Projecta una transformació proposada sobre ``base.text`` cap al text original.
+        """Projecta una operació sobre ``base.text`` cap al text original.
 
-        Retorna ``None`` si la proposta repeteix una regla ja aplicada sobre el
-        mateix segment, si trenca el límit d'una transformació anterior o si no
-        es pot reprojectar de manera exacta.
+        S'admeten tres casos exactes:
+
+        - la proposta no toca cap fragment transformat: es reprojecta;
+        - cau sencera dins d'un sol fragment: s'encadena;
+        - engloba sencers un o més fragments previs: es crea una substitució
+          composta sobre l'interval original que els contenia.
+
+        Si un límit talla pel mig un text generat anteriorment, no hi ha una
+        correspondència exacta amb l'original i la composició es rebutja.
         """
         if proposal.is_identity or not proposal.can_apply_to(base.text):
             return None
-        if len(base.transformations) >= self._max_transformations:
+        if base.n_transformations + proposal.operation_count > self._max_transformations:
             return None
-        result_spans = base.result_spans()
-        for previous, result_span in zip(base.transformations, result_spans, strict=True):
-            if proposal.changed_span.overlaps(result_span) and _same_rule(previous, proposal):
-                return None
 
-        overlapping = [
+        result_spans = base.result_spans()
+        touched = [
             (previous, result_span)
             for previous, result_span in zip(base.transformations, result_spans, strict=True)
-            if proposal.changed_span.overlaps(result_span)
+            if _touches_result(proposal.changed_span, result_span)
         ]
-        if not overlapping:
+        if any(_same_rule(previous, proposal) for previous, _span in touched):
+            return None
+
+        if not touched:
             return self._remap(base, proposal, result_spans)
-        if len(overlapping) > 1:
-            return None
-        previous, result_span = overlapping[0]
-        if not result_span.contains(proposal.changed_span):
-            return None
-        return self._chain(base, previous, result_span, proposal)
+
+        if len(touched) == 1:
+            previous, result_span = touched[0]
+            if not result_span.is_empty and result_span.contains(proposal.changed_span):
+                return self._chain(base, previous, result_span, proposal)
+
+        if all(_fully_absorbed(proposal.changed_span, result_span) for _p, result_span in touched):
+            return self._envelope(base, proposal, result_spans, touched)
+        return None
 
     def _remap(
         self, base: Candidate, proposal: Transformation, result_spans: tuple[Span, ...]
@@ -472,23 +483,54 @@ class CandidateGenerator:
             + proposal.text_after
             + previous.text_after[offset + proposal.changed_span.length :]
         )
-        chained = [r for r in previous.metadata.get(CHAINED_RULES_KEY, "").split(",") if r]
-        chained.append(proposal.rule_id)
-        merged = Transformation(
-            rule_id=previous.rule_id,
-            text_before=previous.text_before,
-            text_after=new_after,
-            changed_span=previous.changed_span,
-            transformation_type=previous.transformation_type,
-            confidence=min(previous.confidence, proposal.confidence),
-            semantic_risk=max(
-                previous.semantic_risk, proposal.semantic_risk, key=lambda r: r.level
-            ),
-            explanation=f"{previous.explanation} A continuació, {proposal.explanation}",
-            metadata={**previous.metadata, CHAINED_RULES_KEY: ",".join(chained)},
+        merged = _compound_transformation(
+            (previous, proposal),
+            previous.changed_span,
+            previous.text_before,
+            new_after,
+            composition="chain",
         )
         transformations = tuple(merged if t is previous else t for t in base.transformations)
         return self._build(base, transformations, proposal.apply(base.text))
+
+    def _envelope(
+        self,
+        base: Candidate,
+        proposal: Transformation,
+        result_spans: tuple[Span, ...],
+        touched: Sequence[tuple[Transformation, Span]],
+    ) -> Candidate | None:
+        """Absorbeix diversos fragments previs dins d'una nova operació més ampla.
+
+        Els dos límits han de correspondre exactament a posicions de l'original;
+        no es talla mai pel mig d'un text generat. Les transformacions absorbides
+        desapareixen com a fragments físics, però totes les seves operacions
+        queden a les metadades de la transformació composta.
+        """
+        source_start = _source_boundary(base, proposal.changed_span.start, result_spans)
+        source_end = _source_boundary(base, proposal.changed_span.end, result_spans)
+        if source_start is None or source_end is None or source_end <= source_start:
+            return None
+        source_span = Span(source_start, source_end)
+        absorbed = tuple(previous for previous, _span in touched)
+        if not all(source_span.contains(previous.changed_span) for previous in absorbed):
+            return None
+        if any(
+            transformation not in absorbed and transformation.changed_span.overlaps(source_span)
+            for transformation in base.transformations
+        ):
+            return None
+
+        expected = proposal.apply(base.text)
+        merged = _compound_transformation(
+            (*absorbed, proposal),
+            source_span,
+            source_span.slice(base.source_text),
+            proposal.text_after,
+            composition="envelope",
+        )
+        remaining = tuple(t for t in base.transformations if t not in absorbed)
+        return self._build(base, (*remaining, merged), expected)
 
     def _build(
         self, base: Candidate, transformations: tuple[Transformation, ...], expected: str
@@ -539,7 +581,7 @@ class CandidateGenerator:
             return False
         normalized = candidate.normalized_text()
         if candidate.text in seen or normalized in seen:
-            trace.discard(DUPLICATE)  # gairebé idèntic a un candidat anterior: no aporta res
+            trace.discard(DUPLICATE)
             return False
         if candidate.change_ratio() > self._max_change_ratio:
             trace.discard(EXCESSIVE)
@@ -551,12 +593,7 @@ class CandidateGenerator:
 
 
 def _quality(candidate: Candidate, position: dict[int, int]) -> tuple[float, float, int]:
-    """Ordre de qualitat d'un candidat: estructura, després confiança, després ordre.
-
-    El grau estructural mana perquè és el que distingeix una reredacció real
-    d'un retoc; la confiança acumulada desempata dins de la mateixa mena de
-    canvi, i l'ordre de generació fa que el desempat final sigui estable.
-    """
+    """Ordre de qualitat: estructura, confiança i ordre estable."""
     return (
         -candidate.structural_degree(),
         -sum(t.confidence for t in candidate.transformations),
@@ -569,9 +606,118 @@ def _compatible(first: Transformation, second: Transformation) -> bool:
     return not first.changed_span.overlaps(second.changed_span)
 
 
+def _touches_result(proposal: Span, result: Span) -> bool:
+    """Cert si la proposta toca contingut generat que haurà d'absorbir o encadenar.
+
+    Una transformació que havia eliminat text té un ``result_span`` buit; es
+    considera tocada només si el seu punt queda estrictament dins de la nova
+    operació. Això permet que una reestructuració posterior englobi, per exemple,
+    la reducció «que fou» → ∅ sense inventar quin costat d'un límit buit toca.
+    """
+    if result.is_empty:
+        return proposal.start < result.start < proposal.end
+    return proposal.overlaps(result)
+
+
+def _fully_absorbed(proposal: Span, result: Span) -> bool:
+    if result.is_empty:
+        return proposal.start < result.start < proposal.end
+    return proposal.contains(result)
+
+
+def _source_boundary(base: Candidate, offset: int, result_spans: tuple[Span, ...]) -> int | None:
+    """Projecta un límit del candidat a l'original; ``None`` si cau dins de text generat."""
+    shift = 0
+    for transformation, result_span in zip(base.transformations, result_spans, strict=True):
+        if result_span.is_empty:
+            if offset == result_span.start:
+                return None
+            if offset < result_span.start:
+                return offset - shift
+            shift += len(transformation.text_after) - transformation.changed_span.length
+            continue
+        if offset < result_span.start:
+            return offset - shift
+        if offset == result_span.start:
+            return transformation.changed_span.start
+        if result_span.start < offset < result_span.end:
+            return None
+        if offset == result_span.end:
+            return transformation.changed_span.end
+        shift += len(transformation.text_after) - transformation.changed_span.length
+    return offset - shift
+
+
 def _same_rule(previous: Transformation, proposal: Transformation) -> bool:
-    chained = previous.metadata.get(CHAINED_RULES_KEY, "").split(",")
-    return proposal.rule_id == previous.rule_id or proposal.rule_id in chained
+    return proposal.rule_id in previous.operation_rule_ids
+
+
+def _architecture_id(transformation: Transformation) -> str:
+    details = [
+        f"{key}={transformation.metadata[key]}"
+        for key in ("architecture", "movement", "block_kind")
+        if str(transformation.metadata.get(key, "")).strip()
+    ]
+    return transformation.rule_id if not details else f"{transformation.rule_id}[{';'.join(details)}]"
+
+
+def _csv(value: object) -> tuple[str, ...]:
+    return tuple(item for item in str(value or "").split(",") if item)
+
+
+def _operation_records(
+    transformation: Transformation,
+) -> tuple[tuple[str, TransformationFamily, TransformationType, str], ...]:
+    """Alinea la traça d'una transformació, incloses metadades antigues incompletes."""
+    rules = transformation.operation_rule_ids
+    families = transformation.operation_families
+    types = transformation.operation_types
+    architectures = (_architecture_id(transformation), *_csv(transformation.metadata.get(CHAINED_ARCHITECTURES_KEY)))
+    records: list[tuple[str, TransformationFamily, TransformationType, str]] = []
+    for index, rule_id in enumerate(rules):
+        family = families[index] if index < len(families) else transformation.family
+        kind = types[index] if index < len(types) else transformation.transformation_type
+        architecture = architectures[index] if index < len(architectures) else rule_id
+        records.append((rule_id, family, kind, architecture))
+    return tuple(records)
+
+
+def _compound_transformation(
+    pieces: Sequence[Transformation],
+    source_span: Span,
+    text_before: str,
+    text_after: str,
+    *,
+    composition: str,
+) -> Transformation:
+    """Una substitució física que conserva totes les operacions que l'han construïda."""
+    records = tuple(record for piece in pieces for record in _operation_records(piece))
+    first = pieces[0]
+    metadata = dict(first.metadata)
+    metadata["composition"] = composition
+    metadata[CHAINED_RULES_KEY] = ",".join(rule for rule, _family, _kind, _arch in records[1:])
+    metadata[CHAINED_FAMILIES_KEY] = ",".join(
+        family.value for _rule, family, _kind, _arch in records[1:]
+    )
+    metadata[CHAINED_TYPES_KEY] = ",".join(
+        kind.value for _rule, _family, kind, _arch in records[1:]
+    )
+    metadata[CHAINED_ARCHITECTURES_KEY] = ",".join(
+        architecture for _rule, _family, _kind, architecture in records[1:]
+    )
+    metadata[OPERATION_COUNT_KEY] = str(len(records))
+    explanations = [piece.explanation for piece in pieces if piece.explanation]
+    return Transformation(
+        rule_id=records[0][0],
+        text_before=text_before,
+        text_after=text_after,
+        changed_span=source_span,
+        transformation_type=records[0][2],
+        confidence=min(piece.confidence for piece in pieces),
+        semantic_risk=max((piece.semantic_risk for piece in pieces), key=lambda risk: risk.level),
+        explanation=" A continuació, ".join(explanations),
+        metadata=metadata,
+    )
 
 
 def worst_risk(transformations: Iterable[Transformation]) -> SemanticRisk:
