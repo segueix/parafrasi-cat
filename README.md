@@ -8,7 +8,7 @@ que s'executa al mateix ordinador.
 > morfològica i sintàctica, validació gramatical i selecció determinista de
 > candidats.**
 
-**Versió 1.3.3.** Un cop instal·lats els recursos, tot funciona sense connexió.
+**Versió 1.3.13.** Un cop instal·lats els recursos, tot funciona sense connexió.
 Parafrasi-cat no envia text a serveis d'Internet: en mode local, el text no surt
 del dispositiu; en mode de xarxa local, només circula entre el navegador client
 i el servidor Parafrasi-cat dins de la LAN.
@@ -291,6 +291,31 @@ gaudir» → «gaudí») tenen grau estructural 0 i es recullen a part com a **g
 superficial**; repetir la mateixa família té rendiments decreixents, i una
 transformació que degrada l'estructura local (dues relatives consecutives amb
 el mateix marcador, «que» acumulats) rep una penalització, mai una invalidació.
+
+### Connectors equivalents dins d'un paràgraf
+
+Entre alternatives igualment segures, el motor prefereix la que no repeteix el
+mateix connector. La mesura té tres peces i cap d'elles és una regla mecànica
+de «no repetir mai»:
+
+- **Només compten les formes que el motor pot variar**: les que declaren les
+  classes d'equivalència de connectors («ja que» ↔ «atès que», «tanmateix» ↔
+  «no obstant això»…). Penalitzar una repetició que no es pot evitar només
+  serviria per empènyer la tria cap a canvis que no hi tenen res a veure.
+- **La distància gradua el pes**: dues aparicions de la mateixa forma pesen
+  `1 / (1 + frases de distància)` —dins d'una frase 1,00, a la següent 0,50,
+  tres més enllà 0,25—, i fora del paràgraf no es mesura res.
+- **Es compara amb l'original**: si l'autor ja escrivia «perquè… perquè», el
+  motor no ho considera cap defecte ni ho canvia. El que no pot fer és
+  **introduir** una repetició que no hi era, com convertir «perquè… perquè» en
+  «atès que… atès que» quan «atès que… ja que» és igual de segur. Un canvi que
+  recrea la repetició, a més, perd el premi que cobrava per haver-se fet.
+
+Si «atès que» continua sent clarament la millor opció segons l'empremta i la
+resta de la puntuació, es pot repetir: la no-repetició és un criteri de
+selecció, mai un validador. La traça del paràgraf diu quin perfil de connectors
+té cada arquitectura, quines repeticions hi ha, quines són noves i a quina
+distància.
 
 Reestructurar en profunditat **no vol dir escriure més llarg**. Abans de
 fusionar res, el motor calcula la longitud de la frase resultant i la compara

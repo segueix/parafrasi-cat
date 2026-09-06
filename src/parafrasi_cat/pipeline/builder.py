@@ -35,6 +35,7 @@ from parafrasi_cat.rules.ruleset import RuleSet, RuleSetConfig, build_rule_set
 from parafrasi_cat.scoring.assertive import AssertiveEvaluator
 from parafrasi_cat.scoring.scorer import CompositeScorer
 from parafrasi_cat.style.adaptation import AuthorAdaptation
+from parafrasi_cat.style.connector_repetition import ConnectorRepetition, connector_forms
 from parafrasi_cat.style.degradation import StructuralDegradation
 from parafrasi_cat.style.evaluator import StyleEvaluator
 from parafrasi_cat.style.fusion_rhythm import FusionRhythm
@@ -187,8 +188,19 @@ def build_pipeline(
             EpistemicLexicon.load(epistemology), style_profile.preferences
         )
     rhythm = FusionRhythm(analyzer, syntax, style_profile.preferences, style_profile)
+    # L'inventari de connectors surt de les regles actives: són les formes que el
+    # motor pot intercanviar amb seguretat i, per tant, les úniques que té sentit
+    # comptar quan es mira si una repetició s'ha introduït o ja hi era.
+    connectors = ConnectorRepetition(analyzer, connector_forms(rule_set.rules))
     scorer = CompositeScorer(
-        weights, style_evaluator, preference_evaluator, adaptation, degradation, assertive, rhythm
+        weights,
+        style_evaluator,
+        preference_evaluator,
+        adaptation,
+        degradation,
+        assertive,
+        rhythm,
+        connectors,
     )
 
     return Pipeline(

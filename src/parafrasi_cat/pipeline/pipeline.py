@@ -173,6 +173,10 @@ class Pipeline:
         return self._rule_set
 
     @property
+    def scorer(self) -> Scorer:
+        return self._scorer
+
+    @property
     def validators(self) -> tuple[Validator, ...]:
         return self._validators
 
@@ -429,6 +433,7 @@ class Pipeline:
             rejection_reason=self._rejection_reason,
             adaptation=self._adaptation,
             affinity_weight=affinity_weight,
+            connectors=getattr(self._scorer, "connectors", None),
         )
 
     def _process_paragraph(

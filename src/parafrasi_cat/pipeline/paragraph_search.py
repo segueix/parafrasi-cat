@@ -42,7 +42,7 @@ from parafrasi_cat.analyzer.paragraphs import Paragraph
 from parafrasi_cat.candidates.candidate import Candidate
 from parafrasi_cat.candidates.generator import CandidateGenerator
 from parafrasi_cat.core.spans import Span
-from parafrasi_cat.core.transformation import Transformation
+from parafrasi_cat.core.transformation import Transformation, TransformationFamily
 from parafrasi_cat.pipeline.result import (
     EvaluatedCandidate,
     ParagraphOpportunities,
@@ -52,8 +52,14 @@ from parafrasi_cat.pipeline.result import (
 )
 from parafrasi_cat.protected.spans import ProtectedSpan
 from parafrasi_cat.rules.base import ParagraphContext, ParagraphRule
-from parafrasi_cat.scoring.scorer import ScoreBreakdown, Scorer, ScoringContext
+from parafrasi_cat.scoring.scorer import (
+    CONNECTOR_COMPONENT,
+    ScoreBreakdown,
+    Scorer,
+    ScoringContext,
+)
 from parafrasi_cat.style.adaptation import AdaptationContext, AuthorAdaptation
+from parafrasi_cat.style.connector_repetition import ConnectorRepetition
 from parafrasi_cat.validation.base import ValidationContext, Validator
 from parafrasi_cat.validation.result import ValidationResult
 
@@ -65,6 +71,10 @@ AFFINITY_COMPONENT = "afinitat_autor"
 CONNECTOR_SIGNATURE = "CONNECTOR"
 CONNECTOR_VARIANTS_PER_SENTENCE = 2
 """Màxim de candidats transformats de connector que el feix conserva per frase."""
+CONNECTOR_PROFILE_TAIL = 2
+"""Connectors recents que identifiquen el perfil d'un estat dins de la poda."""
+WITHDRAWN_COMPONENT = "guany_repeticio_connectors"
+"""Guany retirat a les frases que recreen una repetició de connector."""
 _SHORT = 60
 
 
@@ -79,6 +89,8 @@ class LocalOption:
     sentence_index: int
     evaluated: EvaluatedCandidate
     reason: str
+    connectors: tuple[str, ...] = ()
+    """Connectors de l'inventari que conté aquest candidat, en ordre."""
 
     @property
     def candidate(self) -> Candidate:
@@ -130,6 +142,18 @@ class BeamState:
     def signatures(self) -> tuple[str, ...]:
         return tuple(o.candidate.signature for o in self.options)
 
+    @property
+    def connector_profile(self) -> tuple[str, ...]:
+        """Connectors triats fins ara, en ordre: dues arquitectures amb la mateixa
+        signatura estructural poden diferir només en això."""
+        return tuple(form for option in self.options for form in option.connectors)
+
+    @property
+    def connector_key(self) -> tuple[str, ...]:
+        """Clau compacta del perfil: els darrers connectors, que són els que decideixen
+        si la frase següent repetirà una forma o no."""
+        return self.connector_profile[-CONNECTOR_PROFILE_TAIL:]
+
     def describe(self) -> str:
         rules = ", ".join(t.rule_id for t in self.paragraph.transformations) or "cap"
         return f"[{' | '.join(self.signatures)}] + paràgraf: {rules}"
@@ -172,6 +196,12 @@ class ParagraphAlternative:
     """Repartiment de la reredacció entre les frases amb alternatives segures (0-1)."""
 
     @property
+    def connectors(self) -> dict[str, object]:
+        """Perfil de connectors, repeticions detectades i quines són noves."""
+        score = self.evaluated.score
+        return dict(score.connectors) if score is not None else {}
+
+    @property
     def valid(self) -> bool:
         return self.evaluated.accepted
 
@@ -195,6 +225,7 @@ class ParagraphAlternative:
             "global_total": self.global_total,
             "distribution_of_change": list(self.distribution),
             "coverage_balance": self.coverage_balance,
+            "connectors": self.connectors,
             "valid": self.valid,
             "rejection_reason": self.evaluated.rejection_reason,
             "text": self.evaluated.candidate.text,
@@ -274,6 +305,7 @@ class ParagraphBeam:
         rejection_reason: RejectionReason,
         adaptation: AuthorAdaptation | None = None,
         affinity_weight: float = 0.0,
+        connectors: ConnectorRepetition | None = None,
     ) -> None:
         self._settings = settings
         self._generator = generator
@@ -284,6 +316,7 @@ class ParagraphBeam:
         self._rejection_reason = rejection_reason
         self._adaptation = adaptation
         self._affinity_weight = affinity_weight
+        self._connectors = connectors
 
     @property
     def settings(self) -> BeamSettings:
@@ -375,7 +408,13 @@ class ParagraphBeam:
                 continue
             seen_signatures.add(candidate.signature)
             chosen.append(LocalOption(result.index, evaluated, f"millor {candidate.signature}"))
-        return (*options, *chosen)
+        return tuple(self._with_profile(option) for option in (*options, *chosen))
+
+    def _with_profile(self, option: LocalOption) -> LocalOption:
+        """Anota quins connectors de l'inventari conté el candidat."""
+        if self._connectors is None:
+            return option
+        return replace(option, connectors=self._connectors.profile(option.candidate.text))
 
     # --- cerca ------------------------------------------------------------------------------
 
@@ -395,6 +434,13 @@ class ParagraphBeam:
             gaps.append(paragraph.text[previous.span.end - base : current.span.start - base])
         tail = paragraph.text[inner[-1].span.end - base :] if inner else ""
         options = tuple(self.local_options(result) for result in inner)
+        # Prefix del paràgraf **original** després de cada frase: és la referència amb
+        # què es compara la repetició de connectors mentre el feix creix.
+        originals: list[str] = []
+        prefix = ""
+        for gap, sentence in zip(gaps, inner, strict=True):
+            prefix += gap + sentence.source_text
+            originals.append(prefix)
 
         explored = 0
         pruned: list[PrunedState] = []
@@ -408,7 +454,9 @@ class ParagraphBeam:
             extended: list[BeamState] = []
             for state in beam:
                 for option in group:
-                    grown = self._extend(state, option, gaps[index], paragraph, rejected, notes)
+                    grown = self._extend(
+                        state, option, gaps[index], originals[index], paragraph, rejected, notes
+                    )
                     already = len(state.paragraph.transformations)
                     fusions += sum(1 for g in grown if len(g.paragraph.transformations) > already)
                     extended.extend(grown)
@@ -469,6 +517,7 @@ class ParagraphBeam:
         state: BeamState,
         option: LocalOption,
         gap: str,
+        original: str,
         paragraph: Paragraph,
         rejected: dict[str, RejectedProposal],
         notes: dict[str, None],
@@ -480,7 +529,10 @@ class ParagraphBeam:
         text = previous.text + gap + candidate.text
         local_total = state.local_total + option.total
         extended = Candidate(paragraph.index, intermediate, text, previous.transformations)
-        base_score = self._scorer.score(extended, ScoringContext(None, intermediate, None))
+        # El prefix es puntua contra el prefix original: així la repetició de
+        # connectors que el candidat introdueix ja compta mentre el feix creix, i no
+        # només al final.
+        base_score = self._scorer.score(extended, ScoringContext(None, original, None))
         states = [BeamState((*state.options, option), extended, local_total, base_score, None)]
         if not self._rules or not state.options:
             return states
@@ -506,7 +558,7 @@ class ParagraphBeam:
                     key = proposal.text_before + "→" + proposal.text_after
                     rejected.setdefault(key, RejectedProposal(proposal, validation.summary))
                     continue
-                score = self._scorer.score(composed, ScoringContext(validation, intermediate, None))
+                score = self._scorer.score(composed, ScoringContext(validation, original, None))
                 if not score.valid:
                     continue
                 states.append(
@@ -532,7 +584,16 @@ class ParagraphBeam:
 
         Ordre: el millor estat; el millor estat de cada candidat de la frase que
         s'acaba d'afegir (cap alternativa local no mor sense haver pogut
-        combinar-se amb la frase següent); la resta per puntuació parcial.
+        combinar-se amb la frase següent); el millor estat de cada perfil de
+        connectors recent; la resta per puntuació parcial.
+
+        Les dues primeres capes miren la frase que s'acaba d'afegir; la tercera
+        mira l'historial, perquè dues arquitectures poden tenir les mateixes
+        signatures i el mateix candidat final i diferir només en un connector
+        triat unes quantes frases enrere («atès que… atès que» contra «atès
+        que… ja que»). Sense aquesta capa, la que puntua una mil·lèsima menys
+        mor abans que el paràgraf sencer pugui comparar-les. Tot continua acotat
+        per l'amplada del feix: cap capa no n'afegeix ni un estat de més.
         """
         unique: dict[str, BeamState] = {}
         for state in states:
@@ -556,6 +617,18 @@ class ParagraphBeam:
                         kept.append(state)
                         reasons[id(state)] = f"millor estat amb {option.candidate.signature}"
                     break
+        seen_profiles = {state.connector_key for state in kept}
+        for state in ranked:
+            if len(kept) >= width:
+                break
+            key = state.connector_key
+            if id(state) in reasons or key in seen_profiles:
+                continue
+            seen_profiles.add(key)
+            kept.append(state)
+            reasons[id(state)] = "millor estat amb connectors " + (
+                ", ".join(f"«{form}»" for form in key) if key else "sense connectors"
+            )
         for state in ranked:
             if len(kept) >= width:
                 break
@@ -618,13 +691,13 @@ class ParagraphBeam:
             validation = self._validate(final_paragraph, paragraph.text, protected)
             score = self._scorer.score(
                 final_paragraph,
-                ScoringContext(validation, final_paragraph.source_text, document),
+                ScoringContext(validation, paragraph.text, document),
             )
-            local_total = sum(
-                o.total - (o.evaluated.score.components.get(AFFINITY_COMPONENT, 0.0)
-                           if o.evaluated.score is not None else 0.0)
-                for o in state.options
-            )  # fmt: skip
+            # L'afinitat i la repetició de connectors són propietats del paràgraf
+            # sencer: es descompten de les puntuacions de frase (on només se'n podia
+            # veure una aproximació) i es tornen a comptar una sola vegada sobre
+            # l'arquitectura completa, mesurades contra el paràgraf original.
+            local_total = sum(o.total - _paragraph_scale_components(o) for o in state.options)
             paragraph_total = score.total - score.components.get(AFFINITY_COMPONENT, 0.0)
             affinity_delta: float | None = None
             if baseline is not None:
@@ -636,11 +709,17 @@ class ParagraphBeam:
             balance_bonus = (
                 self._settings.coverage_balance * balance if balance is not None else 0.0
             )
+            # Un canvi de connector que recrea una repetició no és cap millora: se li
+            # retira, en proporció a la severitat, el guany que cobrava per haver-lo
+            # fet. Sense això, afegir un segon canvi idèntic sempre compensaria la
+            # penalització, per petita que sigui la repetició resultant.
+            withdrawn = self._withdrawn_gain(state, score)
             global_total = (
                 local_total
                 + paragraph_total
                 + (self._affinity_weight * affinity_delta if affinity_delta is not None else 0.0)
                 + balance_bonus
+                - withdrawn
             )
             if not score.valid:
                 global_total = score.total
@@ -658,6 +737,9 @@ class ParagraphBeam:
             if balance is not None and self._settings.coverage_balance > 0:
                 components["balanc_cobertura"] = round(balance_bonus, 4)
                 explanation += f"; balanç de cobertura {balance:.2f}"
+            if withdrawn:
+                components[WITHDRAWN_COMPONENT] = round(-withdrawn, 4)
+                explanation += f"; guany retirat per repetició de connectors {-withdrawn:+.3f}"
             explanation += f" → {score.explanation}"
             global_score = replace(
                 score,
@@ -680,6 +762,41 @@ class ParagraphBeam:
                 )
             )
         return alternatives
+
+    def _withdrawn_gain(self, state: BeamState, score: ScoreBreakdown) -> float:
+        """Guany que perden les frases que porten la forma repetida de nou.
+
+        Si el paràgraf introdueix una repetició de connector, les frases que
+        contenen la forma repetida deixen de cobrar (en proporció a la severitat)
+        el premi que els donava aquell canvi. No hi ha cap constant nova: es
+        retira exactament el guany que el mateix puntuador havia concedit.
+        """
+        detail = score.connectors
+        penalty = detail.get("penalty") if detail else None
+        severity = float(penalty) if isinstance(penalty, (int, float)) else 0.0
+        if severity <= 0.0:
+            return 0.0
+        introduced = detail.get("introduced")
+        forms = (
+            {str(item["form"]) for item in introduced if isinstance(item, dict)}
+            if isinstance(introduced, list)
+            else set()
+        )
+        gain_of = getattr(self._scorer, "transformation_gain", None)
+        if not forms or gain_of is None:
+            return 0.0
+        total = 0.0
+        for option in state.options:
+            if not forms.intersection(option.connectors):
+                continue
+            connectors = [
+                t
+                for t in option.candidate.transformations
+                if t.family is TransformationFamily.CONNECTOR
+            ]
+            if connectors:
+                total += gain_of(connectors)
+        return round(severity * total, 4)
 
     def _path(
         self,
@@ -779,6 +896,22 @@ def _coverage_balance(distribution: Sequence[float], sentences: Sequence[int]) -
         return None
     total = sum(math.sqrt(max(0.0, min(1.0, distribution[n]))) for n in sentences)
     return round((total / len(sentences)) ** 2, 4)
+
+
+def _paragraph_scale_components(option: LocalOption) -> float:
+    """Part de la puntuació de frase que es tornarà a mesurar sobre el paràgraf.
+
+    L'afinitat amb l'autor i la repetició de connectors depenen del text del
+    voltant: mesurades frase a frase només en són una aproximació, i sumar-les
+    aquí i tornar-les a comptar sobre l'arquitectura completa seria comptar dues
+    vegades el mateix fenomen.
+    """
+    score = option.evaluated.score
+    if score is None:
+        return 0.0
+    return score.components.get(AFFINITY_COMPONENT, 0.0) + score.components.get(
+        CONNECTOR_COMPONENT, 0.0
+    )
 
 
 def _rank(state: BeamState) -> tuple[float, int]:

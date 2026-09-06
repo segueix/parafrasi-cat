@@ -12,6 +12,7 @@ from parafrasi_cat.preferences.evaluator import PreferenceEvaluator
 from parafrasi_cat.scoring.assertive import AssertiveEvaluator
 from parafrasi_cat.scoring.weights import ScoringWeights
 from parafrasi_cat.style.adaptation import AdaptationContext, AuthorAdaptation
+from parafrasi_cat.style.connector_repetition import ConnectorRepetition
 from parafrasi_cat.style.degradation import StructuralDegradation
 from parafrasi_cat.style.evaluator import StyleEvaluator
 from parafrasi_cat.style.fusion_rhythm import FusionRhythm
@@ -37,6 +38,9 @@ DIMENSIONS: tuple[str, ...] = (
 
 INVALID_TOTAL = -1.0
 
+CONNECTOR_COMPONENT = "repeticio_connectors"
+"""Component de la penalització per repetició de connectors introduïda."""
+
 _DIMENSION_LABELS = {
     "preservacio_factual": "preservació factual",
     "preservacio_epistemologica": "preservació epistemològica",
@@ -59,6 +63,11 @@ _DIMENSION_LABELS = {
 class ScoringContext:
     validation: ValidationResult | None = None
     source_text: str = ""
+    """Text original de la unitat que es puntua (frase o paràgraf), si es coneix.
+
+    És la referència amb què es compara la repetició de connectors: sense
+    original no es pot saber quina repetició és nova i quina ja hi era.
+    """
     document: AdaptationContext | None = None
 
 
@@ -76,6 +85,8 @@ class ScoreBreakdown:
     degradation_reasons: tuple[str, ...] = ()
     assertive: dict[str, object] = field(default_factory=dict)
     rhythm: dict[str, object] = field(default_factory=dict)
+    connectors: dict[str, object] = field(default_factory=dict)
+    """Perfil de connectors i repeticions detectades (buit si no se n'ha mesurat cap)."""
 
     def dimension(self, name: str) -> float | None:
         return self.dimensions.get(name)
@@ -103,6 +114,7 @@ class ScoreBreakdown:
             "degradation_reasons": list(self.degradation_reasons),
             "assertive": dict(self.assertive),
             "rhythm": dict(self.rhythm),
+            "connectors": dict(self.connectors),
         }
 
 
@@ -130,6 +142,7 @@ class CompositeScorer:
         degradation: StructuralDegradation | None = None,
         assertive: AssertiveEvaluator | None = None,
         rhythm: FusionRhythm | None = None,
+        connectors: ConnectorRepetition | None = None,
     ) -> None:
         self._weights = weights or ScoringWeights()
         self._style = style_evaluator
@@ -138,6 +151,7 @@ class CompositeScorer:
         self._degradation = degradation
         self._assertive = assertive
         self._rhythm = rhythm
+        self._connectors = connectors
 
     @property
     def weights(self) -> ScoringWeights:
@@ -167,6 +181,11 @@ class CompositeScorer:
     def rhythm(self) -> FusionRhythm | None:
         return self._rhythm
 
+    @property
+    def connectors(self) -> ConnectorRepetition | None:
+        """Avaluador de la repetició de connectors (cap si no hi ha inventari)."""
+        return self._connectors
+
     def transformation_gain(self, transformations: Sequence[Transformation]) -> float:
         w = self._weights
         by_family: dict[TransformationFamily, list[float]] = {}
@@ -190,8 +209,12 @@ class CompositeScorer:
         validation = ctx.validation if ctx is not None else None
         if validation is not None:
             dimensions["preservacio_factual"] = _binary(validation, ValidationDimension.FACTUAL)
-            dimensions["preservacio_epistemologica"] = _binary(validation, ValidationDimension.EPISTEMIC)
-            dimensions["compliment_terminologic"] = _binary(validation, ValidationDimension.TERMINOLOGY)
+            dimensions["preservacio_epistemologica"] = _binary(
+                validation, ValidationDimension.EPISTEMIC
+            )
+            dimensions["compliment_terminologic"] = _binary(
+                validation, ValidationDimension.TERMINOLOGY
+            )
             grammar = _grammar_score(validation)
             dimensions["gramaticalitat"] = grammar
             grammar_penalty = w.grammar * (1.0 - grammar)
@@ -240,27 +263,26 @@ class CompositeScorer:
                 author_explanation = self._adaptation.explain(affinity, baseline)
                 author_affinity = {**affinity.to_dict(), "baseline": baseline.score}
                 components["afinitat_autor"] = round(affinity_bonus, 4)
-                parts.append(
-                    f"afinitat amb l'autor {affinity_bonus:+.3f} ({author_explanation})"
-                )
+                parts.append(f"afinitat amb l'autor {affinity_bonus:+.3f} ({author_explanation})")
                 dimensions["afinitat_autor"] = affinity.score
 
         connector_repetition_penalty = 0.0
-        if (
-            self._adaptation is not None
-            and w.rewrite_pressure > 0
-            and w.connector_repetition > 0
-        ):
-            own_connectors = self._adaptation.stats_of(candidate.text).connectors
+        connector_detail: dict[str, object] = {}
+        if self._connectors is not None and w.rewrite_pressure > 0 and w.connector_repetition > 0:
+            # Es compara amb l'original de la unitat: només la repetició que el
+            # candidat afegeix compta. La que l'autor ja havia escrit es conserva
+            # sense càrrec, i canviar-la per una de nova sí que en té.
+            reference = (ctx.source_text if ctx is not None else "") or candidate.source_text
             document = ctx.document if ctx is not None else None
-            severity, repeated = _connector_repetition_severity(own_connectors, document)
-            dimensions["varietat_connectors"] = round(1.0 - severity, 4)
-            if severity > 0:
-                connector_repetition_penalty = w.connector_repetition * severity
-                components["repeticio_connectors"] = round(-connector_repetition_penalty, 4)
-                forms = ", ".join(f"«{form}»" for form in repeated)
+            repetition = self._connectors.assess(candidate.text, reference, document)
+            connector_detail = repetition.to_dict()
+            dimensions["varietat_connectors"] = round(1.0 - repetition.penalty, 4)
+            if repetition.penalised:
+                connector_repetition_penalty = w.connector_repetition * repetition.penalty
+                components[CONNECTOR_COMPONENT] = round(-connector_repetition_penalty, 4)
                 parts.append(
-                    f"repetició local de connectors {-connector_repetition_penalty:+.3f} ({forms})"
+                    f"repetició de connectors {-connector_repetition_penalty:+.3f} "
+                    f"({repetition.describe()})"
                 )
 
         change = candidate.change_ratio()
@@ -313,8 +335,7 @@ class CompositeScorer:
                 rhythm_detail = assessment_r.to_dict()
                 components["ritme"] = round(-rhythm_penalty, 4)
                 parts.append(
-                    f"ritme de la fusió {-rhythm_penalty:+.3f} "
-                    f"({'; '.join(assessment_r.reasons)})"
+                    f"ritme de la fusió {-rhythm_penalty:+.3f} ({'; '.join(assessment_r.reasons)})"
                 )
 
         structure_bonus = 0.0
@@ -323,11 +344,7 @@ class CompositeScorer:
             scale = grammar_score if isinstance(grammar_score, float) else 1.0
             quality = dimensions["qualitat_sintactica"]
             structure_bonus = (
-                w.structure
-                * degree
-                * scale
-                * (quality if quality else 0.0)
-                * rhythm_scale
+                w.structure * degree * scale * (quality if quality else 0.0) * rhythm_scale
             )
             components["estructura"] = round(structure_bonus, 4)
             parts.append(f"reredacció estructural {structure_bonus:+.3f}")
@@ -341,10 +358,7 @@ class CompositeScorer:
             safe_scale = grammar_score if isinstance(grammar_score, float) else 1.0
             rewrite_degree = min(1.0, 0.35 * change + 0.65 * degree)
             rewrite_bonus = (
-                w.rewrite_pressure
-                * rewrite_degree
-                * safe_scale
-                * (quality if quality else 0.0)
+                w.rewrite_pressure * rewrite_degree * safe_scale * (quality if quality else 0.0)
             )
             components["pressio_reescriptura"] = round(rewrite_bonus, 4)
             parts.append(f"pressió de reescriptura {rewrite_bonus:+.3f}")
@@ -380,37 +394,8 @@ class CompositeScorer:
             degradation_reasons=degradation_reasons,
             assertive=assertive_detail,
             rhythm=rhythm_detail,
+            connectors=connector_detail,
         )
-
-
-def _connector_repetition_severity(
-    forms: Sequence[str], document: AdaptationContext | None = None
-) -> tuple[float, tuple[str, ...]]:
-    """Severitat 0-1 de repetir exactament el mateix connector en el veïnat local.
-
-    Una repetició dins de la unitat pesa més que una coincidència amb el connector
-    immediat del context anterior o posterior. És una preferència de selecció, no
-    una invalidació: si no existeix cap alternativa segura, el text es conserva.
-    """
-    if not forms:
-        return 0.0, ()
-    severity = 0.0
-    repeated: list[str] = []
-    for left, right in zip(forms, forms[1:], strict=False):
-        if left != right:
-            continue
-        severity += 0.75
-        repeated.append(right)
-    if document is not None:
-        before = document.before.connectors
-        after = document.after.connectors
-        if before and before[-1] == forms[0]:
-            severity += 0.35
-            repeated.append(forms[0])
-        if after and forms[-1] == after[0]:
-            severity += 0.35
-            repeated.append(forms[-1])
-    return min(1.0, severity), tuple(dict.fromkeys(repeated))
 
 
 def _binary(validation: ValidationResult, dimension: ValidationDimension) -> float:
