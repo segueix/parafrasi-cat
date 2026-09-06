@@ -52,7 +52,7 @@ ParaphraseResult (text resultant + informe complet)
 | `morphology` | Lemes i trets flexius | `MorphFeatures`, `LexicalEntry`, `DictionaryMorphology`, protocol `MorphologyProvider` |
 | `protected` | Fragments intocables | `ProtectedSpan`, `ProtectionKind`, detectors, `Protector` |
 | `rules` | Regles que proposen transformacions | `Rule`, `RuleContext`, `LexicalSubstitutionRule`, `BlockMoveRule`, `RuleRegistry`, `RuleSetConfig` |
-| `candidates` | Construcció de versions alternatives | `Candidate`, `CandidateGenerator` |
+| `candidates` | Construcció de versions alternatives | `Candidate`, `CandidateGenerator`, `GenerationTrace` |
 | `validation` | Invariants de contingut | `Validator`, `ValidationResult`, validadors concrets, `EpistemicCategory`, matriu `TRANSITIONS` |
 | `style` | Estilometria i perfils | `StyleProfile`, `StyleMetrics`, `StyleEvaluator`, `estimate_profile`, `FusionRhythm`, `epistemic_profile`, `ConnectorRepetition` |
 | `scoring` | Puntuació i selecció | `ScoringWeights`, `CompositeScorer`, `AssertiveEvaluator`, `select_best` |
