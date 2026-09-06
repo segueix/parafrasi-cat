@@ -194,7 +194,7 @@ class BlockMoveRule(Rule):
         finite = analysis.finite_tokens_in(start, end)
         if not finite:
             return None
-        if marker == "perquè" and any(t.mood == "subj" for t in finite):
+        if normalize_form(marker) == "perquè" and any(t.mood == "subj" for t in finite):
             return None  # final («perquè vinguin»), no causal
         position = _position(text, start, end, body_end)
         if position is None:
@@ -287,7 +287,7 @@ class BlockMoveRule(Rule):
         block_text = text[block.start : block.end]
         before = body[: block.start]
         after = body[block.end :]
-        marker = block.marker
+        marker = normalize_form(block.marker)
         if target == "final":
             main = after.lstrip(" ,;")
             if not main:

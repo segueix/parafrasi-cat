@@ -7,7 +7,13 @@ from collections.abc import Mapping
 from parafrasi_cat.analyzer import RuleBasedAnalyzer
 from parafrasi_cat.protected import default_protector
 from parafrasi_cat.resources import ProjectPaths
-from parafrasi_cat.rules import ConnectorEquivalenceRule, load_rule_definitions
+from parafrasi_cat.rules import (
+    ConnectorEquivalenceRule,
+    RuleSetConfig,
+    build_rule_set,
+    default_registry,
+    load_rule_definitions,
+)
 from parafrasi_cat.rules.examples import outputs_for
 
 
@@ -54,6 +60,12 @@ def test_colon_split_requires_a_finite_verb_immediately_after_colon(
         )
         if d.rule_id == "cobertura.dos_punts_explicatius_a_dues_frases"
     )
+    assert definition.enabled is False
+    rules = build_rule_set(
+        RuleSetConfig.load(paths.rules / "parafrasi.yaml"), default_registry(), paths
+    )
+    assert definition.rule_id not in rules.rule_ids
+    assert "divisio.coordinada_pero" in rules.rule_ids
     pattern = list(definition.pattern)
     colon_index = next(
         index

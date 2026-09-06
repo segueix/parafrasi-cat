@@ -5,6 +5,12 @@ projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
 ## Pendent de publicació
 
+- Els moviments de subordinades reconeixen els connectors amb majúscula:
+  conserven la coma concessiva, adapten «Com que» a «ja que» en posició final
+  i mantenen el bloqueig de «Perquè» final amb subjuntiu.
+- Desactivada per defecte la divisió dels dos punts explicatius: tenir dues
+  clàusules verbals no garanteix conservar la relació discursiva amb un punt.
+
 - L'estil es compta una sola vegada sobre el prefix i el paràgraf complet,
   sense acumular les distàncies estilístiques de cada frase. Es mantenen els
   pesos, les preferències explícites i tots els validadors.
