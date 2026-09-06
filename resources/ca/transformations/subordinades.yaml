@@ -251,6 +251,9 @@ rules:
     semantic_risk: low
     confidence: 0.78
     description: "Relativa passiva explicativa ↔ participial amb antecedent confirmat pel parser"
+    conditions:
+      syntax:
+        requires_parser: true
     examples:
       positive:
         - input: "El monument, que fou encarregat el 1507, és a Florència."
