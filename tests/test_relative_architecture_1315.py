@@ -56,13 +56,22 @@ def _token(
     )
 
 
-def _relative_analysis(text: str, *, comma: bool = True, negated: bool = False) -> SentenceSyntax:
-    # Índexs en ordre sintàctic/textual: monument(0), que(1), [no(2)], fou, participi, data, és.
+def _relative_analysis(text: str, *, negated: bool = False) -> SentenceSyntax:
+    # Índexs en ordre textual: monument(0), que(1), [no(2)], fou, participi, data, és.
     shift = 1 if negated else 0
     participle_i = 3 + shift
     root_i = 5 + shift
     tokens = [
-        _token(text, "monument", 0, dep="nsubj", head=root_i, pos="NOUN", number="sg", gender="m"),
+        _token(
+            text,
+            "monument",
+            0,
+            dep="nsubj",
+            head=root_i,
+            pos="NOUN",
+            number="sg",
+            gender="m",
+        ),
         _token(
             text,
             "que",
@@ -121,13 +130,21 @@ def _relative_analysis(text: str, *, comma: bool = True, negated: bool = False) 
             ),
         ]
     )
-    del comma  # la puntuació es comprova directament sobre `text`
     return SentenceSyntax(text, tuple(tokens), source="test")
 
 
 def _participial_analysis(text: str, *, number: str | None = "sg") -> SentenceSyntax:
     tokens = (
-        _token(text, "monument", 0, dep="nsubj", head=3, pos="NOUN", number=number, gender="m"),
+        _token(
+            text,
+            "monument",
+            0,
+            dep="nsubj",
+            head=3,
+            pos="NOUN",
+            number=number,
+            gender="m",
+        ),
         _token(
             text,
             "encarregat",
@@ -173,15 +190,18 @@ def _rule() -> RelativeArchitectureRule:
     )
 
 
-def test_explanatory_passive_relative_can_reduce_without_touching_date() -> None:
+def test_explanatory_passive_relative_offers_two_structural_architectures() -> None:
     text = "El monument, que fou encarregat el 1507, és a Florència."
     proposals = tuple(_rule().propose(_ctx(text, _relative_analysis(text))))
-    assert proposals
     outputs = [proposal.apply(text) for proposal in proposals]
+
     assert "El monument, encarregat el 1507, és a Florència." in outputs
-    proposal = next(p for p in proposals if p.metadata.get("architecture") == "relative_to_participial")
-    assert proposal.metadata["family"] == "SUBORDINATION"
-    assert "1507" in proposal.apply(text)
+    assert "Encarregat el 1507, el monument és a Florència." in outputs
+    assert all("1507" in output for output in outputs)
+
+    by_architecture = {proposal.metadata.get("architecture"): proposal for proposal in proposals}
+    assert by_architecture["relative_to_participial"].metadata["family"] == "SUBORDINATION"
+    assert by_architecture["relative_to_fronted_participial"].metadata["family"] == "REORDER"
 
 
 def test_explanatory_participial_can_expand_when_event_is_anchored() -> None:
@@ -193,7 +213,7 @@ def test_explanatory_participial_can_expand_when_event_is_anchored() -> None:
 
 def test_restrictive_relative_is_not_reduced() -> None:
     text = "El monument que fou encarregat el 1507 és a Florència."
-    proposals = tuple(_rule().propose(_ctx(text, _relative_analysis(text, comma=False))))
+    proposals = tuple(_rule().propose(_ctx(text, _relative_analysis(text))))
     assert not proposals
 
 
