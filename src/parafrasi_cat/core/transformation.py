@@ -194,6 +194,15 @@ _FAMILY_BY_TYPE: dict[str, TransformationFamily] = {
 #: moure una subordinada sencera.
 STRUCTURAL_WEIGHT_KEY = "structural_weight"
 
+#: Metadades de traçabilitat de les operacions absorbides dins d'una transformació
+#: composta. ``rule_id``/``family``/``transformation_type`` continuen descrivint
+#: l'operació primària per compatibilitat; aquestes claus conserven les operacions
+#: posteriors que han quedat projectades sobre el mateix fragment original.
+CHAINED_RULES_KEY = "chained_rules"
+CHAINED_FAMILIES_KEY = "chained_families"
+CHAINED_TYPES_KEY = "chained_types"
+OPERATION_COUNT_KEY = "operation_count"
+
 
 class SemanticRisk(StrEnum):
     """Risc que una transformació alteri el significat del text original."""
@@ -241,6 +250,10 @@ _RISK_WEIGHTS: dict[SemanticRisk, float] = {
     SemanticRisk.MEDIUM: 0.6,
     SemanticRisk.HIGH: 1.0,
 }
+
+
+def _csv(value: object) -> tuple[str, ...]:
+    return tuple(item for item in str(value or "").split(",") if item)
 
 
 @dataclass(frozen=True, slots=True)
@@ -296,6 +309,47 @@ class Transformation:
         return _FAMILY_BY_TYPE.get(self.transformation_type.value, TransformationFamily.SYNTACTIC)
 
     @property
+    def operation_rule_ids(self) -> tuple[str, ...]:
+        """Regles reals que han contribuït a aquest fragment, en ordre d'aplicació."""
+        return (self.rule_id, *_csv(self.metadata.get(CHAINED_RULES_KEY)))
+
+    @property
+    def operation_families(self) -> tuple[TransformationFamily, ...]:
+        """Famílies de totes les operacions encadenades, no només la primera.
+
+        Les metadades antigues que només guardaven ``chained_rules`` continuen
+        funcionant: en aquest cas només es coneix amb certesa la família primària.
+        """
+        result: list[TransformationFamily] = [self.family]
+        for raw in _csv(self.metadata.get(CHAINED_FAMILIES_KEY)):
+            family = TransformationFamily.parse(raw)
+            if family is not None:
+                result.append(family)
+        return tuple(result)
+
+    @property
+    def operation_types(self) -> tuple[TransformationType, ...]:
+        """Tipus de totes les operacions encadenades que se'n coneixen."""
+        result: list[TransformationType] = [self.transformation_type]
+        for raw in _csv(self.metadata.get(CHAINED_TYPES_KEY)):
+            try:
+                result.append(TransformationType(raw))
+            except ValueError:
+                continue
+        return tuple(result)
+
+    @property
+    def operation_count(self) -> int:
+        """Nombre real d'operacions absorbides dins d'aquesta transformació."""
+        declared = self.metadata.get(OPERATION_COUNT_KEY)
+        if declared is not None:
+            try:
+                return max(1, int(str(declared)))
+            except ValueError:
+                pass
+        return max(1, len(self.operation_rule_ids))
+
+    @property
     def structural_weight(self) -> float:
         """Pes estructural efectiu: el de la família, matisat per la regla si ho declara."""
         family = self.family
@@ -347,7 +401,11 @@ class Transformation:
             "confidence": self.confidence,
             "semantic_risk": self.semantic_risk.value,
             "family": self.family.value,
-            "structural": self.family.structural,
+            "structural": any(f.structural for f in self.operation_families),
+            "operation_count": self.operation_count,
+            "operation_rule_ids": list(self.operation_rule_ids),
+            "operation_families": [family.value for family in self.operation_families],
+            "operation_types": [kind.value for kind in self.operation_types],
             "explanation": self.explanation,
             "metadata": dict(self.metadata),
         }
