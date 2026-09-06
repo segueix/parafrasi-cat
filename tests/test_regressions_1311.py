@@ -15,8 +15,7 @@ import pytest
 from parafrasi_cat.analyzer import RuleBasedAnalyzer
 from parafrasi_cat.core.errors import ConfigError
 from parafrasi_cat.scoring.weights import ScoringWeights
-from parafrasi_cat.style.adaptation import AdaptationContext, UnitStats
-from parafrasi_cat.style.connector_repetition import ConnectorRepetition
+from parafrasi_cat.style.connector_repetition import ConnectorRepetition, DocumentWindow
 
 FORMS = ("atès que", "ja que", "malgrat que", "tanmateix", "per tant", "però")
 
@@ -47,11 +46,8 @@ def test_mixed_safe_connectors_are_not_penalised(repetition: ConnectorRepetition
 def test_same_connector_at_context_boundary_has_smaller_penalty(
     repetition: ConnectorRepetition,
 ) -> None:
-    context = AdaptationContext(
-        before=UnitStats(connectors=("tanmateix",)),
-        after=UnitStats(connectors=("per tant",)),
-    )
-    boundary = repetition.assess("Tanmateix, no plou.", "Per tant, no plou.", context)
+    window = DocumentWindow(before=("Tanmateix, plou.",), after=("Per tant, marxem.",))
+    boundary = repetition.assess("Tanmateix, no plou.", "Per tant, no plou.", window)
     assert boundary.penalty == pytest.approx(0.5)
     assert boundary.forms == ("tanmateix",)
     # Dins de la unitat, la mateixa forma repetida a la frase següent pesa igual, i

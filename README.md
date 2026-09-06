@@ -8,7 +8,7 @@ que s'executa al mateix ordinador.
 > morfològica i sintàctica, validació gramatical i selecció determinista de
 > candidats.**
 
-**Versió 1.3.17.** Un cop instal·lats els recursos, tot funciona sense connexió.
+**Versió 1.3.18.** Un cop instal·lats els recursos, tot funciona sense connexió.
 Parafrasi-cat no envia text a serveis d'Internet: en mode local, el text no surt
 del dispositiu; en mode de xarxa local, només circula entre el navegador client
 i el servidor Parafrasi-cat dins de la LAN.
@@ -323,10 +323,10 @@ conservar-se separades si una mou una subordinada i l'altra un complement, o si
 la mateixa regla mou el bloc en direccions diferents. Els canvis superficials
 continuen agrupats per família perquè variants lèxiques no omplin el feix.
 
-### Connectors equivalents dins d'un paràgraf
+### Connectors equivalents: quatre escales, una finestra curta
 
 Entre alternatives igualment segures, el motor prefereix la que no repeteix el
-mateix connector. La mesura té tres peces i cap d'elles és una regla mecànica
+mateix connector. La mesura té quatre peces i cap d'elles és una regla mecànica
 de «no repetir mai»:
 
 - **Només compten les formes que el motor pot variar**: les que declaren les
@@ -335,12 +335,29 @@ de «no repetir mai»:
   serviria per empènyer la tria cap a canvis que no hi tenen res a veure.
 - **La distància gradua el pes**: dues aparicions de la mateixa forma pesen
   `1 / (1 + frases de distància)` —dins d'una frase 1,00, a la següent 0,50,
-  tres més enllà 0,25—, i fora del paràgraf no es mesura res.
+  tres més enllà 0,25.
+- **La finestra és curta i determinista** (dues frases a cada costat). La unitat
+  que es puntua es mesura amb les frases veïnes encaixades al voltant, numerades
+  de manera consecutiva, i per això la mateixa llei de distància cobreix les
+  quatre escales del problema: dins de la mateixa frase, entre frases
+  consecutives, dins del paràgraf i **a la frontera entre dos paràgrafs**. Cap a
+  enrere la finestra porta el text que el motor ja ha decidit —el que el lector
+  llegirà— i cap endavant el que encara és original. Fora de la finestra no es
+  mesura res: no hi ha cap penalització global que creixi amb la llargada del
+  document.
 - **Es compara amb l'original**: si l'autor ja escrivia «perquè… perquè», el
   motor no ho considera cap defecte ni ho canvia. El que no pot fer és
   **introduir** una repetició que no hi era, com convertir «perquè… perquè» en
   «atès que… atès que» quan «atès que… ja que» és igual de segur. Un canvi que
   recrea la repetició, a més, perd el premi que cobrava per haver-se fet.
+
+Perquè aquesta comparació sigui possible, el feix reserva una plaça —una i
+només una per frase— per al **germà de connector** del millor candidat: la
+mateixa arquitectura escrita amb una altra forma equivalent. Les places de
+`candidates_per_sentence` reparteixen arquitectures, i una redacció alternativa
+del connector no n'és cap de nova; si hagués de gastar-ne una, una frase amb
+prou alternatives estructurals deixaria fora l'única comparació que permet
+triar entre dues opcions igual de segures i igual d'estructurals.
 
 Si «atès que» continua sent clarament la millor opció segons l'empremta i la
 resta de la puntuació, es pot repetir: la no-repetició és un criteri de

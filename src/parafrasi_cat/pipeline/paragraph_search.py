@@ -35,7 +35,7 @@ rescatar un candidat que la validació hagi invalidat.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 
 from parafrasi_cat.analyzer.paragraphs import Paragraph
@@ -59,7 +59,7 @@ from parafrasi_cat.scoring.scorer import (
     ScoringContext,
 )
 from parafrasi_cat.style.adaptation import AdaptationContext, AuthorAdaptation
-from parafrasi_cat.style.connector_repetition import ConnectorRepetition
+from parafrasi_cat.style.connector_repetition import ConnectorRepetition, DocumentWindow
 from parafrasi_cat.validation.base import ValidationContext, Validator
 from parafrasi_cat.validation.result import ValidationResult
 
@@ -68,9 +68,8 @@ RejectionReason = Callable[[Transformation, str, ProtectedConflict], str | None]
 ContextFactory = Callable[[str], ParagraphContext]
 
 AFFINITY_COMPONENT = "afinitat_autor"
-CONNECTOR_SIGNATURE = "CONNECTOR"
 CONNECTOR_VARIANTS_PER_SENTENCE = 2
-"""Màxim de candidats transformats de connector que el feix conserva per frase."""
+"""Redaccions de connector que el feix conserva d'una mateixa arquitectura, per frase."""
 CONNECTOR_PROFILE_TAIL = 2
 """Connectors recents que identifiquen el perfil d'un estat dins de la poda."""
 WITHDRAWN_COMPONENT = "guany_repeticio_connectors"
@@ -355,18 +354,12 @@ class ParagraphBeam:
         )
         room = self._settings.candidates_per_sentence
         seen_signatures: set[str] = set()
-        connector_variants: set[str] = set()
         chosen: list[LocalOption] = []
-
-        def remember_connector(candidate: Candidate) -> None:
-            if candidate.signature == CONNECTOR_SIGNATURE:
-                connector_variants.add(candidate.normalized_text())
 
         if ranked and room > 0:
             best = ranked[0]
             chosen.append(LocalOption(result.index, best, "millor local"))
             seen_signatures.add(best.candidate.signature)
-            remember_connector(best.candidate)
 
         # La diversitat estructural continua tenint prioritat: no sacrifiquem una
         # reordenació o una divisió segura només per conservar un sinònim de connector.
@@ -379,24 +372,28 @@ class ParagraphBeam:
             seen_signatures.add(candidate.signature)
             chosen.append(LocalOption(result.index, evaluated, f"millor {candidate.signature}"))
 
-        # Excepció deliberada a «un candidat per signatura»: dos connectors
-        # equivalents poden necessitar arribar al paràgraf complet perquè la
-        # no-repetició i l'empremta decideixin quin combina millor amb els veïns.
-        connector_count = sum(
-            1 for option in chosen if option.candidate.signature == CONNECTOR_SIGNATURE
-        )
+        # Excepció deliberada a «un candidat per signatura»: dues redaccions d'una
+        # **mateixa arquitectura** que només es diferencien pel connector han
+        # d'arribar juntes al paràgraf sencer. Només allà es veu si una recrea una
+        # repetició que l'altra evita; la frase, tota sola, no ho pot saber. No es
+        # mira la signatura literal ``CONNECTOR``: una divisió que tria el connector
+        # dins de la seva pròpia sortida («A. Tanmateix, B» contra «A. Però B») és
+        # exactament el mateix cas i és igual d'estructural.
+        variants: dict[str, set[tuple[str, ...]]] = {}
+        for option in chosen:
+            signature = option.candidate.signature
+            variants.setdefault(signature, set()).add(self._profile(option.candidate))
         for evaluated in ranked:
-            if len(chosen) >= room or connector_count >= CONNECTOR_VARIANTS_PER_SENTENCE:
+            if len(chosen) >= room:
                 break
             candidate = evaluated.candidate
-            if candidate.signature != CONNECTOR_SIGNATURE:
+            profiles = variants.get(candidate.signature)
+            if profiles is None or len(profiles) >= CONNECTOR_VARIANTS_PER_SENTENCE:
                 continue
-            variant = candidate.normalized_text()
-            if variant in connector_variants:
+            profile = self._profile(candidate)
+            if profile in profiles:
                 continue
-            connector_variants.add(variant)
-            seen_signatures.add(candidate.signature)
-            connector_count += 1
+            profiles.add(profile)
             chosen.append(LocalOption(result.index, evaluated, "variant segura de connector"))
 
         # Finalment, una alternativa per cada altra signatura superficial.
@@ -408,13 +405,58 @@ class ParagraphBeam:
                 continue
             seen_signatures.add(candidate.signature)
             chosen.append(LocalOption(result.index, evaluated, f"millor {candidate.signature}"))
+        chosen.extend(self._sibling_of_best(result, ranked, chosen, variants))
         return tuple(self._with_profile(option) for option in (*options, *chosen))
+
+    def _sibling_of_best(
+        self,
+        result: SentenceResult,
+        ranked: Sequence[EvaluatedCandidate],
+        chosen: Sequence[LocalOption],
+        variants: Mapping[str, set[tuple[str, ...]]],
+    ) -> list[LocalOption]:
+        """Germà del millor candidat: la mateixa arquitectura amb un altre connector.
+
+        Les places de ``candidates_per_sentence`` reparteixen **arquitectures**, i
+        una redacció alternativa del connector no n'és cap de nova: és la mateixa
+        escrita d'una altra manera. Si les places s'han exhaurit abans d'arribar-hi,
+        el paràgraf es quedaria sense l'única comparació que li permet triar entre
+        dues alternatives igual de segures i igual d'estructurals, i la repetició
+        guanyaria per absència de rival. Per això aquest germà té una plaça pròpia,
+        i només una: com a màxim una opció més per frase.
+        """
+        if not chosen:
+            return []
+        best = chosen[0].candidate
+        profiles = variants.get(best.signature, set())
+        if len(profiles) >= CONNECTOR_VARIANTS_PER_SENTENCE:
+            return []
+        for evaluated in ranked:
+            candidate = evaluated.candidate
+            if candidate.signature != best.signature or candidate.text == best.text:
+                continue
+            profile = self._profile(candidate)
+            if profile in profiles:
+                continue
+            return [LocalOption(result.index, evaluated, "variant segura de connector")]
+        return []
 
     def _with_profile(self, option: LocalOption) -> LocalOption:
         """Anota quins connectors de l'inventari conté el candidat."""
         if self._connectors is None:
             return option
-        return replace(option, connectors=self._connectors.profile(option.candidate.text))
+        return replace(option, connectors=self._profile(option.candidate))
+
+    def _profile(self, candidate: Candidate) -> tuple[str, ...]:
+        """Connectors de l'inventari del candidat, en ordre.
+
+        Sense inventari (cap regla d'equivalència activa) no es pot dir quina
+        part del text és un connector: es fa servir el text normalitzat sencer,
+        que distingeix igualment dues redaccions de la mateixa arquitectura.
+        """
+        if self._connectors is None:
+            return (candidate.normalized_text(),)
+        return self._connectors.profile(candidate.text)
 
     # --- cerca ------------------------------------------------------------------------------
 
@@ -424,6 +466,7 @@ class ParagraphBeam:
         sentence_results: Sequence[SentenceResult],
         protected: tuple[ProtectedSpan, ...],
         document: AdaptationContext | None = None,
+        window: DocumentWindow | None = None,
     ) -> tuple[ParagraphResult, tuple[SentenceResult, ...]]:
         """Explora arquitectures del paràgraf i retorna el resultat i les frases re-marcades."""
         inner = tuple(sentence_results)
@@ -442,6 +485,9 @@ class ParagraphBeam:
             prefix += gap + sentence.source_text
             originals.append(prefix)
 
+        # Mentre el feix creix, el prefix només té veïnat cap enrere: el que ve
+        # després encara no s'ha triat i ja es mirarà sobre l'arquitectura completa.
+        prefix_window = DocumentWindow(before=window.before) if window is not None else None
         explored = 0
         pruned: list[PrunedState] = []
         rejected: dict[str, RejectedProposal] = {}
@@ -455,7 +501,14 @@ class ParagraphBeam:
             for state in beam:
                 for option in group:
                     grown = self._extend(
-                        state, option, gaps[index], originals[index], paragraph, rejected, notes
+                        state,
+                        option,
+                        gaps[index],
+                        originals[index],
+                        paragraph,
+                        rejected,
+                        notes,
+                        prefix_window,
                     )
                     already = len(state.paragraph.transformations)
                     fusions += sum(1 for g in grown if len(g.paragraph.transformations) > already)
@@ -464,7 +517,7 @@ class ParagraphBeam:
             beam = self._prune(extended, group, pruned)
 
         alternatives = self._complete(
-            beam, options, gaps, tail, paragraph, protected, document, rejected, notes
+            beam, options, gaps, tail, paragraph, protected, document, window, rejected, notes
         )
         selected = self._select(alternatives)
         winner = alternatives[selected]
@@ -521,6 +574,7 @@ class ParagraphBeam:
         paragraph: Paragraph,
         rejected: dict[str, RejectedProposal],
         notes: dict[str, None],
+        window: DocumentWindow | None = None,
     ) -> list[BeamState]:
         """Estats que resulten d'afegir un candidat de frase (sense i amb fusió)."""
         candidate = option.candidate
@@ -532,7 +586,7 @@ class ParagraphBeam:
         # El prefix es puntua contra el prefix original: així la repetició de
         # connectors que el candidat introdueix ja compta mentre el feix creix, i no
         # només al final.
-        base_score = self._scorer.score(extended, ScoringContext(None, original, None))
+        base_score = self._scorer.score(extended, ScoringContext(None, original, None, window))
         states = [BeamState((*state.options, option), extended, local_total, base_score, None)]
         if not self._rules or not state.options:
             return states
@@ -558,7 +612,9 @@ class ParagraphBeam:
                     key = proposal.text_before + "→" + proposal.text_after
                     rejected.setdefault(key, RejectedProposal(proposal, validation.summary))
                     continue
-                score = self._scorer.score(composed, ScoringContext(validation, original, None))
+                score = self._scorer.score(
+                    composed, ScoringContext(validation, original, None, window)
+                )
                 if not score.valid:
                     continue
                 states.append(
@@ -659,6 +715,7 @@ class ParagraphBeam:
         paragraph: Paragraph,
         protected: tuple[ProtectedSpan, ...],
         document: AdaptationContext | None,
+        window: DocumentWindow | None,
         rejected: dict[str, RejectedProposal],
         notes: dict[str, None],
     ) -> list[ParagraphAlternative]:
@@ -691,7 +748,7 @@ class ParagraphBeam:
             validation = self._validate(final_paragraph, paragraph.text, protected)
             score = self._scorer.score(
                 final_paragraph,
-                ScoringContext(validation, paragraph.text, document),
+                ScoringContext(validation, paragraph.text, document, window),
             )
             # L'afinitat i la repetició de connectors són propietats del paràgraf
             # sencer: es descompten de les puntuacions de frase (on només se'n podia

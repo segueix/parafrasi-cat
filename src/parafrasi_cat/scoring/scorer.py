@@ -12,7 +12,7 @@ from parafrasi_cat.preferences.evaluator import PreferenceEvaluator
 from parafrasi_cat.scoring.assertive import AssertiveEvaluator
 from parafrasi_cat.scoring.weights import ScoringWeights
 from parafrasi_cat.style.adaptation import AdaptationContext, AuthorAdaptation
-from parafrasi_cat.style.connector_repetition import ConnectorRepetition
+from parafrasi_cat.style.connector_repetition import ConnectorRepetition, DocumentWindow
 from parafrasi_cat.style.degradation import StructuralDegradation
 from parafrasi_cat.style.evaluator import StyleEvaluator
 from parafrasi_cat.style.fusion_rhythm import FusionRhythm
@@ -74,6 +74,12 @@ class ScoringContext:
     original no es pot saber quina repetició és nova i quina ja hi era.
     """
     document: AdaptationContext | None = None
+    window: DocumentWindow | None = None
+    """Frases veïnes ja decidides (abans) i encara originals (després).
+
+    És el que permet veure una repetició que travessa la frontera entre dues
+    unitats consecutives sense obrir la mesura a tot el document.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,8 +284,8 @@ class CompositeScorer:
             # candidat afegeix compta. La que l'autor ja havia escrit es conserva
             # sense càrrec, i canviar-la per una de nova sí que en té.
             reference = (ctx.source_text if ctx is not None else "") or candidate.source_text
-            document = ctx.document if ctx is not None else None
-            repetition = self._connectors.assess(candidate.text, reference, document)
+            window = ctx.window if ctx is not None else None
+            repetition = self._connectors.assess(candidate.text, reference, window)
             connector_detail = repetition.to_dict()
             dimensions["varietat_connectors"] = round(1.0 - repetition.penalty, 4)
             if repetition.penalised:

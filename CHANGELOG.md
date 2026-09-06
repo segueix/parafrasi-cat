@@ -3,6 +3,113 @@
 El format segueix [Keep a Changelog](https://keepachangelog.com/ca/1.1.0/) i el
 projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
+## 1.3.18
+
+La repetició de connectors ja no es mesura només dins del paràgraf: es mesura en
+una finestra curta i determinista que passa de la frontera entre dos paràgrafs
+consecutius. Sense tocar cap pes, sense reduir el feix ni les transformacions i
+sense cap excepció per a cap connector concret.
+
+### Causa real
+
+El cas reportat era el final del primer paràgraf («Tanmateix, hi ha una peça…»)
+contra el començament del segon («Tanmateix, no resol…»). Reproduït abans de
+tocar res, hi havia **una sola causa i era de visibilitat, no de pesos**: la
+unitat de mesura era el paràgraf i no existia enlloc una representació del que
+el motor ja havia decidit escriure just abans.
+
+Concretament, la mesura de la v1.3.13 mirava el veïnat a través de
+`AdaptationContext`, i això fallava per tres motius alhora:
+
+1. aquest context només es construeix en mode d'esborrany d'LLM amb empremta;
+   amb text propi era sempre `None` i no es mirava cap veïnat;
+2. es construïa a partir del text **original**, de manera que el veïnat que
+   s'hi veia no era el que el motor acabava d'escriure;
+3. la llista de connectors que en sortia és cega a les formes de més d'una
+   paraula, que són justament la major part de l'inventari («atès que», «no
+   obstant això»…).
+
+Les dues frases implicades estaven separades per **0,0125** de puntuació («Així
+i tot» contra «Tanmateix»); una de les dues arquitectures del primer paràgraf
+empatava **exactament** amb l'altra (0,3781 totes dues). La resolució del
+puntuador ja era suficient: el que faltava era el senyal.
+
+### Una finestra, quatre escales
+
+- `DocumentWindow` porta les **dues frases** immediatament anteriors i les dues
+  immediatament posteriors a la unitat que es puntua. Cap a enrere hi ha el text
+  que el motor **ja ha decidit** (la sortida, que és el que el lector llegirà);
+  cap endavant, el que **encara és original**, perquè encara no s'ha triat.
+- Les tres parts es numeren consecutivament, així que la mateixa llei de
+  distància `1 / (1 + d)` cobreix les quatre escales del problema: dins de la
+  mateixa frase (1,00), entre frases consecutives (0,50), dins del paràgraf
+  (0,33, 0,25…) i **a la frontera entre dos paràgrafs**.
+- Fora de la finestra no es mesura res. La penalització no pot créixer amb la
+  llargada del document i el cost és fix.
+- El candidat i el seu original es mesuren **sobre la mateixa finestra**: el
+  context és idèntic als dos costats, de manera que la diferència aïlla
+  exactament el que aquesta unitat hi afegeix. Conservar el connector de
+  l'autor no pot costar mai més que canviar-lo, i cada unitat paga només la
+  parella que introdueix ella.
+- El pedaç de `AdaptationContext` desapareix, i amb ell la ceguesa a les formes
+  de més d'una paraula: la finestra es llegeix amb el mateix reconeixedor sobre
+  tokens que la resta de la mesura.
+
+### Una plaça per al germà de connector
+
+Perquè la comparació sigui possible, la variant equivalent ha d'arribar viva al
+paràgraf. Fins ara la reserva de variants de connector només s'aplicava a la
+signatura literal `CONNECTOR`, i les places de `candidates_per_sentence`
+reparteixen **arquitectures**: en una frase amb prou alternatives estructurals,
+la variant es quedava fora i la repetició guanyava per absència de rival.
+
+- La reserva ja no mira la signatura literal sinó el **perfil de connectors**:
+  una divisió que tria el connector dins de la seva pròpia sortida («A.
+  Tanmateix, B» contra «A. Però B») és exactament el mateix cas i és igual
+  d'estructural.
+- El germà del millor candidat té una plaça pròpia, i només una: com a màxim
+  una opció més per frase. No es desplaça cap arquitectura ni s'amplia el feix.
+
+### Doble recompte
+
+- El grau estructural ja es paga una sola vegada des de la v1.3.17; s'ha
+  tornat a verificar amb els components de les arquitectures competidores.
+- El context de la finestra apareix als dos costats de la resta (candidat i
+  original), de manera que les repeticions que viuen senceres al veïnat es
+  cancel·len: no es cobren ni es tornen a cobrar al paràgraf següent.
+- **Sí que se n'ha trobat un**, documentat però no corregit aquí: el ritme de
+  fusió es cobra dues vegades, com a penalització (`w.rhythm · p`) i altre cop
+  escalant el premi estructural (`× (1 − p)`). Corregir-ho no canvia cap dels
+  casos reportats (s'ha mesurat: 0,035 sobre una diferència de 0,078) i tocaria
+  totes les fusions de la suite, així que queda com a feina separada.
+
+### Comprovació sobre el text real
+
+Amb text propi i amb pressió de reescriptura 0,9, el text de l'orfil ja no
+repeteix cap connector ni dins d'un paràgraf ni a la frontera: la repetició
+introduïda mesurada sobre el document sencer és 0,00. Es conserva la reredacció
+estructural bona («El roc pot ser assimilat… encara que tingui un nom menys
+evident»), «només … si», el final «categoria política: un home pròxim…» i
+l'absència de «puix que».
+
+Cost: 2,05 s → 2,14 s sobre el text sencer, 21 → 22 opcions locals i 83 → 89
+estats explorats.
+
+### Tests
+
+`tests/test_seleccio_1318.py` (23 propietats): el germà arriba al paràgraf i
+n'hi ha un i només un; la repetició heretada no es cobra i la introduïda sí; les
+quatre escales fan servir la mateixa llei de distància; la finestra és curta i
+acotada; el candidat i l'original es mesuren sobre el mateix context; el
+document no té cap repetició introduïda i l'alternativa repetitiva existia i ha
+perdut; els connectors equivalents diferents no costen res; no hi ha rotació
+obligatòria; una arquitectura estructural continua guanyant; cap estil no
+rescata un candidat invàlid; «només … si», el final polític, l'absència de «puix
+que», el determinisme i la composició profunda de la v1.3.16.
+
+`tests/test_regressions_1311.py` i `tests/test_regressions_1313.py` passen a la
+finestra i continuen protegint les mateixes propietats.
+
 ## 1.3.17
 
 La selecció final ja no es pot guanyar acumulant premis del mateix fet, i el
