@@ -220,7 +220,8 @@ def test_same_family_can_have_two_distinct_structural_architectures() -> None:
         ),
     )
 
-    assert left.signature == right.signature == "REORDER"
+    assert left.family_signature == right.family_signature == "REORDER"
+    assert left.signature != right.signature
     assert left.diversity_signature != right.diversity_signature
     selected = CandidateGenerator(max_candidates=3).select(
         (Candidate.identity(0, source), left, right)
