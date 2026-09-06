@@ -269,6 +269,13 @@ class Pipeline:
                         paragraph, sentence_results, protected, text, document
                     )
                 collected.append(result)
+                if self._adaptation is not None and positions:
+                    # Els paràgrafs següents han de veure el text ja seleccionat,
+                    # incloses les divisions/fusions, no els connectors originals.
+                    indices = [sentence_results[n].index for n in positions]
+                    for index in indices:
+                        stats.pop(index, None)
+                    stats[indices[0]] = self._adaptation.stats_of(result.output_text)
             sentence_results = tuple(updated)
             paragraph_results = tuple(collected)
             output = _reassemble(text, tuple((p.span, p.output_text) for p in paragraph_results))

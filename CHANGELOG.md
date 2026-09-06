@@ -3,6 +3,19 @@
 El format segueix [Keep a Changelog](https://keepachangelog.com/ca/1.1.0/) i el
 projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
+## Pendent de publicació
+
+- L'estil es compta una sola vegada sobre el prefix i el paràgraf complet,
+  sense acumular les distàncies estilístiques de cada frase. Es mantenen els
+  pesos, les preferències explícites i tots els validadors.
+- Amb empremta, els paràgrafs següents veuen el text ja seleccionat dels
+  anteriors, incloses divisions i fusions. No s'afegeixen passades ni s'amplia
+  el beam. El futur continua referenciat a l'original.
+- Regressió amb el corpus acadèmic d'exemple i mode esborrany: el text de
+  l'orfil ja no introdueix «Tanmateix… Tanmateix» entre paràgrafs. Comprovat
+  sense parser ni LanguageTool; aquesta correcció no modifica el parser ni
+  elimina el seu possible soroll en la puntuació sintàctica.
+
 ## 1.3.17
 
 La selecció final ja no es pot guanyar acumulant premis del mateix fet, i el

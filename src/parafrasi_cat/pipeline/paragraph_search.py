@@ -130,7 +130,18 @@ class BeamState:
     @property
     def partial_total(self) -> float:
         paragraph = self.paragraph_score.total if self.paragraph_score is not None else 0.0
-        return round(self.local_total + paragraph, 4)
+        # El prefix ja té una puntuació d'estil: no hi sumem de nou les
+        # distàncies de cada frase (que afavoreixen repetir la forma més habitual).
+        local_style = (
+            sum(
+                o.evaluated.score.components.get("estil", 0.0)
+                for o in self.options
+                if o.evaluated.score is not None
+            )
+            if self.paragraph_score is not None
+            else 0.0
+        )
+        return round(self.local_total - local_style + paragraph, 4)
 
     @property
     def n_transformations(self) -> int:
@@ -693,7 +704,7 @@ class ParagraphBeam:
                 final_paragraph,
                 ScoringContext(validation, paragraph.text, document),
             )
-            # L'afinitat i la repetició de connectors són propietats del paràgraf
+            # L'estil, l'afinitat i la repetició són propietats del paràgraf
             # sencer: es descompten de les puntuacions de frase (on només se'n podia
             # veure una aproximació) i es tornen a comptar una sola vegada sobre
             # l'arquitectura completa, mesurades contra el paràgraf original.
@@ -901,7 +912,7 @@ def _coverage_balance(distribution: Sequence[float], sentences: Sequence[int]) -
 def _paragraph_scale_components(option: LocalOption) -> float:
     """Part de la puntuació de frase que es tornarà a mesurar sobre el paràgraf.
 
-    L'afinitat amb l'autor i la repetició de connectors depenen del text del
+    L'estil, l'afinitat amb l'autor i la repetició de connectors depenen del text del
     voltant: mesurades frase a frase només en són una aproximació, i sumar-les
     aquí i tornar-les a comptar sobre l'arquitectura completa seria comptar dues
     vegades el mateix fenomen.
@@ -909,8 +920,9 @@ def _paragraph_scale_components(option: LocalOption) -> float:
     score = option.evaluated.score
     if score is None:
         return 0.0
-    return score.components.get(AFFINITY_COMPONENT, 0.0) + score.components.get(
-        CONNECTOR_COMPONENT, 0.0
+    return sum(
+        score.components.get(name, 0.0)
+        for name in ("estil", AFFINITY_COMPONENT, CONNECTOR_COMPONENT)
     )
 
 
