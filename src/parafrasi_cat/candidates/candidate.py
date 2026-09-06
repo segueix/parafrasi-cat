@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
@@ -17,7 +17,10 @@ from parafrasi_cat.core.transformation import (
 MULTI_TRANSFORM = "MULTI_TRANSFORM"
 #: Rendiments decreixents d'una mateixa família: la k-èsima aplicació val ``0.5^(k−1)``.
 FAMILY_DECAY = 0.5
+#: Traça addicional de les arquitectures absorbides dins d'una transformació composta.
+CHAINED_ARCHITECTURES_KEY = "chained_architectures"
 _SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([,;:.!?»)])")
+_ARCHITECTURE_KEYS = ("architecture", "movement", "block_kind")
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,7 +32,10 @@ class Candidate:
         source_text: Text original.
         text: Text del candidat (igual a ``source_text`` si és el candidat identitat).
         transformations: Transformacions aplicades, ordenades per posició i
-            relatives a ``source_text``.
+            relatives a ``source_text``. Una transformació física pot contenir
+            diverses operacions encadenades quan una reestructuració posterior
+            engloba fragments ja transformats; la traça conserva totes les
+            operacions reals.
     """
 
     sentence_index: int
@@ -43,20 +49,27 @@ class Candidate:
 
     @property
     def n_transformations(self) -> int:
-        return len(self.transformations)
+        """Nombre real d'operacions, incloses les absorbides per composició."""
+        return sum(t.operation_count for t in self.transformations)
 
     @property
     def rule_ids(self) -> tuple[str, ...]:
-        return tuple(t.rule_id for t in self.transformations)
+        """Regles reals que han contribuït al candidat, en ordre traçable."""
+        return tuple(rule for t in self.transformations for rule in t.operation_rule_ids)
 
     @property
     def families(self) -> tuple[TransformationFamily, ...]:
-        """Famílies de les transformacions, sense repeticions ni reparacions."""
+        """Famílies de totes les operacions, sense repeticions ni reparacions.
+
+        No es mira només la família primària de cada fragment: si una operació
+        posterior ha quedat absorbida dins d'una transformació composta, la
+        família encadenada continua formant part de l'arquitectura del candidat.
+        """
         seen: dict[TransformationFamily, None] = {}
         for transformation in self.transformations:
-            family = transformation.family
-            if family is not TransformationFamily.REPAIR:
-                seen.setdefault(family, None)
+            for family in transformation.operation_families:
+                if family is not TransformationFamily.REPAIR:
+                    seen.setdefault(family, None)
         return tuple(seen)
 
     @property
@@ -65,8 +78,8 @@ class Candidate:
         return tuple(f for f in self.families if f.structural)
 
     @property
-    def signature(self) -> str:
-        """Signatura abstracta: ``ORIGINAL``, una família, o ``MULTI_TRANSFORM(A+B)``."""
+    def family_signature(self) -> str:
+        """Signatura abstracta de famílies, compatible amb les versions anteriors."""
         families = self.families
         if not families:
             return TransformationFamily.ORIGINAL.value
@@ -74,49 +87,98 @@ class Candidate:
             return families[0].value
         return f"{MULTI_TRANSFORM}({'+'.join(sorted(f.value for f in families))})"
 
+    @property
+    def operation_architectures(self) -> tuple[str, ...]:
+        """Identitat concreta de cada operació per distingir arquitectures equivalents.
+
+        La família respon «què ha canviat»; aquesta traça respon «com». Dues
+        reordenacions de la mateixa família poden ser diferents si una mou una
+        subordinada i l'altra un complement, o si la mateixa regla mou el bloc
+        en direccions diferents.
+        """
+        result: list[str] = []
+        for transformation in self.transformations:
+            primary = _architecture_id(transformation.rule_id, transformation.metadata)
+            result.append(primary)
+            chained = _csv(transformation.metadata.get(CHAINED_ARCHITECTURES_KEY))
+            chained_rules = transformation.operation_rule_ids[1:]
+            for index, rule_id in enumerate(chained_rules):
+                result.append(chained[index] if index < len(chained) else rule_id)
+        return tuple(result)
+
+    @property
+    def architecture_signature(self) -> str:
+        """Signatura concreta de la ruta estructural, estable i determinista."""
+        if self.is_identity:
+            return TransformationFamily.ORIGINAL.value
+        operations = self.operation_architectures
+        return "ARCH(" + "+".join(operations) + ")" if operations else self.family_signature
+
+    @property
+    def signature(self) -> str:
+        """Signatura usada per la cerca i la traça.
+
+        Sense metadades arquitectòniques conserva exactament la signatura de
+        família antiga. Quan una operació estructural declara ``architecture``,
+        ``movement`` o ``block_kind`` —o n'ha absorbit una altra que ho feia—,
+        la signatura incorpora la ruta concreta. Així el feix de paràgraf no
+        confon dues reordenacions diferents només perquè totes dues són
+        ``REORDER``.
+        """
+        base = self.family_signature
+        if not self.is_structural or not _has_explicit_architecture(self.transformations):
+            return base
+        return f"{base}::{self.architecture_signature}"
+
+    @property
+    def diversity_signature(self) -> str:
+        """Clau de diversitat del cercador.
+
+        En candidats estructurals distingeix sempre les arquitectures concretes,
+        fins i tot si una regla antiga encara no declara metadades específiques.
+        En retocs superficials conserva la signatura de família perquè variants
+        lèxiques no omplin el feix només pel seu ``rule_id``.
+        """
+        return self.architecture_signature if self.is_structural else self.family_signature
+
     def structural_degree(self) -> float:
         """Grau de reredacció estructural (0-1): només l'arquitectura lingüística.
 
-        Hi compten únicament les transformacions de famílies estructurals
+        Hi compten únicament les operacions de famílies estructurals
         (reordenació, subordinació, canvi de construcció, divisió, fusió). Cap
         substitució lèxica, de connector, de puntuació ni de flexió verbal no hi
-        suma res, per moltes que se n'apliquin: tres canvis «va gaudir» → «gaudí»
-        donen exactament 0.
+        suma res, per moltes que se n'apliquin.
 
-        Cada transformació estructural aporta ``pes de la regla × confiança ×
-        abast``, on l'abast és la part de la frase que el canvi reorganitza
-        (reordenar tota l'oració pesa més que tocar-ne un sintagma; un canvi
-        entre frases compta sencer). Les aportacions es combinen com a
-        probabilitats independents, ``1 − Π(1 − a_i)``: el resultat mai no passa
-        d'1, dues famílies diferents pesen més que dues aplicacions de la
-        mateixa, i les repeticions d'una família tenen rendiments decreixents
-        (la segona val la meitat; la tercera, un quart).
+        Quan diverses operacions han quedat absorbides dins d'un mateix fragment
+        per composició profunda, totes les famílies conegudes continuen comptant;
+        la mateixa família manté rendiments decreixents.
         """
         return _combine(self._impacts(structural=True))
 
     def surface_degree(self) -> float:
-        """Grau de canvi superficial (0-1): mots, connectors, puntuació i flexió.
-
-        Mateixa agregació que el grau estructural, sobre les famílies no
-        estructurals. Serveix per explicar què ha canviat, no per premiar-ho.
-        """
+        """Grau de canvi superficial (0-1): mots, connectors, puntuació i flexió."""
         return _combine(self._impacts(structural=False))
 
     def _impacts(self, *, structural: bool) -> list[float]:
         by_family: dict[TransformationFamily, list[float]] = {}
         length = max(1, len(self.source_text))
         for transformation in self.transformations:
-            family = transformation.family
-            if family.structural is not structural or family is TransformationFamily.REPAIR:
-                continue
-            if structural:
-                coverage = min(1.0, transformation.changed_span.length / length)
-                reach = 1.0 if family.cross_sentence else 0.5 + 0.5 * coverage
-                impact = transformation.structural_weight * transformation.confidence * reach
-            else:
-                impact = family.surface_weight * transformation.confidence
-            if impact > 0:
-                by_family.setdefault(family, []).append(impact)
+            coverage = min(1.0, transformation.changed_span.length / length)
+            for index, family in enumerate(transformation.operation_families):
+                if family.structural is not structural or family is TransformationFamily.REPAIR:
+                    continue
+                if structural:
+                    weight = (
+                        transformation.structural_weight
+                        if index == 0 and family is transformation.family
+                        else family.weight
+                    )
+                    reach = 1.0 if family.cross_sentence else 0.5 + 0.5 * coverage
+                    impact = weight * transformation.confidence * reach
+                else:
+                    impact = family.surface_weight * transformation.confidence
+                if impact > 0:
+                    by_family.setdefault(family, []).append(impact)
         impacts: list[float] = []
         for values in by_family.values():
             for rank, value in enumerate(sorted(values, reverse=True)):
@@ -125,8 +187,12 @@ class Candidate:
 
     @property
     def is_structural(self) -> bool:
-        """Cert si alguna transformació canvia l'arquitectura de la frase."""
-        return any(t.family.structural for t in self.transformations)
+        """Cert si alguna operació real canvia l'arquitectura de la frase."""
+        return any(
+            family.structural
+            for transformation in self.transformations
+            for family in transformation.operation_families
+        )
 
     def normalized_text(self) -> str:
         """Text sense espais repetits ni espais davant de puntuació.
@@ -172,7 +238,7 @@ class Candidate:
         return offset - shift
 
     def rule_at(self, offset: int) -> str:
-        """Regla que ha escrit el fragment on cau la posició (buit si no n'hi ha cap)."""
+        """Regla primària que ha escrit el fragment on cau la posició."""
         for transformation, span in zip(self.transformations, self.result_spans(), strict=True):
             if span.start <= offset < span.end:
                 return transformation.rule_id
@@ -205,13 +271,40 @@ class Candidate:
             "source_text": self.source_text,
             "text": self.text,
             "transformations": [t.to_dict() for t in self.transformations],
+            "operation_count": self.n_transformations,
+            "operation_rule_ids": list(self.rule_ids),
+            "operation_architectures": list(self.operation_architectures),
+            "architecture_signature": self.architecture_signature,
             "change_ratio": round(self.change_ratio(), 4),
             "signature": self.signature,
+            "family_signature": self.family_signature,
             "families": [f.value for f in self.families],
             "structural_families": [f.value for f in self.structural_families],
             "structural_degree": self.structural_degree(),
             "surface_degree": self.surface_degree(),
         }
+
+
+def _architecture_id(rule_id: str, metadata: Mapping[str, str]) -> str:
+    details = [
+        f"{key}={metadata[key]}"
+        for key in _ARCHITECTURE_KEYS
+        if str(metadata.get(key, "")).strip()
+    ]
+    return rule_id if not details else f"{rule_id}[{';'.join(details)}]"
+
+
+def _has_explicit_architecture(transformations: Iterable[Transformation]) -> bool:
+    for transformation in transformations:
+        if any(str(transformation.metadata.get(key, "")).strip() for key in _ARCHITECTURE_KEYS):
+            return True
+        if str(transformation.metadata.get(CHAINED_ARCHITECTURES_KEY, "")).strip():
+            return True
+    return False
+
+
+def _csv(value: object) -> tuple[str, ...]:
+    return tuple(item for item in str(value or "").split(",") if item)
 
 
 def _combine(impacts: Iterable[float]) -> float:

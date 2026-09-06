@@ -8,7 +8,7 @@ que s'executa al mateix ordinador.
 > morfològica i sintàctica, validació gramatical i selecció determinista de
 > candidats.**
 
-**Versió 1.3.14.** Un cop instal·lats els recursos, tot funciona sense connexió.
+**Versió 1.3.16.** Un cop instal·lats els recursos, tot funciona sense connexió.
 Parafrasi-cat no envia text a serveis d'Internet: en mode local, el text no surt
 del dispositiu; en mode de xarxa local, només circula entre el navegador client
 i el servidor Parafrasi-cat dins de la LAN.
@@ -267,9 +267,9 @@ els diccionaris, les preferències i la llista de validadors són idèntics.
 |---|---|---|
 | 1 | Lèxic | 3 |
 | 2 | Connectors | 7 |
-| 3 | Sintaxi: còpula, agent, presència, ordre, blocs sintàctics, temporals, subordinades, impersonals | 44 |
+| 3 | Sintaxi: còpula, agent, presència, ordre, blocs sintàctics, temporals, subordinades, impersonals | 45 |
 | 4 | Entre frases: divisió i puntuació | 3 |
-| 5 | **Reestructuració controlada de paràgraf** | 2 |
+| 5 | **Reestructuració controlada de paràgraf** | 3 |
 
 El **nivell 5 és diferent del 4**: activa una fase de paràgraf que reorganitza
 frases senceres (fusió amb represa anafòrica, fusió copulativa, integració d'un
@@ -277,12 +277,12 @@ fragment nominal anafòric) i, en mode profund, **compara arquitectures
 alternatives de paràgraf**: en lloc de reconstruir el paràgraf amb el candidat
 que guanya a cada frase, una cerca en feix determinista i acotada conserva uns
 quants candidats segurs i diversos de cada frase (l'original, el millor i el
-millor de cada família estructural), aplica les regles de paràgraf on són
-possibles i tria l'arquitectura sencera que puntua millor, amb l'afinitat de
-l'autor mesurada sobre tot el paràgraf. Un candidat que queda segon en una
-frase pot guanyar si dona un paràgraf millor; el resultat ho explica. El nivell
-4 treballa dins de cada frase i no arriba a aquesta fase. Les proteccions són
-exactament les mateixes als dos nivells.
+millor de cada arquitectura estructural distingible), aplica les regles de
+paràgraf on són possibles i tria l'arquitectura sencera que puntua millor, amb
+l'afinitat de l'autor mesurada sobre tot el paràgraf. Un candidat que queda
+segon en una frase pot guanyar si dona un paràgraf millor; el resultat ho
+explica. El nivell 4 treballa dins de cada frase i no arriba a aquesta fase. Les
+proteccions són exactament les mateixes als dos nivells.
 
 El **grau estructural** d'un candidat només mesura l'arquitectura lingüística:
 reordenacions, subordinació, canvis de construcció, divisions i fusions. Les
@@ -291,6 +291,29 @@ gaudir» → «gaudí») tenen grau estructural 0 i es recullen a part com a **g
 superficial**; repetir la mateixa família té rendiments decreixents, i una
 transformació que degrada l'estructura local (dues relatives consecutives amb
 el mateix marcador, «que» acumulats) rep una penalització, mai una invalidació.
+
+### Composició estructural en profunditat (1.3.16)
+
+La reaplicació de regles ja no queda limitada a canvis que no se solapen o a
+una operació que cau dins d'un únic fragment anterior. Si una transformació
+posterior **engloba sencers diversos fragments ja transformats**, el motor pot
+projectar tota l'operació sobre l'interval original i construir una arquitectura
+més profunda. Només ho fa quan els dos límits tenen una correspondència exacta
+amb l'original; si un límit talla pel mig text generat o la projecció és
+ambigua, la composició es rebutja.
+
+La substitució física resultant pot ser una sola, però la traça conserva el
+nombre real d'operacions, tots els `rule_id`, totes les famílies i tipus i la
+ruta arquitectònica concreta (`architecture`, `movement`, `block_kind`). El
+límit «fins a 3 transformacions» continua comptant **operacions reals**, encara
+que dues o tres hagin quedat absorbides dins del mateix fragment. Això evita
+que una composició profunda esquivi el pressupost de seguretat.
+
+A més, una família ja no és suficient per decidir que dues alternatives són
+iguals. Quan les regles declaren l'arquitectura, dues variants `REORDER` poden
+conservar-se separades si una mou una subordinada i l'altra un complement, o si
+la mateixa regla mou el bloc en direccions diferents. Els canvis superficials
+continuen agrupats per família perquè variants lèxiques no omplin el feix.
 
 ### Connectors equivalents dins d'un paràgraf
 
