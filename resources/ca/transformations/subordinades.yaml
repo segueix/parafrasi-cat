@@ -238,3 +238,26 @@ rules:
       negative:
         - "L'orfil, segons Cessolis, no encaixa en la jerarquia."
         - "Va venir, va mirar, i va marxar."
+
+  # --- Arquitectura parser-backed: relativa passiva explicativa ↔ participial -----------
+  # Aquest motor no substitueix les regles de patró anteriors: les complementa quan
+  # hi ha parser fiable i exigeix que la relació sigui realment `acl:relcl`/`acl`,
+  # amb antecedent inequívoc, concordança no contradictòria i comes explicatives.
+  - rule_id: subordinada.relativa_participial_parser
+    engine: relative_architecture
+    category: subordinada
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.78
+    description: "Relativa passiva explicativa ↔ participial amb antecedent confirmat pel parser"
+    examples:
+      positive:
+        - input: "El monument, que fou encarregat el 1507, és a Florència."
+          output: "El monument, encarregat el 1507, és a Florència."
+        - input: "Les escultures, realitzades per Gaudí, són a Barcelona."
+          output: "Les escultures, que foren realitzades per Gaudí, són a Barcelona."
+      negative:
+        - "Els monuments que foren encarregats el 1507 són a Florència."
+        - "El monument, que no fou encarregat el 1507, és a Florència."
+        - "El monument, antic i sever, és a Florència."
