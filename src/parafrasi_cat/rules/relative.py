@@ -5,6 +5,8 @@ actua quan l'arbre de dependències és fiable i la correspondència és explíc
 
 - ``N, que fou/foren PART ...,`` → ``N, PART ...,``;
 - ``N, que va/van ser PART ...,`` → ``N, PART ...,``;
+- quan ``N`` és inequívocament el subjecte principal, la mateixa relativa pot
+  donar també ``PART ..., N ...`` (reducció + avantposició del bloc sencer);
 - ``N, PART ...,`` → ``N, que fou/foren PART ...,`` quan el participi és un
   modificador nominal explicatiu i porta una àncora d'esdeveniment (data,
   complement temporal o agent amb ``per``).
@@ -14,9 +16,8 @@ La coma és deliberada: la regla només tracta relatives/participials
 conserven. Tampoc es redueixen negacions, modalitzacions, relatives actives ni
 construccions en què el parser no identifica de manera inequívoca l'antecedent.
 
-L'objectiu és donar al cercador una arquitectura realment diferent que després
-pugui combinar-se amb altres operacions (p. ex. inversió copulativa o moviment
-del bloc participial), no introduir sinònims.
+L'objectiu és donar al cercador arquitectures realment diferents que després
+puguin competir amb altres operacions, no introduir sinònims.
 """
 
 from __future__ import annotations
@@ -40,10 +41,32 @@ _PASSIVE_PREFIXES = frozenset(
     }
 )
 _BOUNDARIES = (",", ".", "!", "?", "…", ";")
+_LOWERABLE_OPENERS = frozenset(
+    {
+        "el",
+        "la",
+        "els",
+        "les",
+        "l'",
+        "l’",
+        "un",
+        "una",
+        "uns",
+        "unes",
+        "aquest",
+        "aquesta",
+        "aquests",
+        "aquestes",
+        "aquell",
+        "aquella",
+        "aquells",
+        "aquelles",
+    }
+)
 
 
 class RelativeArchitectureRule(Rule):
-    """Genera les dues arquitectures només quan el parser en demostra l'estructura."""
+    """Genera arquitectures relatives/participials només amb estructura demostrada."""
 
     def __init__(self, definition: RuleDefinition) -> None:
         super().__init__(
@@ -145,6 +168,75 @@ class RelativeArchitectureRule(Rule):
                 "relativa passiva explicativa reduïda a modificador participial",
             )
 
+            fronted = self._fronted_relative(
+                ctx, analysis, antecedent, relative, clause, end, members
+            )
+            if fronted is not None:
+                yield fronted
+
+    def _fronted_relative(
+        self,
+        ctx: RuleContext,
+        analysis: SentenceSyntax,
+        antecedent: SyntaxToken,
+        relative: SyntaxToken,
+        clause: SyntaxToken,
+        clause_end: int,
+        members: tuple[SyntaxToken, ...],
+    ) -> Transformation | None:
+        """Redueix i avantposa el participial si modifica el subjecte principal.
+
+        És una arquitectura composta explícita, però continua sent una sola regla
+        verificable. Només s'ofereix quan el subjecte ocupa l'inici de l'oració i
+        la relativa va immediatament després: si hi ha un altre incís o una
+        estructura topicalitzada, s'absté.
+        """
+        subject = analysis.main_subject()
+        if subject is None or subject.index != antecedent.index:
+            return None
+        if any(
+            token is not relative
+            and token.pos in {"PRON", "DET"}
+            and token.pron_type in {"Prs", "Dem"}
+            for token in members
+        ):
+            return None
+
+        before_relative = ctx.text[: relative.start].rstrip()
+        if not before_relative.endswith(","):
+            return None
+        subject_text = before_relative[:-1].strip()
+        if not subject_text or "," in subject_text or antecedent.text not in subject_text:
+            return None
+
+        tail = ctx.text[clause_end:].lstrip()
+        if not tail.startswith(","):
+            return None
+        remainder = tail[1:].lstrip()
+        if not remainder:
+            return None
+        participial = ctx.text[clause.start : clause_end].strip()
+        if not participial:
+            return None
+
+        rebuilt = (
+            f"{_capitalize_first(participial)}, "
+            f"{_lower_subject_opener(subject_text)} {remainder}"
+        )
+        span = Span(0, len(ctx.text))
+        if ctx.protected_conflict(span, rebuilt) is not None:
+            return None
+        return self._transformation(
+            span,
+            ctx.text,
+            rebuilt,
+            "relative_to_fronted_participial",
+            "relativa reduïda i participial explicatiu avantposat davant del seu subjecte",
+            family="REORDER",
+            structural_weight="0.9",
+            confidence=max(0.0, self._definition.confidence - 0.04),
+        )
+
     # --- participial → relativa passiva -------------------------------------------------
 
     def _participial_to_relative(
@@ -192,6 +284,10 @@ class RelativeArchitectureRule(Rule):
         after: str,
         architecture: str,
         explanation: str,
+        *,
+        family: str = "SUBORDINATION",
+        structural_weight: str = "0.85",
+        confidence: float | None = None,
     ) -> Transformation:
         definition = self._definition
         return Transformation(
@@ -200,16 +296,16 @@ class RelativeArchitectureRule(Rule):
             text_after=after,
             changed_span=span,
             transformation_type=definition.transformation_type,
-            confidence=definition.confidence,
+            confidence=definition.confidence if confidence is None else confidence,
             semantic_risk=definition.semantic_risk,
             explanation=f"{definition.description} — {explanation}",
             metadata={
                 "category": definition.category or "subordinada",
                 "level": str(definition.level),
-                "family": "SUBORDINATION",
+                "family": family,
                 "architecture": architecture,
                 "parser_required": "true",
-                "structural_weight": "0.85",
+                "structural_weight": structural_weight,
             },
         )
 
@@ -245,6 +341,23 @@ def _event_anchor(text: str, members: Iterable[SyntaxToken]) -> bool:
     if any(token.adv_type == "Tim" or token.dep == "obl:agent" for token in tokens):
         return True
     return any(token.text.casefold() == "per" for token in tokens)
+
+
+def _capitalize_first(text: str) -> str:
+    if not text:
+        return text
+    return text[0].upper() + text[1:]
+
+
+def _lower_subject_opener(text: str) -> str:
+    """Baixa només un determinant inicial conegut; mai un nom propi."""
+    if not text:
+        return text
+    first, separator, rest = text.partition(" ")
+    if first.casefold() not in _LOWERABLE_OPENERS:
+        return text
+    lowered = first[0].lower() + first[1:]
+    return lowered + (separator + rest if separator else "")
 
 
 __all__ = ["RelativeArchitectureRule"]
