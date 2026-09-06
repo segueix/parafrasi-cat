@@ -41,6 +41,11 @@ INVALID_TOTAL = -1.0
 CONNECTOR_COMPONENT = "repeticio_connectors"
 """Component de la penalització per repetició de connectors introduïda."""
 
+STRUCTURAL_PRESSURE_SHARE = 0.65
+"""Part de la pressió de reescriptura que és preferència per la reredacció estructural."""
+SURFACE_PRESSURE_SHARE = 0.35
+"""Part de la pressió de reescriptura que és distància superficial respecte de l'original."""
+
 _DIMENSION_LABELS = {
     "preservacio_factual": "preservació factual",
     "preservacio_epistemologica": "preservació epistemològica",
@@ -268,7 +273,7 @@ class CompositeScorer:
 
         connector_repetition_penalty = 0.0
         connector_detail: dict[str, object] = {}
-        if self._connectors is not None and w.rewrite_pressure > 0 and w.connector_repetition > 0:
+        if self._connectors is not None and w.connector_repetition > 0:
             # Es compara amb l'original de la unitat: només la repetició que el
             # candidat afegeix compta. La que l'autor ja havia escrit es conserva
             # sense càrrec, i canviar-la per una de nova sí que en té.
@@ -338,27 +343,33 @@ class CompositeScorer:
                     f"ritme de la fusió {-rhythm_penalty:+.3f} ({'; '.join(assessment_r.reasons)})"
                 )
 
+        # El grau estructural es paga **una sola vegada**. Fins a la 1.3.16 el
+        # cobrava el bonus d'estructura i, a més, la pressió de reescriptura
+        # (que hi tornava a multiplicar el mateix grau): una sola reordenació
+        # arribava a valer sis vegades el desempat estilístic més gran, i cap
+        # criteri d'estil no podia decidir mai entre dues arquitectures
+        # comparables. Ara la preferència per la reredacció és un únic component
+        # —amb el mateix pes total que abans, sumant la part estructural de la
+        # pressió— i la pressió només paga el que el grau no mesura: la
+        # distància superficial respecte de l'original.
+        quality = dimensions["qualitat_sintactica"]
+        quality_scale = quality if quality else 0.0
+        grammar_score = dimensions.get("gramaticalitat")
+        safe_scale = grammar_score if isinstance(grammar_score, float) else 1.0
+        structural_weight = w.structure + STRUCTURAL_PRESSURE_SHARE * w.rewrite_pressure
+
         structure_bonus = 0.0
-        if w.structure > 0 and degree > 0:
-            grammar_score = dimensions.get("gramaticalitat")
-            scale = grammar_score if isinstance(grammar_score, float) else 1.0
-            quality = dimensions["qualitat_sintactica"]
-            structure_bonus = (
-                w.structure * degree * scale * (quality if quality else 0.0) * rhythm_scale
-            )
+        if structural_weight > 0 and degree > 0:
+            structure_bonus = structural_weight * degree * safe_scale * quality_scale * rhythm_scale
             components["estructura"] = round(structure_bonus, 4)
             parts.append(f"reredacció estructural {structure_bonus:+.3f}")
 
         rewrite_bonus = 0.0
         if w.rewrite_pressure > 0 and candidate.transformations:
-            # Pressió només entre candidats que passen els mateixos filtres de seguretat.
-            # Dona més pes a la reestructuració que al simple canvi de caràcters.
-            quality = dimensions["qualitat_sintactica"]
-            grammar_score = dimensions.get("gramaticalitat")
-            safe_scale = grammar_score if isinstance(grammar_score, float) else 1.0
-            rewrite_degree = min(1.0, 0.35 * change + 0.65 * degree)
+            # Pressió només entre candidats que passen els mateixos filtres de seguretat:
+            # amb un esborrany ja ben redactat, no tornar el mateix text.
             rewrite_bonus = (
-                w.rewrite_pressure * rewrite_degree * safe_scale * (quality if quality else 0.0)
+                w.rewrite_pressure * SURFACE_PRESSURE_SHARE * change * safe_scale * quality_scale
             )
             components["pressio_reescriptura"] = round(rewrite_bonus, 4)
             parts.append(f"pressió de reescriptura {rewrite_bonus:+.3f}")

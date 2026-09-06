@@ -8,7 +8,7 @@ que s'executa al mateix ordinador.
 > morfològica i sintàctica, validació gramatical i selecció determinista de
 > candidats.**
 
-**Versió 1.3.16.** Un cop instal·lats els recursos, tot funciona sense connexió.
+**Versió 1.3.17.** Un cop instal·lats els recursos, tot funciona sense connexió.
 Parafrasi-cat no envia text a serveis d'Internet: en mode local, el text no surt
 del dispositiu; en mode de xarxa local, només circula entre el navegador client
 i el servidor Parafrasi-cat dins de la LAN.
@@ -283,6 +283,14 @@ l'afinitat de l'autor mesurada sobre tot el paràgraf. Un candidat que queda
 segon en una frase pot guanyar si dona un paràgraf millor; el resultat ho
 explica. El nivell 4 treballa dins de cada frase i no arriba a aquesta fase. Les
 proteccions són exactament les mateixes als dos nivells.
+
+La preferència per la reredacció es paga **una sola vegada**: el grau
+estructural d'un candidat entra en un únic component de la puntuació (i, en mode
+d'esborrany, la pressió de reescriptura només hi afegeix la distància
+superficial respecte de l'original). Així un criteri d'estil —per exemple, no
+repetir un connector que l'original no repetia— pot decidir entre dues
+arquitectures comparables, en lloc de quedar sepultat sota tres premis del
+mateix fet.
 
 El **grau estructural** d'un candidat només mesura l'arquitectura lingüística:
 reordenacions, subordinació, canvis de construcció, divisions i fusions. Les

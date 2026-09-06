@@ -26,20 +26,28 @@ class ScoringWeights:
     - ``author_affinity_own``: el mateix pes amb text propi i empremta: un
       desempat lleu entre candidats segurs, no una pressió per imitar.
     - ``rewrite_pressure``: pressió de reescriptura segura. Només es fa servir
-      quan el mode d'origen és ``llm_draft``: entre candidats ja validats, dona
-      un bonus pel grau de canvi i sobretot per la reestructuració real. No pot
-      compensar errors factuals, epistemològics, terminològics o gramaticals.
-    - ``connector_repetition``: penalització petita, només quan hi ha pressió de
-      reescriptura i empremta d'autor, per repetir el mateix connector en una
-      seqüència curta. Serveix de microdesempat entre alternatives segures; no
-      inventa cap connector ni força una substitució si no hi ha candidat.
+      quan el mode d'origen és ``llm_draft``: entre candidats ja validats, evita
+      tornar el mateix text. Des de la 1.3.17 la seva part estructural se suma a
+      ``structure`` i la preferència per la reredacció es paga **una sola
+      vegada**; aquí només hi queda la distància superficial respecte de
+      l'original. No pot compensar errors factuals, epistemològics,
+      terminològics o gramaticals.
+    - ``connector_repetition``: penalització petita per **introduir** una
+      repetició de connector que l'original no tenia. Serveix de microdesempat
+      entre alternatives segures; no inventa cap connector ni força cap
+      substitució, i conservar la repetició que l'autor ja havia escrit no costa
+      res. Des de la 1.3.17 no depèn del mode d'origen: amb text propi el motor
+      també tria entre connectors, i per tant també hi ha de decidir.
     - ``structure``: pes del grau de reredacció estructural (famílies de
       transformació ponderades: un canvi sintàctic segur pesa més que un
       connector, i un canvi entre frases més que un de dins de la frase). Val 0
       en mode conservador, on l'original guanya els empats, i el mode profund el
       puja perquè, entre candidats igualment segurs, tingui avantatge la
-      reredacció estructural real. Es multiplica per la gramaticalitat: mai no
-      compensa un avís gramatical.
+      reredacció estructural real. És l'**únic** lloc on es paga el grau
+      estructural: quan hi ha pressió de reescriptura, la seva part estructural
+      s'hi suma. Es multiplica per la gramaticalitat, per la qualitat sintàctica
+      i pel ritme: mai no compensa un avís gramatical ni una fusió que trenca el
+      ritme de l'autor.
     - ``family_gain_decay``: rendiments decreixents del guany dins d'una mateixa
       família: la segona transformació d'una família aporta aquesta fracció de
       la primera, la tercera el quadrat... Tres retocs verbals no valen tres

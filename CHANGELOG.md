@@ -3,6 +3,71 @@
 El format segueix [Keep a Changelog](https://keepachangelog.com/ca/1.1.0/) i el
 projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
+## 1.3.17
+
+La selecció final ja no es pot guanyar acumulant premis del mateix fet, i el
+desempat estilístic existeix sempre. Sense reduir gens la capacitat de
+reredacció de la v1.3.16.
+
+### Causa real
+
+Dos defectes independents, tots dos reproduïts sobre el paràgraf de l'orfil
+abans de tocar res:
+
+- **El desempat de repetició de connectors estava condicionat a
+  `rewrite_pressure > 0`**, és a dir, només s'aplicava als esborranys d'LLM. Amb
+  text propi, les dues arquitectures competidores empataven **exactament** a
+  -0,2036 i guanyava la repetitiva per ordre d'arribada. Aquesta és la causa del
+  cas reportat: no és que l'arquitectura més estructural s'imposés, és que el
+  criteri que havia de desempatar no existia.
+- **El grau estructural es cobrava dues vegades a la mateixa frase**: al bonus
+  d'estructura (`w.structure · grau`) i, un altre cop, dins de la pressió de
+  reescriptura (`w.rewrite_pressure · 0,65 · grau`). Amb els pesos del mode
+  profund i esborrany, una sola reordenació valia 0,94 · grau ≈ 0,61, sis
+  vegades el desempat estilístic més gran (0,18). Cap criteri d'estil no podia
+  decidir mai entre dues arquitectures comparables.
+
+### Un sol pagament per la reredacció
+
+- La preferència per la reredacció és ara **un únic component** amb el mateix
+  pes total que abans: `estructura = (w.structure + 0,65 · w.rewrite_pressure) ·
+  grau · gramaticalitat · qualitat · ritme`. La pressió de reescriptura només
+  paga el que el grau no mesura, la distància superficial respecte de
+  l'original: `0,35 · w.rewrite_pressure · grau_de_canvi`.
+- Amb el ritme intacte, la suma dels dos components és idèntica a la de la
+  v1.3.16 (verificat als tests): la capacitat de reredacció no baixa gens. La
+  diferència apareix on hi havia d'aparèixer: una fusió que trenca el ritme de
+  l'autor perdia només la meitat del premi (la part estructural de la pressió
+  no estava escalada pel ritme) i ara el perd sencer.
+
+### El desempat estilístic no depèn de l'origen del text
+
+- La repetició de connectors es mesura sempre que hi ha un inventari, amb text
+  propi i amb esborrany. El que evita qualsevol diversificació agressiva no és
+  el mode d'origen sinó la mesura mateixa: només es penalitza la repetició que
+  el candidat **introdueix**; conservar la de l'autor continua sent gratuït.
+
+### Comprovació sobre el text real
+
+Amb les tres configuracions provades (text propi, esborrany amb empremta i
+esborrany sense empremta), el paràgraf de l'orfil ja no repeteix la mateixa
+causal: la reordenació de la frase del roc es conserva i el connector de la
+frase del cavaller varia. La repetició introduïda per paràgraf és 0,00.
+
+### Tests
+
+`tests/test_seleccio_1317.py`: el grau es paga una sola vegada, la pressió
+només paga la distància superficial, el pes total es conserva, una fusió que
+trenca el ritme perd tot el premi, el desempat funciona sense pressió de
+reescriptura, cap criteri estilístic no rescata un candidat invalidat, la
+diversitat estructural continua guanyant un retoc superficial, la composició
+profunda de la v1.3.16 continua viva, i sobre el text de l'orfil: cap repetició
+introduïda, l'arquitectura repetitiva existia i ha perdut, la reredacció real
+manté l'avantatge sobre l'original, «només … si» i els dos punts es conserven,
+no es genera «puix que» i el resultat és determinista.
+
+Les versions 1.3.15 i 1.3.16 estan documentades a l'historial de git.
+
 ## 1.3.14
 
 Cerca de candidats: la reserva inicial ja no pot deixar l'expansió estructural
