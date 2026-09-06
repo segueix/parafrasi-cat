@@ -11,14 +11,14 @@ from parafrasi_cat.analyzer.lexicon import ClosedClassLexicon
 from parafrasi_cat.analyzer.paragraphs import Paragraph
 from parafrasi_cat.analyzer.sentences import Sentence
 from parafrasi_cat.candidates.candidate import Candidate
-from parafrasi_cat.candidates.generator import (
-    CHAINED_RULES_KEY,
-    CandidateAssessment,
-    CandidateGenerator,
-)
+from parafrasi_cat.candidates.generator import CandidateAssessment, CandidateGenerator
 from parafrasi_cat.candidates.repair import AgreementRepair
 from parafrasi_cat.core.spans import Span
-from parafrasi_cat.core.transformation import SemanticRisk, Transformation
+from parafrasi_cat.core.transformation import (
+    CHAINED_RULES_KEY,
+    SemanticRisk,
+    Transformation,
+)
 from parafrasi_cat.morphology.provider import MorphologyProvider, NullMorphology
 from parafrasi_cat.pipeline.paragraph_search import BeamSettings, ParagraphBeam
 from parafrasi_cat.pipeline.result import (

@@ -351,12 +351,29 @@ def test_no_safe_alternative_means_no_change(deep: Pipeline) -> None:
 
 
 def test_own_text_gets_no_variety_pressure(project_root: Path) -> None:
-    """Sense pressió de reescriptura (text propi) la mesura no s'aplica."""
+    """Amb text propi tampoc no s'introdueix una repetició, però no es força cap canvi.
+
+    Fins a la v1.3.16 la mesura estava condicionada a la pressió de reescriptura,
+    de manera que amb text propi no s'aplicava mai i el motor podia introduir-hi
+    una repetició. Des de la v1.3.17 el desempat existeix sempre —no depèn de
+    l'origen del text—, i el que continua garantint que no hi hagi cap
+    diversificació agressiva és que **només** es penalitza la repetició que el
+    candidat afegeix: conservar la de l'autor no costa res.
+    """
     pipeline = _pipeline(project_root, pressure=0.0)
-    candidate = Candidate(0, TWO_CAUSALS, REPEATED_BY_AUTHOR, ())
-    score = pipeline.scorer.score(candidate, ScoringContext(None, TWO_CAUSALS, None))
-    assert CONNECTOR_COMPONENT not in score.components
-    assert score.dimension("varietat_connectors") is None
+    assert pipeline.scorer.weights.rewrite_pressure == 0.0
+    ctx = ScoringContext(None, TWO_CAUSALS, None)
+
+    introduced = Candidate(0, TWO_CAUSALS, REPEATED_BY_AUTHOR, ())
+    score = pipeline.scorer.score(introduced, ctx)
+    assert score.components[CONNECTOR_COMPONENT] < 0
+
+    # La repetició que l'autor ja havia escrit no rep cap penalització ni cap
+    # pressió per canviar-la.
+    inherited = Candidate(0, REPEATED_BY_AUTHOR, REPEATED_BY_AUTHOR, ())
+    kept = pipeline.scorer.score(inherited, ScoringContext(None, REPEATED_BY_AUTHOR, None))
+    assert CONNECTOR_COMPONENT not in kept.components
+    assert kept.dimension("varietat_connectors") == 1.0
 
 
 def test_the_penalty_reaches_the_score_and_the_trace(deep: Pipeline) -> None:
