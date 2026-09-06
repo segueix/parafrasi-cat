@@ -11,7 +11,11 @@ from parafrasi_cat.analyzer.lexicon import ClosedClassLexicon
 from parafrasi_cat.analyzer.paragraphs import Paragraph
 from parafrasi_cat.analyzer.sentences import Sentence
 from parafrasi_cat.candidates.candidate import Candidate
-from parafrasi_cat.candidates.generator import CHAINED_RULES_KEY, CandidateGenerator
+from parafrasi_cat.candidates.generator import (
+    CHAINED_RULES_KEY,
+    CandidateAssessment,
+    CandidateGenerator,
+)
 from parafrasi_cat.candidates.repair import AgreementRepair
 from parafrasi_cat.core.spans import Span
 from parafrasi_cat.core.transformation import SemanticRisk, Transformation
@@ -175,6 +179,10 @@ class Pipeline:
     @property
     def scorer(self) -> Scorer:
         return self._scorer
+
+    @property
+    def generator(self) -> CandidateGenerator:
+        return self._generator
 
     @property
     def validators(self) -> tuple[Validator, ...]:
@@ -346,15 +354,22 @@ class Pipeline:
         ctx = self._sentence_context(sentence, protected, document_text)
         max_level = self._level_for(ctx)
         proposals, rejected = self._collect_proposals(ctx, max_level)
-        candidates = self._generator.generate(
+        validation_ctx = ValidationContext(sentence.text, ctx.protected_spans)
+        # La reparació, la validació i la puntuació es fan **abans** de repartir les
+        # places: un candidat que no supera la validació no n'ha d'ocupar cap que
+        # podria aprofitar una alternativa vàlida. La memòria cau fa que després no
+        # es torni a validar ni a puntuar res.
+        assess, cache = self._admission(validation_ctx, ctx.protected_conflict, document)
+        search = self._generator.search(
             sentence.index,
             sentence.text,
             proposals,
             expand=partial(self.propose, max_level=max_level),
+            admissible=assess,
         )
-        candidates = self._repaired(candidates, ctx.protected_conflict)
-        validation_ctx = ValidationContext(sentence.text, ctx.protected_spans)
-        evaluated, best = self._evaluate(candidates, validation_ctx, document)
+        evaluated, best = self._evaluate(
+            (*search.candidates, *search.rejected), validation_ctx, document, cache
+        )
         return SentenceResult(
             index=sentence.index,
             source_text=sentence.text,
@@ -365,26 +380,53 @@ class Pipeline:
             protected_spans=ctx.protected_spans,
             notes=tuple(ctx.notes),
             opportunities=_opportunities(len(proposals), len(rejected), evaluated, best),
+            generation=search.trace,
         )
 
-    def _repaired(
-        self, candidates: tuple[Candidate, ...], protected_conflict: ProtectedConflict
-    ) -> tuple[Candidate, ...]:
-        """Candidats amb la concordança que el motor hagi trencat ja reparada.
+    def _admission(
+        self,
+        validation_ctx: ValidationContext,
+        protected_conflict: ProtectedConflict,
+        document: AdaptationContext | None,
+    ) -> tuple[Callable[[Candidate], CandidateAssessment], dict[str, EvaluatedCandidate]]:
+        """Funció que repara, valida i puntua un candidat, amb la seva memòria cau.
 
-        Si la morfologia no dona una forma única, el candidat es queda com
-        estava i el validador de concordança el descarta.
+        Es consulta mentre es reparteixen les places i, després, la mateixa cau
+        serveix el resultat: cada candidat es valida i es puntua una sola vegada.
         """
-        if not self._repair.available:
-            return candidates
-        repaired = tuple(
-            self._repair.repair(candidate, protected_conflict=protected_conflict)
-            for candidate in candidates
+        cache: dict[str, EvaluatedCandidate] = {}
+
+        def assess(candidate: Candidate) -> CandidateAssessment:
+            repaired = candidate
+            if self._repair.available:
+                repaired = self._repair.repair(candidate, protected_conflict=protected_conflict)
+            evaluated = cache.get(repaired.text)
+            if evaluated is None:
+                evaluated = self._evaluated(repaired, validation_ctx, document)
+                cache[repaired.text] = evaluated
+            score = evaluated.score
+            return CandidateAssessment(
+                candidate=evaluated.candidate,
+                valid=evaluated.accepted,
+                total=score.total if score is not None else 0.0,
+                reason=evaluated.rejection_reason,
+            )
+
+        return assess, cache
+
+    def _evaluated(
+        self,
+        candidate: Candidate,
+        validation_ctx: ValidationContext,
+        document: AdaptationContext | None,
+    ) -> EvaluatedCandidate:
+        validation = ValidationResult.merge(
+            validator.validate(candidate, validation_ctx) for validator in self._validators
         )
-        seen: dict[str, Candidate] = {}
-        for candidate in repaired:
-            seen.setdefault(candidate.text, candidate)
-        return tuple(seen.values())
+        score = self._scorer.score(
+            candidate, ScoringContext(validation, validation_ctx.source_text, document)
+        )
+        return EvaluatedCandidate(candidate, validation, score)
 
     def _collect_proposals(
         self, ctx: RuleContext, max_level: int | None = None
@@ -515,16 +557,15 @@ class Pipeline:
         candidates: tuple[Candidate, ...],
         validation_ctx: ValidationContext,
         document: AdaptationContext | None = None,
+        cache: dict[str, EvaluatedCandidate] | None = None,
     ) -> tuple[tuple[EvaluatedCandidate, ...], EvaluatedCandidate]:
         evaluated: list[EvaluatedCandidate] = []
         for candidate in candidates:
-            validation = ValidationResult.merge(
-                validator.validate(candidate, validation_ctx) for validator in self._validators
-            )
-            score = self._scorer.score(
-                candidate, ScoringContext(validation, validation_ctx.source_text, document)
-            )
-            evaluated.append(EvaluatedCandidate(candidate, validation, score))
+            known = cache.get(candidate.text) if cache is not None else None
+            if known is not None:
+                evaluated.append(known)
+                continue
+            evaluated.append(self._evaluated(candidate, validation_ctx, document))
         accepted = [e for e in evaluated if e.accepted]
         best = select_best(accepted, lambda e: e.candidate, _score_of)
         if best is None:

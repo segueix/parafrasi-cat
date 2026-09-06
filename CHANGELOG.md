@@ -3,6 +3,78 @@
 El format segueix [Keep a Changelog](https://keepachangelog.com/ca/1.1.0/) i el
 projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
+## 1.3.14
+
+Cerca de candidats: la reserva inicial ja no pot deixar l'expansió estructural
+sense marge, i les places finals van a candidats que ja han passat la
+validació. No s'ha ampliat cap regla ni s'ha relaxat cap validador, risc ni
+confiança.
+
+### El problema
+
+Amb la configuració profunda, la reserva de treball és de 84 candidats i la
+tria final en conserva 24. Les transformacions soltes i les seves combinacions
+omplien la reserva sencera abans que l'expansió de segon nivell hagués
+començat: amb vuit propostes independents ja se n'arriben a construir 92
+(8 soltes + 28 parelles + 56 tríades), i el bucle d'expansió es trobava la
+reserva plena i no feia **cap** crida. A més, el feix d'expansió s'ordenava per
+la suma de confiances, de manera que tres retocs lèxics (0,95 × 3) sempre
+desplaçaven una reordenació segura (0,70), que és justament la que més pot
+guanyar amb una segona passada.
+
+### Pressupost propi per a l'expansió
+
+- `CandidateGenerator` accepta `expansion_budget` (per defecte, el doble de
+  l'amplada del feix) i el reserva **per damunt** de la reserva base:
+  `work_limit = pool_limit + expansion_budget`. Encara que les combinacions
+  inicials la saturin, la reaplicació de regles sempre té marge.
+- El feix d'expansió s'ordena per diversitat estructural (grau estructural,
+  després confiança acumulada, després ordre de generació) i reserva un lloc a
+  cada signatura abans de repetir-ne cap.
+
+### Admissió abans de repartir les places
+
+- La selecció final pot consultar una funció d'admissió que **repara, valida i
+  puntua** el candidat. Els que no superen la validació no ocupen cap plaça —la
+  hi aprofita una alternativa vàlida— però es retornen a part
+  (`GenerationResult.rejected`) perquè el resultat continuï explicant per què
+  s'han descartat.
+- La canonada li dona aquesta funció amb memòria cau: cada candidat es repara,
+  es valida i es puntua **una sola vegada**, i el pas d'avaluació reutilitza la
+  mateixa cau. La reparació de concordança, que abans es feia en un pas a part
+  sobre els candidats ja triats, ara forma part de l'admissió.
+- L'original es conserva sempre i els desempats continuen sent estables (grau
+  estructural, confiança acumulada, ordre de generació).
+
+### Traça de la cerca
+
+`SentenceResult.generation` (i el camp `generation` de l'API i de l'informe)
+diu quantes propostes hi havia, quants candidats s'han construït, quants els ha
+aportat l'expansió i en quantes reanàlisis, quants s'han avaluat, quants s'han
+conservat, si la cerca ha arribat al seu límit de treball i per què cau la
+resta: `duplicat`, `canvi excessiu`, `pressupost` (no cabia a la reserva),
+`seguretat` (no supera la validació) i `puntuació` (l'han desplaçat candidats
+millors).
+
+### Cost
+
+Sobre text real (paràgraf de l'orfil i text acadèmic de deu frases, mode
+profund nivell 5), el temps d'execució no canvia: 2,06–2,48 s i 3,87–4,13 s
+contra 2,10–2,42 s i 3,93–4,25 s abans. Cap frase del corpus del projecte no
+satura avui la reserva —calen vuit propostes compatibles a la mateixa frase—,
+de manera que el canvi és sobretot una correcció de robustesa per a frases
+llargues amb moltes regles aplicables; el que sí que millora a tot arreu és que
+les places finals no se les enduguin candidats invàlids.
+
+### Tests
+
+`tests/test_cerca_candidats.py`: saturació amb variants superficials i
+supervivència de l'expansió, diversitat estructural al feix, expansió que
+produeix una alternativa que la generació base no pot construir, admissió que
+no gasta places en candidats invàlids, una sola consulta per candidat,
+conservació de l'original, traça dels descartaments, límits acotats,
+determinisme i, a la canonada, proteccions i explicació dels rebutjats.
+
 ## 1.3.13
 
 Tria entre connectors equivalents dins d'un paràgraf: el motor deixa

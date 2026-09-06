@@ -531,6 +531,7 @@ class RewriteService:
             "opportunities": (
                 unit.opportunities.to_dict() if hasattr(unit, "opportunities") else {}
             ),
+            "generation": (unit.generation.to_dict() if hasattr(unit, "generation") else {}),
             "candidates": [
                 self._candidate(f"{unit_id}-{n}", evaluated, source)
                 for n, evaluated in enumerate(unit.candidates)

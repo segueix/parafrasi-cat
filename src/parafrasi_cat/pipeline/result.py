@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from parafrasi_cat.candidates.candidate import Candidate
+from parafrasi_cat.candidates.generator import GenerationTrace
 from parafrasi_cat.core.spans import Span
 from parafrasi_cat.core.transformation import Transformation
 from parafrasi_cat.protected.spans import ProtectedSpan
@@ -267,6 +268,8 @@ class SentenceResult(_UnitResult):
     """Per què el motor no ha transformat (o ha limitat) aquesta frase."""
     opportunities: OpportunityStats = field(default_factory=OpportunityStats)
     """Quantes alternatives hi havia, quantes eren segures i què s'ha triat."""
+    generation: GenerationTrace = field(default_factory=GenerationTrace)
+    """Com ha anat la cerca de candidats: què s'ha generat i per què cau la resta."""
 
     @property
     def changed(self) -> bool:
@@ -281,6 +284,7 @@ class SentenceResult(_UnitResult):
             "changed": self.changed,
             "notes": list(self.notes),
             "opportunities": self.opportunities.to_dict(),
+            "generation": self.generation.to_dict(),
             "transformations": [t.to_dict() for t in self.transformations],
             "alternatives": list(self.alternatives),
             "summary": self.summary(),
@@ -460,6 +464,7 @@ class ParaphraseResult:
             lines.append(f"Frase {sentence.index + 1}: «{sentence.source_text}»")
             _report_unit(lines, sentence, max_discarded)
             lines.append(f"  Oportunitats: {sentence.opportunities.describe()}")
+            lines.append(f"  Cerca: {sentence.generation.describe()}")
             lines.extend(f"  ℹ {note}" for note in sentence.notes)
         for paragraph in self.paragraphs:
             if not paragraph.changed and len(paragraph.candidates) <= 1 and not paragraph.notes:
