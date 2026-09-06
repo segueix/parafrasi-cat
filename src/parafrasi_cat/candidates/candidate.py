@@ -78,8 +78,8 @@ class Candidate:
         return tuple(f for f in self.families if f.structural)
 
     @property
-    def signature(self) -> str:
-        """Signatura de famílies: ``ORIGINAL``, una família o ``MULTI_TRANSFORM(...)``."""
+    def family_signature(self) -> str:
+        """Signatura abstracta de famílies, compatible amb les versions anteriors."""
         families = self.families
         if not families:
             return TransformationFamily.ORIGINAL.value
@@ -112,17 +112,34 @@ class Candidate:
         if self.is_identity:
             return TransformationFamily.ORIGINAL.value
         operations = self.operation_architectures
-        return "ARCH(" + "+".join(operations) + ")" if operations else self.signature
+        return "ARCH(" + "+".join(operations) + ")" if operations else self.family_signature
+
+    @property
+    def signature(self) -> str:
+        """Signatura usada per la cerca i la traça.
+
+        Sense metadades arquitectòniques conserva exactament la signatura de
+        família antiga. Quan una operació estructural declara ``architecture``,
+        ``movement`` o ``block_kind`` —o n'ha absorbit una altra que ho feia—,
+        la signatura incorpora la ruta concreta. Així el feix de paràgraf no
+        confon dues reordenacions diferents només perquè totes dues són
+        ``REORDER``.
+        """
+        base = self.family_signature
+        if not self.is_structural or not _has_explicit_architecture(self.transformations):
+            return base
+        return f"{base}::{self.architecture_signature}"
 
     @property
     def diversity_signature(self) -> str:
         """Clau de diversitat del cercador.
 
-        En candidats estructurals distingeix arquitectures concretes dins de la
-        mateixa família. En retocs superficials conserva la signatura de família
-        perquè variants lèxiques no omplin el feix només pel seu ``rule_id``.
+        En candidats estructurals distingeix sempre les arquitectures concretes,
+        fins i tot si una regla antiga encara no declara metadades específiques.
+        En retocs superficials conserva la signatura de família perquè variants
+        lèxiques no omplin el feix només pel seu ``rule_id``.
         """
-        return self.architecture_signature if self.is_structural else self.signature
+        return self.architecture_signature if self.is_structural else self.family_signature
 
     def structural_degree(self) -> float:
         """Grau de reredacció estructural (0-1): només l'arquitectura lingüística.
@@ -260,6 +277,7 @@ class Candidate:
             "architecture_signature": self.architecture_signature,
             "change_ratio": round(self.change_ratio(), 4),
             "signature": self.signature,
+            "family_signature": self.family_signature,
             "families": [f.value for f in self.families],
             "structural_families": [f.value for f in self.structural_families],
             "structural_degree": self.structural_degree(),
@@ -274,6 +292,15 @@ def _architecture_id(rule_id: str, metadata: Mapping[str, str]) -> str:
         if str(metadata.get(key, "")).strip()
     ]
     return rule_id if not details else f"{rule_id}[{';'.join(details)}]"
+
+
+def _has_explicit_architecture(transformations: Iterable[Transformation]) -> bool:
+    for transformation in transformations:
+        if any(str(transformation.metadata.get(key, "")).strip() for key in _ARCHITECTURE_KEYS):
+            return True
+        if str(transformation.metadata.get(CHAINED_ARCHITECTURES_KEY, "")).strip():
+            return True
+    return False
 
 
 def _csv(value: object) -> tuple[str, ...]:
