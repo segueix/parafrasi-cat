@@ -50,13 +50,7 @@ class RuleRegistry:
     def describe(self, rule_type: str) -> str:
         return self._registration(rule_type).description
 
-    def create(
-        self,
-        rule_type: str,
-        rule_id: str,
-        params: Mapping[str, object],
-        paths: ProjectPaths,
-    ) -> AnyRule:
+    def create(self, rule_type: str, rule_id: str, params: Mapping[str, object], paths: ProjectPaths) -> AnyRule:
         return self._registration(rule_type).factory(rule_id, params, paths)
 
     def create_from_definition(self, definition: RuleDefinition, paths: ProjectPaths) -> AnyRule:
@@ -68,9 +62,7 @@ class RuleRegistry:
             return self._types[rule_type]
         except KeyError:
             valid = ", ".join(self.available()) or "(cap)"
-            raise ConfigError(
-                f"Tipus de regla desconegut: «{rule_type}». Disponibles: {valid}"
-            ) from None
+            raise ConfigError(f"Tipus de regla desconegut: «{rule_type}». Disponibles: {valid}") from None
 
 
 class _Hints:
@@ -85,16 +77,13 @@ class _Hints:
             finite: tuple[str, ...] = ()
             if file is not None:
                 from parafrasi_cat.resources import load_mapping
-
                 finite = as_str_list(load_mapping(file), "forms")
             cls.cache = HintsCache(finite)
             cls.root = root
         return cls.cache
 
 
-def _lexical_factory(
-    rule_id: str, params: Mapping[str, object], paths: ProjectPaths
-) -> AnyRule:
+def _lexical_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPaths) -> AnyRule:
     definition = params.get("definition")
     source = as_str(params, "source", "")
     if not source and isinstance(definition, RuleDefinition):
@@ -103,69 +92,45 @@ def _lexical_factory(
         raise ConfigError(f"La regla «{rule_id}» necessita el paràmetre «source»")
     category = definition.category if isinstance(definition, RuleDefinition) else "lexic"
     level = definition.level if isinstance(definition, RuleDefinition) else 1
-    return LexicalSubstitutionRule.from_file(
-        paths.resolve(source), rule_id=rule_id, category=category or "lexic", level=level
-    )
+    return LexicalSubstitutionRule.from_file(paths.resolve(source), rule_id=rule_id, category=category or "lexic", level=level)
 
 
-def _pattern_factory(
-    rule_id: str, params: Mapping[str, object], paths: ProjectPaths
-) -> AnyRule:
+def _pattern_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPaths) -> AnyRule:
     return PatternRule(definition_from_params(params, rule_id), hints=_Hints.for_paths(paths))
 
 
-def _connector_factory(
-    rule_id: str, params: Mapping[str, object], paths: ProjectPaths
-) -> AnyRule:
+def _connector_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPaths) -> AnyRule:
     return ConnectorEquivalenceRule(definition_from_params(params, rule_id))
 
 
-def _periphrastic_factory(
-    rule_id: str, params: Mapping[str, object], paths: ProjectPaths
-) -> AnyRule:
+def _periphrastic_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPaths) -> AnyRule:
     definition = definition_from_params(params, rule_id)
     return periphrastic_rule_from_params(definition, params, paths.root)
 
 
-def _nominalization_factory(
-    rule_id: str, params: Mapping[str, object], paths: ProjectPaths
-) -> AnyRule:
+def _nominalization_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPaths) -> AnyRule:
     definition = definition_from_params(params, rule_id)
     return nominalization_rule_from_params(definition, params, paths.root)
 
 
-def _fusion_factory(
-    rule_id: str, params: Mapping[str, object], paths: ProjectPaths
-) -> AnyRule:
-    return SentenceFusionRule(
-        definition_from_params(params, rule_id), hints=_Hints.for_paths(paths)
-    )
+def _fusion_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPaths) -> AnyRule:
+    return SentenceFusionRule(definition_from_params(params, rule_id), hints=_Hints.for_paths(paths))
 
 
-def _block_move_factory(
-    rule_id: str, params: Mapping[str, object], paths: ProjectPaths
-) -> AnyRule:
+def _block_move_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPaths) -> AnyRule:
     return BlockMoveRule(definition_from_params(params, rule_id))
 
 
-def _relative_factory(
-    rule_id: str, params: Mapping[str, object], paths: ProjectPaths
-) -> AnyRule:
+def _relative_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPaths) -> AnyRule:
     del paths
     return RelativeArchitectureRule(definition_from_params(params, rule_id))
 
 
-def _copular_fusion_factory(
-    rule_id: str, params: Mapping[str, object], paths: ProjectPaths
-) -> AnyRule:
-    return CopularFusionRule(
-        definition_from_params(params, rule_id), hints=_Hints.for_paths(paths)
-    )
+def _copular_fusion_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPaths) -> AnyRule:
+    return CopularFusionRule(definition_from_params(params, rule_id), hints=_Hints.for_paths(paths))
 
 
-def _assertive_factory(
-    rule_id: str, params: Mapping[str, object], paths: ProjectPaths
-) -> AnyRule:
+def _assertive_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPaths) -> AnyRule:
     return AssertiveNormalizationRule(definition_from_params(params, rule_id))
 
 
@@ -178,41 +143,21 @@ def _anaphoric_fragment_factory(
 
 def default_registry() -> RuleRegistry:
     registry = RuleRegistry()
-    registry.register(
-        "lexical.substitution",
-        _lexical_factory,
-        description="Substitució lèxica basada en diccionari",
-    )
+    registry.register("lexical.substitution", _lexical_factory, description="Substitució lèxica basada en diccionari")
     registry.register("lexical", _lexical_factory, description="Àlies de lexical.substitution")
     registry.register("pattern", _pattern_factory, description="Patró de tokens amb plantilles")
-    registry.register(
-        "connector", _connector_factory, description="Classes de connectors equivalents"
-    )
-    registry.register(
-        "periphrastic_past", _periphrastic_factory, description="Passat perifràstic ↔ passat simple"
-    )
-    registry.register(
-        "nominalization", _nominalization_factory, description="Verb ↔ construcció nominal"
-    )
-    registry.register(
-        "fusion", _fusion_factory, description="Fusió de frases consecutives compatibles"
-    )
-    registry.register(
-        "block_move", _block_move_factory, description="Moviment de blocs sintàctics tancats"
-    )
+    registry.register("connector", _connector_factory, description="Classes de connectors equivalents")
+    registry.register("periphrastic_past", _periphrastic_factory, description="Passat perifràstic ↔ passat simple")
+    registry.register("nominalization", _nominalization_factory, description="Verb ↔ construcció nominal")
+    registry.register("fusion", _fusion_factory, description="Fusió de frases consecutives compatibles")
+    registry.register("block_move", _block_move_factory, description="Moviment de blocs sintàctics tancats")
     registry.register(
         "relative_architecture",
         _relative_factory,
         description="Relativa passiva explicativa ↔ participial, guiada pel parser",
     )
-    registry.register(
-        "copular_fusion", _copular_fusion_factory, description="Fusió de frases copulatives"
-    )
-    registry.register(
-        "epistemic_normalize",
-        _assertive_factory,
-        description="Normalització determinista de piles de modalització",
-    )
+    registry.register("copular_fusion", _copular_fusion_factory, description="Fusió de frases copulatives")
+    registry.register("epistemic_normalize", _assertive_factory, description="Normalització determinista de piles de modalització")
     registry.register(
         "anaphoric_fragment_repair",
         _anaphoric_fragment_factory,
