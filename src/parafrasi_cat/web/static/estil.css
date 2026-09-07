@@ -12,6 +12,10 @@
   --suprimit-fons: #f6dede;
   --avis: #8a5a00;
   --rebuig: #8b2c2c;
+  --boto-text: #ffffff;
+  --alternativa: #5941a0;
+  --alternativa-fons: #eeebf8;
+  --seleccio-fons: #e5eff7;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -28,6 +32,10 @@
     --suprimit-fons: #3d2222;
     --avis: #e0b567;
     --rebuig: #e79a9a;
+    --boto-text: #12202c;
+    --alternativa: #c4b5fd;
+    --alternativa-fons: #302944;
+    --seleccio-fons: #263b4d;
   }
 }
 
@@ -123,14 +131,14 @@ button {
   border: 1px solid var(--accent);
   border-radius: 5px;
   background: var(--accent);
-  color: #fff;
+  color: var(--boto-text);
   font: inherit;
   cursor: pointer;
 }
 
 button.secundari { background: transparent; color: var(--accent); }
-button:disabled { opacity: 0.55; cursor: progress; }
-button:hover:not(:disabled) { filter: brightness(1.08); }
+button:disabled { background: var(--fons); color: var(--suau); border-color: var(--vora); cursor: progress; }
+button:hover:not(:disabled) { filter: brightness(1.03); }
 
 .resum { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem; margin: 0 0 0.5rem; }
 .resum div { border: 1px solid var(--vora); border-radius: 5px; padding: 0.4rem 0.55rem; }
@@ -162,7 +170,7 @@ button:hover:not(:disabled) { filter: brightness(1.08); }
 
 .candidat { border: 1px solid var(--vora); border-radius: 5px; padding: 0.6rem 0.7rem; }
 .candidat.seleccionat { border-color: var(--accent); border-width: 2px; }
-.candidat.rebutjat { opacity: 0.82; border-style: dashed; }
+.candidat.rebutjat { border-style: dashed; }
 
 .capçalera-candidat { display: flex; gap: 0.55rem; align-items: baseline; }
 .text-candidat { margin: 0; flex: 1; white-space: pre-wrap; }
@@ -193,7 +201,7 @@ code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-si
 .pestanyes {
   display: flex;
   gap: 0.25rem;
-  border-bottom: 1px solid #d7d7d2;
+  border-bottom: 1px solid var(--vora);
   margin-bottom: 1rem;
 }
 
@@ -202,34 +210,34 @@ code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-si
   border: 1px solid transparent;
   border-bottom: none;
   border-radius: 4px 4px 0 0;
-  color: #4a4a44;
+  color: var(--suau);
   cursor: pointer;
   font: inherit;
   padding: 0.5rem 0.9rem;
 }
 
 .pestanya:hover {
-  background: #f0f0ea;
+  background: var(--seleccio-fons);
 }
 
 .pestanya.activa {
-  background: #fff;
-  border-color: #d7d7d2;
-  color: #1a1a17;
+  background: var(--plafo);
+  border-color: var(--vora);
+  color: var(--accent);
   font-weight: 600;
   margin-bottom: -1px;
 }
 
 .frase {
-  border: 1px solid #d7d7d2;
+  border: 1px solid var(--vora);
   border-radius: 6px;
   margin-bottom: 1rem;
   padding: 0.8rem 1rem;
 }
 
 .frase.feta {
-  background: #f4f8f4;
-  border-color: #9dbd9d;
+  background: var(--afegit-fons);
+  border-color: var(--afegit);
 }
 
 .capçalera-frase {
@@ -244,17 +252,17 @@ code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-si
 }
 
 .estat-frase {
-  color: #6a6a62;
+  color: var(--suau);
   font-size: 0.85em;
 }
 
 .frase.feta .estat-frase {
-  color: #35662f;
+  color: var(--afegit);
   font-weight: 600;
 }
 
 .original-frase {
-  color: #4a4a44;
+  color: var(--suau);
   font-size: 0.92em;
 }
 
@@ -265,19 +273,21 @@ code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-si
 }
 
 .redaccio {
-  border: 1px solid #e4e4de;
+  background: var(--plafo);
+  color: var(--text);
+  border: 1px solid var(--vora);
   border-radius: 5px;
   margin-bottom: 0.5rem;
   padding: 0.5rem 0.7rem;
 }
 
 .redaccio.triada {
-  background: #fbfbf7;
-  border-color: #8a8a80;
+  background: var(--seleccio-fons);
+  border-color: var(--accent);
 }
 
 .etiqueta-redaccio {
-  color: #6a6a62;
+  color: var(--suau);
   font-size: 0.85em;
 }
 
@@ -289,8 +299,8 @@ code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-si
 .mot {
   background: none;
   border: none;
-  border-bottom: 2px dotted #7a7ac0;
-  color: inherit;
+  border-bottom: 2px dotted var(--alternativa);
+  color: var(--alternativa);
   cursor: pointer;
   font: inherit;
   padding: 0 1px;
@@ -298,13 +308,14 @@ code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-si
 
 .mot:hover,
 .mot:focus {
-  background: #ececfa;
+  background: var(--alternativa-fons);
   outline: none;
 }
 
 .mot.canviat {
-  background: #eef6ee;
-  border-bottom-color: #4f8a4f;
+  color: var(--afegit);
+  background: var(--afegit-fons);
+  border-bottom-color: var(--afegit);
   font-weight: 600;
 }
 
@@ -314,8 +325,9 @@ code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-si
 }
 
 .desplegable {
-  background: #fff;
-  border: 1px solid #a8a8a0;
+  color: var(--text);
+  background: var(--plafo);
+  border: 1px solid var(--suau);
   border-radius: 6px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
   max-height: 60vh;
@@ -332,7 +344,7 @@ code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-si
 }
 
 .desplegable-grup {
-  border-top: 1px solid #eaeae4;
+  border-top: 1px solid var(--vora);
   margin-top: 0.5rem;
   padding-top: 0.5rem;
 }
@@ -344,15 +356,16 @@ code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-si
 }
 
 .desplegable-etiqueta {
-  color: #6a6a62;
+  color: var(--suau);
   display: block;
   font-size: 0.82em;
   margin-bottom: 0.3rem;
 }
 
 .desplegable-opcio {
-  background: none;
-  border: 1px solid #d7d7d2;
+  background: var(--fons);
+  color: var(--alternativa);
+  border: 1px solid var(--vora);
   border-radius: 4px;
   cursor: pointer;
   font: inherit;
@@ -361,14 +374,28 @@ code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-si
 }
 
 .desplegable-opcio:hover {
-  background: #f0f0ea;
+  background: var(--alternativa-fons);
 }
 
 .desplegable-opcio .registre {
-  color: #8a6a30;
+  color: var(--avis);
   font-size: 0.8em;
 }
 
 .desplegable-tanca {
   margin-top: 0.6rem;
 }
+
+/* Colors compartits per la web i la finestra de l'app. */
+h1, h2, h3, h4, legend, .desplegable-titol { color: var(--accent); }
+a, summary { color: var(--accent); }
+textarea::placeholder, input::placeholder { color: var(--suau); opacity: 1; }
+input { accent-color: var(--accent); }
+input[type="file"] { color: var(--text); }
+input::file-selector-button { background: var(--fons); color: var(--accent); border: 1px solid var(--vora); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mot:focus-visible { outline: 2px solid var(--alternativa); }
+::selection { background: var(--accent); color: var(--boto-text); }
+.etiquetes li { color: var(--alternativa); }
+.vot[data-verdicte="acceptable"] { color: var(--afegit); border-color: var(--afegit); }
+.vot[data-verdicte="rejected"] { color: var(--rebuig); border-color: var(--rebuig); }
