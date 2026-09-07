@@ -214,6 +214,11 @@ class Pipeline:
         return self._max_level
 
     @property
+    def morphology(self) -> MorphologyProvider:
+        """Morfologia activa (l'analitzador intern si el recurs no s'ha importat)."""
+        return self._morphology
+
+    @property
     def repair(self) -> AgreementRepair:
         """Reparador de concordança (inactiu sense parser o sense morfologia)."""
         return self._repair

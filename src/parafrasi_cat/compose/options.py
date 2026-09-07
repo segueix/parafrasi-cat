@@ -1,0 +1,164 @@
+"""Tria de redaccions el més diferents possible entre elles.
+
+El motor genera molts candidats segurs d'una mateixa frase, i sovint la
+majoria s'assemblen: canvien un connector, o mouen el mateix bloc. Ensenyar-ne
+tres de gairebé iguals no ajuda ningú a decidir. Aquí es trien les que **més
+es diferencien**, amb un criteri explícit i determinista.
+
+La distància entre dues redaccions té dues parts, totes dues entre 0 i 1:
+
+- **arquitectura**: si tenen la mateixa signatura estructural, 0; si en tenen
+  de diferents, 1. És el que distingeix una divisió d'una reordenació.
+- **redacció**: ``1 - semblança`` de les seqüències de paraules. És el que
+  distingeix dues divisions que parteixen la frase per llocs diferents.
+
+La distància total pesa el doble l'arquitectura, perquè és la diferència que
+es veu llegint. La tria és voraç: primer la millor redacció segons el
+puntuador, i després, cada cop, la que és més lluny de totes les triades.
+Amb empats, mana la puntuació i després l'ordre d'arribada, de manera que la
+mateixa entrada dona sempre la mateixa llista.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from difflib import SequenceMatcher
+
+from parafrasi_cat.candidates.candidate import Candidate
+from parafrasi_cat.pipeline.result import EvaluatedCandidate
+from parafrasi_cat.synonyms.suggester import TokenOptions
+
+ARCHITECTURE_WEIGHT = 2.0
+"""Pes de la diferència d'arquitectura dins de la distància (la redacció val 1)."""
+
+DEFAULT_WANTED = 3
+"""Redaccions que la pantalla de composició demana de cada frase."""
+
+
+def _words(text: str) -> tuple[str, ...]:
+    return tuple(text.lower().split())
+
+
+def distance(first: Candidate, second: Candidate) -> float:
+    """Com de diferents són dues redaccions, entre 0 i 1."""
+    architecture = 0.0 if first.signature == second.signature else 1.0
+    wording = 1.0 - SequenceMatcher(None, _words(first.text), _words(second.text)).ratio()
+    return (ARCHITECTURE_WEIGHT * architecture + wording) / (ARCHITECTURE_WEIGHT + 1.0)
+
+
+def choose_options(
+    candidates: Sequence[EvaluatedCandidate], wanted: int = DEFAULT_WANTED
+) -> tuple[EvaluatedCandidate, ...]:
+    """Les ``wanted`` redaccions més diferents entre elles, la millor al davant.
+
+    Només entren candidats acceptats i diferents de l'original: l'original ja
+    hi és sempre, com a punt de partida, i no cal comptar-lo dues vegades.
+    """
+    pool = [
+        evaluated
+        for evaluated in candidates
+        if evaluated.accepted and not evaluated.candidate.is_identity
+    ]
+    if not pool or wanted <= 0:
+        return ()
+    position = {id(evaluated): n for n, evaluated in enumerate(pool)}
+    ranked = sorted(pool, key=lambda e: (-_total(e), position[id(e)]))
+    seen: set[str] = set()
+    chosen: list[EvaluatedCandidate] = []
+    for evaluated in ranked:
+        text = evaluated.candidate.normalized_text()
+        if text in seen:
+            continue
+        seen.add(text)
+        chosen.append(evaluated)
+    if len(chosen) <= wanted:
+        return tuple(chosen)
+    picked = [chosen[0]]
+    rest = chosen[1:]
+    while len(picked) < wanted and rest:
+        best = max(
+            rest,
+            key=lambda e: (
+                min(distance(e.candidate, p.candidate) for p in picked),
+                _total(e),
+                -position[id(e)],
+            ),
+        )
+        picked.append(best)
+        rest.remove(best)
+    return tuple(picked)
+
+
+def _total(evaluated: EvaluatedCandidate) -> float:
+    return evaluated.score.total if evaluated.score is not None else 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class DraftOption:
+    """Una redacció que la persona pot triar i editar."""
+
+    option_id: str
+    text: str
+    original: bool = False
+    """Cert per al text tal com el va escriure qui l'ha portat."""
+    signature: str = "ORIGINAL"
+    structural_degree: float = 0.0
+    change_ratio: float = 0.0
+    summary: str = ""
+    """Què s'hi ha canviat, en poques paraules."""
+    rules: tuple[str, ...] = ()
+    tokens: tuple[TokenOptions, ...] = field(default_factory=tuple)
+    """Fragments amb alternatives, en ordre d'aparició dins de ``text``."""
+
+    @property
+    def editable(self) -> bool:
+        return any(token.clickable for token in self.tokens)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "option_id": self.option_id,
+            "text": self.text,
+            "original": self.original,
+            "signature": self.signature,
+            "structural_degree": self.structural_degree,
+            "change_ratio": self.change_ratio,
+            "summary": self.summary,
+            "rules": list(self.rules),
+            "editable": self.editable,
+            "tokens": [token.to_dict() for token in self.tokens],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class SentenceDraft:
+    """Una frase del paràgraf amb les redaccions que se n'ofereixen."""
+
+    index: int
+    source_text: str
+    options: tuple[DraftOption, ...]
+    note: str = ""
+    """Per què no n'hi ha tres, quan no n'hi ha tres."""
+
+    @property
+    def n_rewrites(self) -> int:
+        return sum(1 for option in self.options if not option.original)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "index": self.index,
+            "source_text": self.source_text,
+            "note": self.note,
+            "n_rewrites": self.n_rewrites,
+            "options": [option.to_dict() for option in self.options],
+        }
+
+
+__all__ = [
+    "ARCHITECTURE_WEIGHT",
+    "DEFAULT_WANTED",
+    "DraftOption",
+    "SentenceDraft",
+    "choose_options",
+    "distance",
+]

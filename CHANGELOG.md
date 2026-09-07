@@ -3,6 +3,99 @@
 El format segueix [Keep a Changelog](https://keepachangelog.com/ca/1.1.0/) i el
 projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
+## 1.4.0
+
+Pantalla nova: **composició frase a frase**. L'usuari hi enganxa un paràgraf i,
+de cada frase, el motor n'ofereix fins a tres redaccions segures tan diferents
+entre elles com pugui. A cada redacció es poden clicar les paraules i els
+connectors per triar-ne una altra forma; quan la frase va bé, es dona per bona
+i el paràgraf final es munta amb les frases desades. La interfície de sempre no
+canvia: la pantalla nova és una pestanya al costat.
+
+### Per què una pantalla a part
+
+La resta del motor tria i explica per què. Una substitució lèxica automàtica,
+en canvi, exigeix saber de quin sentit es parla —«peça» de música o «peça»
+d'una habitació— i això el projecte no ho endevina mai. Amb una persona
+davant, el sentit el tria ella: per això aquí el motor proposa i no decideix.
+
+### Diccionari de sinònims (component opcional)
+
+- `scripts/install_thesaurus.py` baixa el diccionari de sinònims de Softcatalà
+  ([sinonims-cat](https://github.com/Softcatala/sinonims-cat), autor principal
+  Jaume Ortolà i Font; dades CC-BY 4.0) i `scripts/import_sinonims.py` en
+  genera un recurs SQLite local. Menys d'un megabyte, sense git i sense cap
+  altra eina.
+- **Els antònims no s'importen mai.** Un antònim és el contrari, no un
+  equivalent: no és al recurs, de manera que no es pot servir.
+- El registre (col·loquial, vulgar, antic, dialectal…) s'anota com a dada i la
+  interfície el mostra; no filtra res.
+- El recurs no es versiona, com la resta de recursos externs. Sense ell la
+  pantalla funciona igual, però només ofereix connectors equivalents i les
+  formes dels diccionaris del projecte.
+
+### Alternatives que es poden clicar
+
+`parafrasi_cat.synonyms` recorre un text i diu quins fragments es poden canviar
+i per quines formes. Tres fonts, totes locals: les classes d'equivalència de
+connectors de les regles actives, els diccionaris terminològics del projecte i
+el diccionari de sinònims. Quatre garanties:
+
+- **Res que trepitgi un fragment protegit.**
+- **Res que canviï el que el text afirma**: una negació, un atenuador, un
+  marcador de certesa o un verb auxiliar no reben sinònims. Canviar «hi ha»
+  per «hi té» no és triar un sinònim, és canviar la construcció, i reescriure
+  la construcció ja és feina de les redaccions alternatives.
+- **Concordança o res**: cada proposta arriba flexionada com la forma que
+  substitueix («sabem» → «coneixem», «cases» → «llars»). La cerca es fa per la
+  forma i pel lema, perquè el diccionari està escrit amb formes de diccionari.
+  Si la morfologia no pot generar la forma que caldria, la proposta no
+  s'ofereix.
+- **Cap antònim**, perquè no n'hi ha al recurs.
+
+Les propostes s'agrupen per sentit, amb la glossa del diccionari. Amb
+analitzador sintàctic fiable, la categoria que dona **en aquesta frase**
+descarta els sentits d'una altra categoria.
+
+### Tres redaccions el més diferents possible
+
+`parafrasi_cat.compose` tria, entre els candidats segurs d'una frase, els que
+més es diferencien. La distància té dues parts —arquitectura (mateixa signatura
+estructural o no) i redacció (semblança de les seqüències de paraules)— i
+l'arquitectura pesa el doble, perquè és la diferència que es veu llegint. La
+tria és voraç i determinista.
+
+Les redaccions són els candidats de sempre: han passat els mateixos validadors
+i el mateix puntuador. **L'original hi és sempre**, l'últim de la llista, i
+també es pot editar. Si el motor no arriba a tres reestructuracions segures
+d'una frase, la targeta ho diu; no s'omple la llista amb variants inventades.
+
+### Interfície i API
+
+- Pestanyes noves al plafó de resultats: «Reredacció automàtica» (la de sempre)
+  i «Composició frase a frase».
+- `POST /api/compose` rep el paràgraf i la mateixa configuració que
+  `/api/rewrite` i retorna, per frase, les redaccions amb els seus fragments
+  clicables i les alternatives de cadascun, ja flexionades.
+- El diccionari de sinònims apareix a l'estat de recursos amb el seu botó
+  d'instal·lació, però **no compta** per al mode lingüístic complet: el motor
+  reescriu igual sense ell.
+
+### Tests
+
+`tests/test_composicio.py` (26 propietats): l'importador no guarda cap antònim
+i conserva el registre; el recurs respon sense la forma consultada i filtra per
+categoria; un connector ofereix la seva classe d'equivalència; una negació i un
+fragment protegit no ofereixen res; les propostes concorden amb la forma que
+substitueixen; les locucions es reconeixen senceres; els sentits no es
+barregen; la tria de redaccions és determinista i no compta mai l'original com
+una reescriptura; el paràgraf es torna a muntar idèntic; tot el que s'ofereix
+ha passat la validació; i les posicions dels fragments quadren amb el text,
+que és el que permet a la interfície substituir-los sense trencar res.
+
+El recurs de sinònims no cal tenir-lo instal·lat per executar els tests: se'n
+construeix un de petit amb l'importador real.
+
 ## 1.3.18
 
 La repetició de connectors ja no es mesura només dins del paràgraf: es mesura en

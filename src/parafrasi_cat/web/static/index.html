@@ -129,12 +129,49 @@
 
     <div class="botons">
       <button type="submit" id="genera">Genera candidats</button>
+      <button type="button" id="compon">Compon frase a frase</button>
       <button type="button" id="exporta-historial" class="secundari">Exporta l'historial</button>
     </div>
     <p id="estat" class="estat" role="status"></p>
   </form>
 
   <section class="plafó resultats">
+    <nav class="pestanyes" role="tablist" aria-label="Manera de treballar">
+      <button type="button" id="pestanya-reredacta" class="pestanya activa" role="tab"
+        aria-selected="true" aria-controls="vista-reredacta">Reredacció automàtica</button>
+      <button type="button" id="pestanya-compon" class="pestanya" role="tab"
+        aria-selected="false" aria-controls="vista-compon">Composició frase a frase</button>
+    </nav>
+
+    <div id="vista-compon" class="vista" role="tabpanel" aria-labelledby="pestanya-compon" hidden>
+      <h2>Composició frase a frase</h2>
+      <p class="ajuda">
+        De cada frase del paràgraf, el motor n'ofereix les redaccions segures més
+        diferents entre elles. Cliqueu les paraules subratllades per triar-ne una altra
+        i, quan la frase us vagi bé, premeu <strong>Fet</strong>. El paràgraf final es va
+        muntant a sota amb les frases que doneu per bones.
+      </p>
+      <p id="compon-sense" class="ajuda">Encara no s'ha compost cap paràgraf.</p>
+      <div id="compon-resultat" hidden>
+        <p id="compon-fonts" class="ajuda"></p>
+        <p id="compon-tesaurus" class="ajuda avis" hidden></p>
+        <div id="frases"></div>
+
+        <h3>Paràgraf final</h3>
+        <p class="ajuda">
+          Podeu editar-lo abans de copiar-lo. Les frases que encara no heu donat per bones
+          hi surten tal com les vau escriure.
+        </p>
+        <textarea id="compon-final" rows="7" spellcheck="false"></textarea>
+        <div class="botons">
+          <button type="button" id="compon-copia">Copia</button>
+          <button type="button" id="compon-exporta" class="secundari">Exporta en text</button>
+        </div>
+        <p id="compon-estat" class="estat" role="status"></p>
+      </div>
+    </div>
+
+    <div id="vista-reredacta" class="vista" role="tabpanel" aria-labelledby="pestanya-reredacta">
     <h2>Resultat</h2>
     <p id="sense-resultat" class="ajuda">Encara no s'ha generat cap candidat.</p>
 
@@ -173,6 +210,7 @@
         <button type="button" id="desa" class="secundari">Desa al registre</button>
       </div>
       <p id="estat-final" class="estat" role="status"></p>
+    </div>
     </div>
   </section>
 </main>
@@ -219,6 +257,38 @@
     </details>
   </li>
 </template>
+
+<template id="plantilla-frase">
+  <article class="frase">
+    <header class="capçalera-frase">
+      <h4 class="titol-frase"></h4>
+      <span class="estat-frase">pendent</span>
+    </header>
+    <p class="original-frase text-bloc"></p>
+    <p class="nota-frase ajuda" hidden></p>
+    <ul class="redaccions"></ul>
+    <div class="accions-frase">
+      <button type="button" class="fet">Fet</button>
+      <button type="button" class="refes secundari" hidden>Torna-hi</button>
+    </div>
+  </article>
+</template>
+
+<template id="plantilla-redaccio">
+  <li class="redaccio">
+    <label class="tria">
+      <input type="radio" class="tria-redaccio">
+      <span class="etiqueta-redaccio"></span>
+    </label>
+    <p class="text-redaccio"></p>
+  </li>
+</template>
+
+<div id="desplegable" class="desplegable" role="dialog" aria-label="Alternatives" hidden>
+  <p class="desplegable-titol"></p>
+  <div class="desplegable-cos"></div>
+  <button type="button" class="desplegable-tanca secundari">Tanca</button>
+</div>
 
 <script src="/static/app.js"></script>
 </body>

@@ -39,7 +39,12 @@ from parafrasi_cat.web.auth import (
     cookie_value,
     expired_cookie,
 )
-from parafrasi_cat.web.service import FeedbackRequest, RewriteRequest, RewriteService
+from parafrasi_cat.web.service import (
+    ComposeRequest,
+    FeedbackRequest,
+    RewriteRequest,
+    RewriteService,
+)
 
 DEFAULT_HOST = "127.0.0.1"
 #: Amfitrió del mode de xarxa local: totes les interfícies d'aquesta màquina.
@@ -313,6 +318,8 @@ class RequestHandler(BaseHTTPRequestHandler):
         elif path == "/api/rewrite":
             request = RewriteRequest.from_mapping(self._read_json())
             self._send_json(self._service.rewrite(request))
+        elif path == "/api/compose":
+            self._send_json(self._service.compose(ComposeRequest.from_mapping(self._read_json())))
         elif path == "/api/feedback":
             request_data = self._read_json()
             self._send_json(

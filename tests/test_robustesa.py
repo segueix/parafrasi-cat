@@ -403,6 +403,7 @@ def test_all_resources_present_activate_the_full_linguistic_mode() -> None:
         syntax=component("Parser sintàctic català", active=True),
         languagetool=component("LanguageTool local", active=True),
         java=component("Java", active=True),
+        thesaurus=component("Diccionari de sinònims", active=True),
     )
     assert full.mode is LinguisticMode.FULL
     assert full.installable == ()
@@ -422,11 +423,31 @@ def test_a_missing_resource_falls_back_to_the_basic_mode() -> None:
         syntax=component("Parser sintàctic català", active=True),
         languagetool=component("LanguageTool local", active=False),
         java=component("Java", active=True),
+        thesaurus=component("Diccionari de sinònims", active=True),
     )
     assert basic.mode is LinguisticMode.BASIC
     assert basic.installable == ("morphology", "languagetool")
     assert "Mode bàsic" in basic.mode.label
     assert basic.mode.label in basic.summary()
+
+
+def test_the_thesaurus_does_not_decide_the_linguistic_mode() -> None:
+    """El diccionari de sinònims només serveix la composició: el motor reescriu igual sense ell.
+
+    Per això no entra al mode lingüístic complet, però sí que surt a la llista
+    de components que la interfície pot instal·lar.
+    """
+    without = LinguisticResources(
+        morphology=component("Morfologia catalana", active=True),
+        syntax=component("Parser sintàctic català", active=True),
+        languagetool=component("LanguageTool local", active=True),
+        java=component("Java", active=True),
+        thesaurus=component("Diccionari de sinònims", active=False),
+    )
+    assert without.mode is LinguisticMode.FULL
+    assert without.offline_ready
+    assert without.installable == ("thesaurus",)
+    assert without.to_dict()["thesaurus"]["active"] is False
 
 
 def test_the_syntax_provider_protocol_is_satisfied(parser: SpacySyntax) -> None:

@@ -16,7 +16,7 @@ import sys
 import threading
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
@@ -24,9 +24,12 @@ from typing import Any
 from parafrasi_cat import __version__
 from parafrasi_cat.adapters.status import resources_status
 from parafrasi_cat.analyzer.analysis import RuleBasedAnalyzer
+from parafrasi_cat.analyzer.lexicon import WordClass
+from parafrasi_cat.compose.composer import Composer
+from parafrasi_cat.compose.options import DEFAULT_WANTED
 from parafrasi_cat.core.errors import ConfigError, ParafrasiError
 from parafrasi_cat.dictionaries.dictionary import TermDictionary
-from parafrasi_cat.pipeline.builder import build_pipeline
+from parafrasi_cat.pipeline.builder import build_pipeline, load_dictionaries
 from parafrasi_cat.pipeline.config import FINGERPRINT_REQUIRED, PipelineConfig, SourceMode
 from parafrasi_cat.pipeline.modes import (
     LEVEL_LABELS,
@@ -40,12 +43,14 @@ from parafrasi_cat.pipeline.result import EvaluatedCandidate, ParaphraseResult, 
 from parafrasi_cat.preferences.author import AuthorPreferences
 from parafrasi_cat.preferences.feedback import DEFAULT_FEEDBACK_FILE, VERDICTS, FeedbackStore
 from parafrasi_cat.protected.spans import ProtectedSpan
-from parafrasi_cat.resources import ProjectPaths, load_mapping
+from parafrasi_cat.resources import ProjectPaths, as_str_list, load_mapping
 from parafrasi_cat.style.corpus import corpus_from_texts
 from parafrasi_cat.style.fingerprint import StyleFingerprint
 from parafrasi_cat.style.observations import DocumentObserver, StyleResources
 from parafrasi_cat.style.preferences import StylePreferences
 from parafrasi_cat.style.profiler import build_fingerprint
+from parafrasi_cat.synonyms.suggester import SynonymSuggester, connector_index
+from parafrasi_cat.synonyms.thesaurus import CatalanThesaurus
 from parafrasi_cat.syntax.spacy_parser import SpacySyntax
 from parafrasi_cat.web.history import DEFAULT_HISTORY_FILE, HistoryLog
 
@@ -62,9 +67,12 @@ INSTALLERS: dict[str, str] = {
     "morphology": "scripts/install_morphology.py",
     "languagetool": "scripts/install_languagetool.py",
     "parser": "scripts/install_parser.py",
+    "thesaurus": "scripts/install_thesaurus.py",
 }
 DEFAULT_STYLE_PROFILE = "default"
 MAX_TEXT_CHARS = 20000
+MAX_WANTED_OPTIONS = 5
+"""Redaccions que la pantalla de composició pot demanar d'una frase."""
 
 #: Missatge quan algú intenta posar un esborrany generat amb LLM al corpus de l'autor.
 LLM_DRAFT_NOT_CORPUS = (
@@ -189,6 +197,36 @@ class RewriteRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class ComposeRequest(RewriteRequest):
+    """Petició de la pantalla de composició: un paràgraf i quantes redaccions se'n volen.
+
+    Hereta la configuració de la reescriptura perquè les redaccions que
+    s'ofereixen surtin exactament de la mateixa canonada, amb els mateixos
+    validadors, diccionaris i preferències. L'única diferència és què se'n fa
+    després: aquí no es tria cap guanyador.
+    """
+
+    wanted: int = DEFAULT_WANTED
+
+    def __post_init__(self) -> None:
+        # Amb «slots=True», el zero-arg super() no funciona: la classe que veu el
+        # descriptor no és la que el decorador acaba deixant al mòdul.
+        RewriteRequest.__post_init__(self)
+        if not 1 <= self.wanted <= MAX_WANTED_OPTIONS:
+            raise ConfigError(f"«wanted» ha de ser entre 1 i {MAX_WANTED_OPTIONS}")
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, object]) -> ComposeRequest:
+        base = RewriteRequest.from_mapping(data)
+        wanted = data.get("wanted", DEFAULT_WANTED)
+        if isinstance(wanted, str) and wanted.strip().isdigit():
+            wanted = int(wanted.strip())
+        if isinstance(wanted, bool) or not isinstance(wanted, int):
+            raise ConfigError(f"«wanted» ha de ser un enter entre 1 i {MAX_WANTED_OPTIONS}")
+        return cls(**{f.name: getattr(base, f.name) for f in fields(base)}, wanted=wanted)
+
+
+@dataclass(frozen=True, slots=True)
 class FeedbackRequest:
     """Marca d'un candidat com a preferit, acceptable o rebutjat."""
 
@@ -279,6 +317,9 @@ class RewriteService:
         self._installers: dict[str, subprocess.Popen[bytes]] = {}
         self._observer: DocumentObserver | None = None
         self._analyzer: RuleBasedAnalyzer | None = None
+        #: Suggeridors per configuració, amb la mateixa generació que les canonades.
+        self._suggesters: dict[tuple[PipelineConfig, int], SynonymSuggester] = {}
+        self._guarded: tuple[str, ...] | None = None
         self._syntax: SpacySyntax | None = None
 
     @property
@@ -468,6 +509,67 @@ class RewriteService:
             "protected_spans": [_protected(span) for span in result.protected_spans],
             "units": self._units(result),
         }
+
+    # -- composició frase a frase --------------------------------------------------------
+
+    def compose(self, request: ComposeRequest) -> JsonDict:
+        """Prepara el paràgraf per compondre'l frase a frase.
+
+        La canonada és la mateixa que la de la reescriptura: el que canvia és
+        que aquí no se'n tria cap guanyador. De cada frase se n'ofereixen les
+        redaccions segures més diferents entre elles i, de cada redacció, els
+        fragments que tenen alternativa.
+        """
+        config = request.to_config(self._paths.root)
+        pipeline = self.pipeline_for(config)
+        composer = Composer(pipeline, self.suggester(config), wanted=request.wanted)
+        draft = composer.compose(request.text)
+        resources = resources_status(self._paths.root)
+        return {
+            **draft.to_dict(),
+            "wanted": request.wanted,
+            "mode": mode_settings(request.mode).to_dict(),
+            "rule_set": config.rule_set,
+            "dictionaries": list(request.dictionaries),
+            "preferences": request.preferences,
+            "thesaurus": resources.thesaurus.to_dict(),
+        }
+
+    def suggester(self, config: PipelineConfig) -> SynonymSuggester:
+        """Font d'alternatives clicables per a aquesta configuració.
+
+        Es construeix a partir de la canonada ja carregada, de manera que els
+        connectors que ofereix són exactament els de les regles actives i els
+        diccionaris, els que l'usuari ha triat.
+        """
+        pipeline = self.pipeline_for(config)
+        with self._lock:
+            key = (config, self._pipeline_generation)
+            known = self._suggesters.get(key)
+            if known is not None:
+                return known
+            suggester = SynonymSuggester(
+                pipeline.analyzer,
+                morphology=pipeline.morphology,
+                thesaurus=CatalanThesaurus.discover(self._paths.language()),
+                connectors=connector_index(pipeline.rule_set.sentence_rules),
+                dictionary=load_dictionaries(config, self._paths),
+                syntax=pipeline.syntax,
+                guarded=(*self._guarded_forms(), *_auxiliaries(pipeline)),
+            )
+            self._suggesters[key] = suggester
+            return suggester
+
+    def _guarded_forms(self) -> tuple[str, ...]:
+        """Formes que no reben sinònims: canviar-les canviaria el que el text afirma."""
+        if self._guarded is None:
+            data = load_mapping(self._paths.language() / "lexicon" / "modalitat.yaml")
+            self._guarded = (
+                *as_str_list(data, "negation"),
+                *as_str_list(data, "hedges"),
+                *as_str_list(data, "certainty"),
+            )
+        return self._guarded
 
     def _languagetool_used(self, config: PipelineConfig) -> bool:
         """Cert si la validació de LanguageTool ha intervingut realment."""
@@ -674,6 +776,7 @@ class RewriteService:
                 )
             store.save(path)
             self._pipelines.clear()  # els pesos han canviat: cal reconstruir les canonades
+            self._suggesters.clear()  # depenen de la canonada i de la seva generació
             self._pipeline_generation += 1
         return {
             "verdict": request.verdict,
@@ -840,6 +943,7 @@ class RewriteService:
         with self._lock:
             fingerprint.save(target)
             self._pipelines.clear()  # hi ha una empremta nova disponible
+            self._suggesters.clear()
             self._pipeline_generation += 1
         return {
             "name": clean,
@@ -924,6 +1028,24 @@ _INSTALL_INFO: dict[str, JsonDict] = {
         "note": (
             "El model només analitza: no genera text ni pren cap decisió. Un cop instal·lat, "
             "no cal connexió per a res."
+        ),
+    },
+    "thesaurus": {
+        "component": "Diccionari de sinònims",
+        "purpose": (
+            "Sinònims per a la pantalla de composició: en clicar una paraula, el "
+            "desplegable ofereix les formes equivalents agrupades per sentit. Els "
+            "antònims no s'importen mai."
+        ),
+        "origin": "https://github.com/Softcatala/sinonims-cat",
+        "version": "darrera revisió publicada del fitxer",
+        "license": "CC-BY-4.0 (dades) · GPL-2.0 (programari d'origen)",
+        "approximate_size_mb": 1,
+        "requirement": "cap",
+        "offline_after_install": True,
+        "note": (
+            "El diccionari proposa; qui escriu decideix. El motor no substitueix cap "
+            "paraula pel seu compte a partir d'aquest recurs."
         ),
     },
 }
@@ -1055,6 +1177,20 @@ def _syntax_summary(profile: Mapping[str, object]) -> JsonDict:
         "mean_dependency_distance": get(distance, "mean_dependency_distance"),
         "top_patterns": list(top[:5]) if isinstance(top, list) else [],
     }
+
+
+def _auxiliaries(pipeline: Pipeline) -> tuple[str, ...]:
+    """Formes auxiliars, que no reben sinònims.
+
+    En català «haver», «ser», «estar» o «anar» dins d'una perífrasi són peces
+    gramaticals, no lèxiques: canviar «hi ha» per «hi té» no és triar un
+    sinònim, és canviar la construcció. Reescriure la construcció sí que és
+    feina del motor, i ja arriba com una de les redaccions alternatives.
+    """
+    lexicon = pipeline.lexicon
+    if lexicon is None:
+        return ()
+    return tuple(lexicon.forms_of(WordClass.AUXILIARY))
 
 
 def install_info(component: str = "languagetool") -> JsonDict:

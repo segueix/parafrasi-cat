@@ -8,7 +8,7 @@ que s'executa al mateix ordinador.
 > morfològica i sintàctica, validació gramatical i selecció determinista de
 > candidats.**
 
-**Versió 1.3.18.** Un cop instal·lats els recursos, tot funciona sense connexió.
+**Versió 1.4.0.** Un cop instal·lats els recursos, tot funciona sense connexió.
 Parafrasi-cat no envia text a serveis d'Internet: en mode local, el text no surt
 del dispositiu; en mode de xarxa local, només circula entre el navegador client
 i el servidor Parafrasi-cat dins de la LAN.
@@ -198,6 +198,9 @@ candidats, les diferències, les regles aplicades, les puntuacions per dimensió
 i els advertiments de validació. Podeu marcar candidats, editar el resultat i
 copiar-lo o exportar-lo.
 
+La pestanya **Composició frase a frase** fa servir la mateixa configuració i
+el mateix motor, però no tria per vosaltres: vegeu-ne l'apartat més avall.
+
 Des del terminal:
 
 ```bash
@@ -207,6 +210,44 @@ parafrasi-cat rewrite text.txt --style style/autor.json \
 parafrasi-cat --rules parafrasi --explain "Gairebé sempre plou, tot i que avui no."
 parafrasi-cat --assertiu "Potser podria ser una còpia posterior."   # Llenguatge assertiu
 ```
+
+## Composició frase a frase
+
+La pestanya **Composició frase a frase** és una manera de treballar diferent.
+En lloc de rebre un text ja triat, enganxeu un paràgraf, premeu **Compon frase
+a frase** i el motor us dona, de cada frase, **fins a tres redaccions segures
+tan diferents entre elles com pugui**, més el text original. A cada redacció,
+les paraules i els connectors que tenen alternativa surten subratllats: en
+clicar-los, un desplegable ensenya les formes equivalents **agrupades per
+sentit**. Quan la frase us va bé, premeu **Fet** i queda desada; a sota, el
+paràgraf final es va muntant amb les frases que heu donat per bones.
+
+Qui tria és qui escriu. El motor no decideix de quin sentit parla el text:
+
+- Una paraula corrent pertany a diversos grups de significat («peça» de música
+  o «peça» d'una habitació) i tots s'ofereixen amb la glossa del diccionari.
+  Amb l'analitzador sintàctic instal·lat, la categoria que dona **en aquesta
+  frase** descarta els sentits d'una altra categoria: «fan» com a nom no surt
+  on el text diu «fan» com a verb.
+- Cada proposta arriba **ja flexionada** com la forma que substitueix («sabem»
+  → «coneixem», «cases» → «llars»). Si la morfologia no pot generar la forma
+  que caldria, la proposta no s'ofereix: val més una llista curta que una
+  llista que trenca la concordança.
+- **No s'ofereixen antònims** (no s'importen ni tan sols al recurs), ni
+  alternatives per a negacions, atenuadors i marcadors de certesa («no»,
+  «potser», «sens dubte»), ni per a verbs auxiliars. Canviar-los no és canviar
+  la forma del text sinó el que afirma.
+- Un fragment protegit —un nom, una data, una xifra, un terme vostre— no
+  ofereix res.
+
+Les redaccions alternatives són els mateixos candidats de sempre: han passat
+els mateixos validadors i el mateix puntuador. Si el motor no arriba a tres
+reestructuracions segures d'una frase, la targeta ho diu; no s'omple la llista
+amb variants inventades.
+
+El desplegable de sinònims necessita el component opcional **Diccionari de
+sinònims**. Sense ell, la pantalla funciona igual però només ofereix
+connectors equivalents i les formes dels diccionaris del projecte.
 
 ## Origen del text
 
