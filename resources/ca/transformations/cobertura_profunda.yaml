@@ -110,13 +110,10 @@ rules:
       negative:
         - "Ho vol, però no pot."
 
-  # Dos punts entre dues clàusules verbals: el segon membre és una explicació
-  # autònoma. La divisió no afegeix cap connector ni cap relació nova; només
-  # converteix el límit explicatiu en dues frases. Per evitar falsos positius
-  # com «categoria política: un home pròxim al rei...», el segment després dels
-  # dos punts ha de COMENÇAR per un verb finit; que n'hi hagi un més endavant no
-  # és suficient. Sense parser fiable, la regla continua sense actuar.
+  # Desactivada per defecte: el punt esborra la relació explicativa explícita.
+  # El parser confirma clàusules, però no garanteix equivalència discursiva.
   - rule_id: cobertura.dos_punts_explicatius_a_dues_frases
+    enabled: false
     engine: pattern
     category: divisio
     level: 4

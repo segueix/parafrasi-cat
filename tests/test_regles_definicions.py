@@ -101,7 +101,6 @@ RULE_IDS = [
     "cobertura.causal_perque_a_ja_que",
     "cobertura.temporals_coordinades_interposades_a_inicial",
     "cobertura.pero_inicial_a_tanmateix",
-    "cobertura.dos_punts_explicatius_a_dues_frases",
     "fusio.frases_compatibles", "fusio.repara_fragment_anaforic", "fusio.copulativa",
     "divisio.coordinada_i", "divisio.coordinada_pero", "puntuacio.punt_i_coma_a_punt",
     "puntuacio.parentesi_a_comes", "puntuacio.parentesi_final_a_coma", "puntuacio.guions_a_comes",
