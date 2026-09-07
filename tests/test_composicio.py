@@ -299,8 +299,10 @@ def test_it_says_when_there_are_not_three_rewrites(composer: Composer) -> None:
     for sentence in draft.sentences:
         if sentence.n_rewrites < composer.wanted:
             assert sentence.note
-        else:
+        elif any(option.structural_degree > 0 for option in sentence.options):
             assert not sentence.note
+        else:
+            assert "cap alternativa estructural" in sentence.note
 
 
 def test_the_paragraph_is_rebuilt_exactly(composer: Composer) -> None:

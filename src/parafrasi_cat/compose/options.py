@@ -14,7 +14,8 @@ La distància entre dues redaccions té dues parts, totes dues entre 0 i 1:
 
 La distància total pesa el doble l'arquitectura, perquè és la diferència que
 es veu llegint. La tria és voraç: primer la millor redacció segons el
-puntuador, i després, cada cop, la que és més lluny de totes les triades.
+puntuador, reservant una plaça per al candidat validat amb més canvi
+estructural. Després, cada cop, la que és més lluny de totes les triades.
 Amb empats, mana la puntuació i després l'ordre d'arribada, de manera que la
 mateixa entrada dona sempre la mateixa llista.
 """
@@ -63,9 +64,20 @@ def choose_options(
     if not pool or wanted <= 0:
         return ()
     position = {id(evaluated): n for n, evaluated in enumerate(pool)}
+    structural = [e for e in pool if e.candidate.is_structural
+                  and e.candidate.structural_degree() > 0]
+    reserved = max(structural, key=lambda e: (
+        e.candidate.structural_degree(), e.candidate.change_ratio(),
+        _total(e), -position[id(e)],
+    )) if structural else None
+    if wanted == 1 and reserved is not None:
+        return (reserved,)
     ranked = sorted(pool, key=lambda e: (-_total(e), position[id(e)]))
     seen: set[str] = set()
     chosen: list[EvaluatedCandidate] = []
+    # Prefer the structural trace when identical text has multiple derivations.
+    if reserved is not None:
+        ranked = [reserved] + [e for e in ranked if e is not reserved]
     for evaluated in ranked:
         text = evaluated.candidate.normalized_text()
         if text in seen:
@@ -73,9 +85,13 @@ def choose_options(
         seen.add(text)
         chosen.append(evaluated)
     if len(chosen) <= wanted:
-        return tuple(chosen)
+        return tuple(sorted(chosen, key=lambda e: (-_total(e), position[id(e)])))
+    # Keep the highest scoring wording first, then the reserved alternative.
+    chosen.sort(key=lambda e: (-_total(e), position[id(e)]))
     picked = [chosen[0]]
-    rest = chosen[1:]
+    if reserved is not None and reserved is not chosen[0]:
+        picked.append(reserved)
+    rest = [e for e in chosen if all(e is not p for p in picked)]
     while len(picked) < wanted and rest:
         best = max(
             rest,

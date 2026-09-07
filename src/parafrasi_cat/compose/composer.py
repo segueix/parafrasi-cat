@@ -12,7 +12,7 @@ persona davant:
 
 L'original hi és sempre, l'últim de la llista: qui escriu ha de poder
 quedar-se'l i, tot i així, canviar-hi una paraula. Si el motor no arriba a
-tres reestructuracions segures, es diu clarament; no s'omple la llista.
+tres alternatives validades, es diu clarament; no s'omple la llista.
 """
 
 from __future__ import annotations
@@ -140,7 +140,11 @@ class Composer:
             index=result.index,
             source_text=result.source_text,
             options=tuple(options),
-            note=_note(len(rewrites), self._wanted),
+            note=_note(len(rewrites), self._wanted) + (
+                " No s’ha trobat cap alternativa estructural validada; "
+                "les alternatives disponibles són canvis locals."
+                if rewrites and not any(e.candidate.is_structural for e in rewrites) else ""
+            ),
         )
 
     def _option(self, option_id: str, candidate: Candidate, *, original: bool) -> DraftOption:
@@ -224,15 +228,15 @@ def _note(found: int, wanted: int) -> str:
         return ""
     if found == 0:
         return (
-            "El motor no ha trobat cap reestructuració segura d'aquesta frase. Pots "
+            "El motor no ha trobat cap alternativa validada d'aquesta frase. Pots "
             "canviar-hi paraules i connectors clicant-los."
         )
     return (
-        f"El motor només ha trobat {found} reestructuració segura d'aquesta frase "
+        f"El motor només ha trobat {found} alternativa validada d'aquesta frase "
         f"de les {wanted} demanades. La resta de canvis els pots fer clicant les paraules."
         if found == 1
         else (
-            f"El motor només ha trobat {found} reestructuracions segures d'aquesta frase "
+            f"El motor només ha trobat {found} alternatives validades d'aquesta frase "
             f"de les {wanted} demanades. La resta de canvis els pots fer clicant les paraules."
         )
     )
