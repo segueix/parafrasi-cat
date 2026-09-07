@@ -21,7 +21,9 @@ Quatre regles fan que una proposta sigui segura de clicar:
 3. **Concordança o res.** Una proposta del diccionari de sinònims s'ofereix
    flexionada com la forma que substitueix («sabem» → «coneixem», «cases» →
    «llars»). Si la morfologia no pot generar la forma que caldria —perquè el
-   gènere d'un nom no és flexionable, per exemple— la proposta **no s'ofereix**.
+   forma és desconeguda, per exemple— la proposta **no s'ofereix**. Amb parser
+   fiable, els grups nominals simples es canvien sencers, ajustant determinants
+   i adjectius al gènere del nou nom i conservant el nombre.
    Val més una llista curta que una llista que trenca el text.
 4. **Cap antònim.** No són al recurs: l'importador no els hi posa.
 
@@ -50,7 +52,8 @@ from parafrasi_cat.dictionaries.dictionary import DictionarySet, FormStatus, nor
 from parafrasi_cat.morphology.provider import MorphologyProvider, inflect_like
 from parafrasi_cat.protected.spans import ProtectedSpan
 from parafrasi_cat.synonyms.thesaurus import CatalanThesaurus, SynonymGroup, normalize
-from parafrasi_cat.syntax.analysis import SyntaxProvider
+from parafrasi_cat.syntax.analysis import SentenceSyntax, SyntaxProvider
+from parafrasi_cat.synonyms.agreement import nominal_span, replacement
 
 MAX_PHRASE_TOKENS = 4
 """Paraules màximes d'un fragment clicable (les locucions llargues no s'hi busquen)."""
@@ -284,10 +287,59 @@ class SynonymSuggester:
             options, length = entry
             found.append(options)
             position += length
+        if isinstance(parsed, SentenceSyntax) and self._morphology is not None:
+            found = self._nominal_groups(text, parsed, protected, found)
         result = tuple(found)
         if not protected:
             self._cache[text] = result
         return result
+
+    def _nominal_groups(
+        self, text: str, parsed: SentenceSyntax,
+        protected: Sequence[ProtectedSpan], found: list[TokenOptions],
+    ) -> list[TokenOptions]:
+        """El nom i la concordança formen un únic fragment editable/desfés."""
+        assert self._morphology is not None
+        for noun in parsed.tokens:
+            if noun.pos != "NOUN":
+                continue
+            span = nominal_span(parsed, noun)
+            # Never leave an isolated noun replacement bypassing agreement.
+            found = [t for t in found if not (t.start <= noun.start < t.end)]
+            if span is None:
+                continue
+            start, end = span
+            if any(p.span.overlaps(Span(start, end)) for p in protected):
+                continue
+            if any(normalize_form(t.text) in self._guarded
+                   for t in parsed.tokens_in(start, end)):
+                continue
+            groups = self._from_dictionary(noun.text)
+            if self._thesaurus is not None:
+                for group in self._groups_for(noun.text, noun.lemma):
+                    if group.pos != "noun":
+                        continue
+                    groups.append(OptionGroup(group.label or "sinònims", SOURCE_THESAURUS,
+                        tuple(SynonymOption(m.form, m.form, SOURCE_THESAURUS,
+                            m.register, "equivalència més fluixa" if m.secondary else "")
+                            for m in group.members), True))
+            adjusted = []
+            for group in groups:
+                options = []
+                seen = set()
+                for option in group.options:
+                    value = replacement(parsed, noun, option.lemma, self._morphology)
+                    if value is None or normalize(value) == normalize(text[start:end]) or value in seen:
+                        continue
+                    seen.add(value)
+                    options.append(replace(option, text=value))
+                if options:
+                    adjusted.append(replace(group, options=tuple(options[:MAX_OPTIONS_PER_SENSE])))
+            if adjusted:
+                found = [t for t in found if not (t.start < end and start < t.end)]
+                found.append(TokenOptions(start, end, text[start:end],
+                                          tuple(_numbered(adjusted)[:MAX_SENSES])))
+        return sorted(found, key=lambda t: t.start)
 
     def _words(self, text: str) -> tuple[Token, ...]:
         """Paraules del text, amb la posició referida al text sencer."""
@@ -349,7 +401,7 @@ class SynonymSuggester:
             return ()
         groups = [
             *self._from_connectors(phrase),
-            *self._from_dictionary(phrase),
+            *self._dictionary_without_agreement(phrase),
             *self._from_thesaurus(phrase, parser_pos, parser_lemma),
         ]
         ranked = sorted(
@@ -373,6 +425,25 @@ class SynonymSuggester:
         )
         label = f"connector de {function}" if function else "connector equivalent"
         return [OptionGroup(label, SOURCE_CONNECTOR, options[:MAX_OPTIONS_PER_SENSE], True)]
+
+    def _dictionary_without_agreement(self, phrase: str) -> list[OptionGroup]:
+        """Sense ajust contextual, un nom no pot canviar de gènere o nombre."""
+        groups = self._from_dictionary(phrase)
+        if self._morphology is None:
+            return groups
+        nouns = [e for e in self._morphology.analyze(phrase) if e.features.pos == "noun"]
+        if not nouns:
+            return groups
+        safe = []
+        for group in groups:
+            options = tuple(o for o in group.options if any(
+                target.features.pos == "noun"
+                and target.features.gender == original.features.gender
+                and target.features.number == original.features.number
+                for original in nouns for target in self._morphology.analyze(o.text)))
+            if options:
+                safe.append(replace(group, options=options))
+        return safe
 
     def _from_dictionary(self, phrase: str) -> list[OptionGroup]:
         if self._dictionary is None:
