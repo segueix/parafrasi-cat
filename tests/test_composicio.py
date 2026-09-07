@@ -432,8 +432,12 @@ def test_the_interface_ships_the_composition_screen() -> None:
         'id="plantilla-frase"',
         'id="plantilla-redaccio"',
         'id="desplegable"',
+        # Sense el recurs, la pantalla ha de demanar d'instal·lar-lo allà mateix.
+        'id="compon-tesaurus"',
+        'id="compon-instal-la"',
     ):
         assert marca in html, marca
     script = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
     assert "/api/compose" in script
     assert "thesaurus" in script
+    assert 'demanarInstalacio("thesaurus")' in script

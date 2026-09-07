@@ -1060,9 +1060,13 @@ function mostrarComposicio(esborrany) {
   $("compon-sense").hidden = true;
   $("compon-resultat").hidden = false;
   $("compon-fonts").textContent = `Alternatives: ${esborrany.suggestions}.`;
+  // Sense diccionari de sinònims la pantalla funciona igual, però la llista és
+  // molt més curta: val la pena oferir-lo aquí i no només al plafó de recursos.
   const avis = $("compon-tesaurus");
   avis.hidden = esborrany.thesaurus.active;
-  avis.textContent = esborrany.thesaurus.active ? "" : esborrany.thesaurus.message;
+  $("compon-tesaurus-avis").textContent = esborrany.thesaurus.active
+    ? ""
+    : esborrany.thesaurus.message;
   $("frases").replaceChildren();
   for (const frase of esborrany.sentences) crearFrase(frase);
   refrescarParagraf();
@@ -1144,6 +1148,10 @@ async function iniciar() {
   $("pestanya-compon").addEventListener("click", () => canviarPestanya("compon"));
   $("pestanya-reredacta").addEventListener("click", () => canviarPestanya("reredacta"));
   $("compon-copia").addEventListener("click", copiarComposicio);
+  $("compon-instal-la").addEventListener("click", () => {
+    canviarPestanya("reredacta");
+    demanarInstalacio("thesaurus");
+  });
   $("compon-exporta").addEventListener("click", exportarComposicio);
   $("desplegable").querySelector(".desplegable-tanca").addEventListener("click", tancarDesplegable);
   document.addEventListener("keydown", (esdeveniment) => {
