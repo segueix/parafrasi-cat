@@ -36,14 +36,23 @@ def test_initial_connector_keeps_punctuation_and_relation(
             pos, dep, head, token_mood = "VERB", "ROOT", root, "ind"
         elif match.group() in {",", "."}:
             pos, dep, head = "PUNCT", "punct", root
-        tokens.append(SyntaxToken(
-            index, match.group(), match.group().lower(), pos, dep, head,
-            match.start(), match.end(), mood=token_mood,
-        ))
+        tokens.append(
+            SyntaxToken(
+                index,
+                match.group(),
+                match.group().lower(),
+                pos,
+                dep,
+                head,
+                match.start(),
+                match.end(),
+                mood=token_mood,
+            )
+        )
     definition = next(
-        d for d in load_rule_definitions(
-            paths.language() / "transformations" / "blocs.yaml"
-        ) if d.rule_id == "blocs.subordinada_adverbial"
+        d
+        for d in load_rule_definitions(paths.language() / "transformations" / "blocs.yaml")
+        if d.rule_id == "blocs.subordinada_adverbial"
     )
     ctx = RuleContext(
         sentence=catalan_analyzer.analyze(text).sentences[0],

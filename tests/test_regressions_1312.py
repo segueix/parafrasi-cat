@@ -93,7 +93,5 @@ def test_beam_does_not_keep_unbounded_connector_synonyms() -> None:
     )
 
     options = _beam().local_options(result)
-    connector_options = [
-        option for option in options if option.candidate.signature == "CONNECTOR"
-    ]
+    connector_options = [option for option in options if option.candidate.signature == "CONNECTOR"]
     assert len(connector_options) == 2

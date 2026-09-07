@@ -442,9 +442,9 @@ def _discounted(option: LocalOption) -> float:
     if score is None:
         return 0.0
     # L'estil també es recalcula una sola vegada sobre el paràgraf complet.
-    return sum(score.components.get(name, 0.0) for name in (
-        "estil", "afinitat_autor", CONNECTOR_COMPONENT
-    ))
+    return sum(
+        score.components.get(name, 0.0) for name in ("estil", "afinitat_autor", CONNECTOR_COMPONENT)
+    )
 
 
 def test_the_beam_reaches_the_global_phase_with_both_variants(orfil: ParaphraseResult) -> None:

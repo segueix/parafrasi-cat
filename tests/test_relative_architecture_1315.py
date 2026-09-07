@@ -83,9 +83,7 @@ def _relative_analysis(text: str, *, negated: bool = False) -> SentenceSyntax:
         ),
     ]
     if negated:
-        tokens.append(
-            _token(text, "no", 2, dep="advmod", head=participle_i, pos="ADV", lemma="no")
-        )
+        tokens.append(_token(text, "no", 2, dep="advmod", head=participle_i, pos="ADV", lemma="no"))
     tokens.extend(
         [
             _token(

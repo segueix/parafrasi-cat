@@ -11,6 +11,8 @@ i el final de l'oració:
   que pengen del verb principal, encara que continguin una completiva o una
   relativa;
 - **complements circumstancials** preposicionals del verb principal;
+- **circumstancials curts** (un adverbi o un sintagma sense preposició) que
+  obren o tanquen l'oració i es poden moure a l'altre extrem;
 - **modificadors participials** del subjecte, interposats entre comes.
 
 Cada moviment passa les comprovacions de bloc de
@@ -39,9 +41,14 @@ from parafrasi_cat.rules.definition import RuleDefinition
 from parafrasi_cat.syntax.analysis import SUBJECT_DEPS, SentenceSyntax, SyntaxToken
 
 #: Menes de bloc que el motor sap moure.
-KINDS = ("adverbial", "adjunct", "participial")
+KINDS = ("adverbial", "adjunct", "participial", "circumstantial")
 #: Pes estructural de cada mena (la subordinada reorganitza més que un complement).
-STRUCTURAL_WEIGHTS: Mapping[str, float] = {"adverbial": 0.9, "adjunct": 0.6, "participial": 0.7}
+STRUCTURAL_WEIGHTS: Mapping[str, float] = {
+    "adverbial": 0.9,
+    "adjunct": 0.6,
+    "participial": 0.7,
+    "circumstantial": 0.5,
+}
 #: Relacions d'un complement circumstancial.
 ADJUNCT_DEPS = frozenset({"obl", "obl:tmod", "obl:mod", "advmod", "nmod:tmod"})
 #: Preposicions que obren un complement que es pot avantposar (mai l'agent «per»).
@@ -97,6 +104,11 @@ class BlockMoveRule(Rule):
         }
         self._comma_final = frozenset(normalize_form(m) for m in as_str_list(params, "comma_final"))
         self._min_words = as_int(params, "min_words", 3 if kind == "adjunct" else 2)
+        self._max_words = as_int(params, "max_words", 99)
+        #: Adverbis que no es mouen mai: la seva posició en marca l'abast.
+        self._excluded = frozenset(
+            normalize_form(m) for m in as_str_list(params, "excluded") if m.strip()
+        )
         self._weight = STRUCTURAL_WEIGHTS[kind]
 
     @property
@@ -180,6 +192,10 @@ class BlockMoveRule(Rule):
                 block = self._adjunct(analysis, token, text, body_end)
             elif self._kind == "participial" and token.verb_form == "Part":
                 block = self._participial(analysis, token, text, body_end)
+            elif (
+                self._kind == "circumstantial" and token.dep in ADJUNCT_DEPS and token.head in heads
+            ):
+                block = self._circumstantial(analysis, token, text, body_end)
             if block is not None:
                 blocks.append(block)
         return blocks
@@ -224,6 +240,44 @@ class BlockMoveRule(Rule):
             return None
         return Block("adjunct", start, end, position, token)
 
+    def _circumstantial(
+        self, analysis: SentenceSyntax, token: SyntaxToken, text: str, body_end: int
+    ) -> Block | None:
+        """Un circumstancial curt que obre o tanca l'oració («Ara…», «…l'any passat»).
+
+        És el germà de ``_adjunct`` per als casos que aquell no pot veure: un
+        adverbi sol o un sintagma sense preposició. Per això aquí no es demana
+        cap marcador, i en canvi es demana que el bloc **no porti la força de
+        l'oració**: un adverbi de focus, de negació o de modalitat canvia què
+        afirma la frase segons on és («només», «no», «potser»), de manera que
+        moure'l no és reordenar sinó reescriure.
+        """
+        if token.dep == "obl:agent" or token.is_negation:
+            return None
+        start, end = analysis.subtree_span(token)
+        block_text = text[start:end]
+        words = block_text.split()
+        if not (self._min_words <= len(words) <= self._max_words):
+            return None
+        # La comparació és per locució sencera, no per primera paraula: «fins i
+        # tot» és un marcador de focus i «fins» sol no vol dir res aquí.
+        if _leading_marker(block_text, self._excluded):
+            return None
+        # Amb preposició al davant ja és feina de «blocs.complement_del_verb»,
+        # que el mou només cap a l'inici. Aquesta regla existeix justament per
+        # als que aquella no pot veure; solapar-s'hi obriria moviments que allà
+        # s'havien descartat a consciència.
+        if _leading_marker(block_text, self._prepositions):
+            return None
+        if analysis.finite_tokens_in(start, end):
+            return None  # un circumstancial, no una clàusula
+        if any(t.is_negation for t in analysis.tokens_in(start, end)):
+            return None
+        position = _position(text, start, end, body_end)
+        if position not in ("initial", "final"):
+            return None
+        return Block("circumstantial", start, end, position, token)
+
     def _participial(
         self, analysis: SentenceSyntax, token: SyntaxToken, text: str, body_end: int
     ) -> Block | None:
@@ -266,7 +320,7 @@ class BlockMoveRule(Rule):
         return Block("participial", start, end, position, token, clause_start=clause_start)
 
     def _targets(self, block: Block) -> tuple[str, ...]:
-        if block.kind == "adverbial":
+        if block.kind in ("adverbial", "circumstantial"):
             if block.position == "initial":
                 return ("final",)
             return ("initial",)

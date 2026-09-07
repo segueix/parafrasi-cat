@@ -220,8 +220,7 @@ class RelativeArchitectureRule(Rule):
             return None
 
         rebuilt = (
-            f"{_capitalize_first(participial)}, "
-            f"{_lower_subject_opener(subject_text)} {remainder}"
+            f"{_capitalize_first(participial)}, {_lower_subject_opener(subject_text)} {remainder}"
         )
         span = Span(0, len(ctx.text))
         if ctx.protected_conflict(span, rebuilt) is not None:

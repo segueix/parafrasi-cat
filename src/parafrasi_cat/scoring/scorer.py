@@ -285,7 +285,8 @@ class CompositeScorer:
             # sense càrrec, i canviar-la per una de nova sí que en té.
             reference = (ctx.source_text if ctx is not None else "") or candidate.source_text
             window = ctx.window if ctx is not None else None
-            repetition = self._connectors.assess(candidate.text, reference, window)
+            document = ctx.document if ctx is not None else None
+            repetition = self._connectors.assess(candidate.text, reference, window, document)
             connector_detail = repetition.to_dict()
             dimensions["varietat_connectors"] = round(1.0 - repetition.penalty, 4)
             if repetition.penalised:

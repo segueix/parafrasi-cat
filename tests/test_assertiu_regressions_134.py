@@ -42,6 +42,8 @@ def test_limitacio_documental_es_permet_quan_la_mateixa_frase_ho_aporta() -> Non
 
 
 def test_font_no_es_converteix_en_prova() -> None:
-    result = _rewrite("Com detalla Rafael Ramis Barceló, el lul·lisme va gaudir d'una notable protecció.")
+    result = _rewrite(
+        "Com detalla Rafael Ramis Barceló, el lul·lisme va gaudir d'una notable protecció."
+    )
     assert "demostra" not in result.lower()
     assert "prova" not in result.lower()
