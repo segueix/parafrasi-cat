@@ -31,6 +31,11 @@ history/
 # Softcatalà són copyleft (GPL-2.0+/LGPL-2.1+) i cada usuari se les genera amb
 # scripts/import_softcatala.py. Vegeu docs/recursos-linguistics.md.
 resources/ca/morphology/generated/
+# El diccionari de sinònims és CC-BY 4.0: es podria distribuir amb l'atribució,
+# però se segueix el mateix criteri que la resta de recursos externs —cada
+# usuari se'l baixa amb scripts/install_thesaurus.py— per no versionar dades
+# que no són del projecte i que s'actualitzen al seu ritme.
+resources/ca/thesaurus/generated/
 vendor/
 
 # Editors

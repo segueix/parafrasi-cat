@@ -37,6 +37,7 @@ from parafrasi_cat.rules.ruleset import RuleSet, RuleSetConfig
 from parafrasi_cat.scoring.scorer import ScoreBreakdown, Scorer, ScoringContext
 from parafrasi_cat.scoring.selection import select_best
 from parafrasi_cat.style.adaptation import AdaptationContext, AuthorAdaptation, UnitStats
+from parafrasi_cat.style.connector_repetition import WINDOW_SENTENCES, DocumentWindow
 from parafrasi_cat.style.profile import StyleProfile
 from parafrasi_cat.syntax.analysis import CachedSyntax, NullSyntax, SyntaxProvider
 from parafrasi_cat.validation.base import ValidationContext, Validator
@@ -213,6 +214,11 @@ class Pipeline:
         return self._max_level
 
     @property
+    def morphology(self) -> MorphologyProvider:
+        """Morfologia activa (l'analitzador intern si el recurs no s'ha importat)."""
+        return self._morphology
+
+    @property
     def repair(self) -> AgreementRepair:
         """Reparador de concordança (inactiu sense parser o sense morfologia)."""
         return self._repair
@@ -240,9 +246,16 @@ class Pipeline:
         analysis = self._analyzer.analyze(text)
         protected = self._protector.protect(text)
         stats = self._unit_stats(analysis.sentences)
+        sentences = analysis.sentences
         sentence_results = tuple(
-            self._process_sentence(sentence, protected, text, _context(stats, {sentence.index}))
-            for sentence in analysis.sentences
+            self._process_sentence(
+                sentence,
+                protected,
+                text,
+                _context(stats, {sentence.index}),
+                _sentence_window(sentences, position),
+            )
+            for position, sentence in enumerate(sentences)
         )
         paragraph_results: tuple[ParagraphResult, ...] = ()
         searching = self.searches_paragraphs
@@ -250,23 +263,36 @@ class Pipeline:
             beam = self._paragraph_beam() if searching else None
             updated = list(sentence_results)
             collected: list[ParagraphResult] = []
-            for paragraph in analysis.paragraphs:
+            paragraphs = analysis.paragraphs
+            for position, paragraph in enumerate(paragraphs):
                 positions = [
                     n for n, s in enumerate(sentence_results) if paragraph.span.contains(s.span)
                 ]
                 document = _context(stats, {sentence_results[n].index for n in positions})
+                # Enrere, el text que el motor ja ha decidit; endavant, el que encara
+                # és original. Així cada paràgraf paga la repetició que introdueix i
+                # cap parella no es cobra dues vegades.
+                window = DocumentWindow.around(
+                    before=self._tail_sentences(collected[-1].output_text) if collected else (),
+                    after=(
+                        self._head_sentences(paragraphs[position + 1].text)
+                        if position + 1 < len(paragraphs)
+                        else ()
+                    ),
+                )
                 if beam is not None and positions:
                     result, remarked = beam.search(
                         paragraph,
                         [sentence_results[n] for n in positions],
                         Protector.within(protected, paragraph.span),
                         document,
+                        window,
                     )
                     for n, sentence_result in zip(positions, remarked, strict=True):
                         updated[n] = sentence_result
                 else:
                     result = self._process_paragraph(
-                        paragraph, sentence_results, protected, text, document
+                        paragraph, sentence_results, protected, text, document, window
                     )
                 collected.append(result)
                 if self._adaptation is not None and positions:
@@ -295,6 +321,18 @@ class Pipeline:
             source_mode=self._source_mode,
             assertive_language=self._assertive_language,
         )
+
+    def _tail_sentences(self, text: str, count: int = WINDOW_SENTENCES) -> tuple[str, ...]:
+        """Últimes frases d'un text ja decidit (el context immediat cap enrere)."""
+        if not text.strip() or count <= 0:
+            return ()
+        return tuple(s.text for s in self._analyzer.analyze(text).sentences)[-count:]
+
+    def _head_sentences(self, text: str, count: int = WINDOW_SENTENCES) -> tuple[str, ...]:
+        """Primeres frases d'un text encara original (el context immediat cap endavant)."""
+        if not text.strip() or count <= 0:
+            return ()
+        return tuple(s.text for s in self._analyzer.analyze(text).sentences)[:count]
 
     def _unit_stats(self, sentences: Sequence[Sentence]) -> dict[int, UnitStats]:
         """Recomptes de cada frase original, per donar context a l'afinitat autoral."""
@@ -357,6 +395,7 @@ class Pipeline:
         protected: tuple[ProtectedSpan, ...],
         document_text: str,
         document: AdaptationContext | None = None,
+        window: DocumentWindow | None = None,
     ) -> SentenceResult:
         ctx = self._sentence_context(sentence, protected, document_text)
         max_level = self._level_for(ctx)
@@ -366,7 +405,7 @@ class Pipeline:
         # places: un candidat que no supera la validació no n'ha d'ocupar cap que
         # podria aprofitar una alternativa vàlida. La memòria cau fa que després no
         # es torni a validar ni a puntuar res.
-        assess, cache = self._admission(validation_ctx, ctx.protected_conflict, document)
+        assess, cache = self._admission(validation_ctx, ctx.protected_conflict, document, window)
         search = self._generator.search(
             sentence.index,
             sentence.text,
@@ -375,7 +414,7 @@ class Pipeline:
             admissible=assess,
         )
         evaluated, best = self._evaluate(
-            (*search.candidates, *search.rejected), validation_ctx, document, cache
+            (*search.candidates, *search.rejected), validation_ctx, document, window, cache
         )
         return SentenceResult(
             index=sentence.index,
@@ -395,6 +434,7 @@ class Pipeline:
         validation_ctx: ValidationContext,
         protected_conflict: ProtectedConflict,
         document: AdaptationContext | None,
+        window: DocumentWindow | None = None,
     ) -> tuple[Callable[[Candidate], CandidateAssessment], dict[str, EvaluatedCandidate]]:
         """Funció que repara, valida i puntua un candidat, amb la seva memòria cau.
 
@@ -409,7 +449,7 @@ class Pipeline:
                 repaired = self._repair.repair(candidate, protected_conflict=protected_conflict)
             evaluated = cache.get(repaired.text)
             if evaluated is None:
-                evaluated = self._evaluated(repaired, validation_ctx, document)
+                evaluated = self._evaluated(repaired, validation_ctx, document, window)
                 cache[repaired.text] = evaluated
             score = evaluated.score
             return CandidateAssessment(
@@ -426,12 +466,13 @@ class Pipeline:
         candidate: Candidate,
         validation_ctx: ValidationContext,
         document: AdaptationContext | None,
+        window: DocumentWindow | None = None,
     ) -> EvaluatedCandidate:
         validation = ValidationResult.merge(
             validator.validate(candidate, validation_ctx) for validator in self._validators
         )
         score = self._scorer.score(
-            candidate, ScoringContext(validation, validation_ctx.source_text, document)
+            candidate, ScoringContext(validation, validation_ctx.source_text, document, window)
         )
         return EvaluatedCandidate(candidate, validation, score)
 
@@ -492,6 +533,7 @@ class Pipeline:
         protected: tuple[ProtectedSpan, ...],
         document_text: str,
         document: AdaptationContext | None = None,
+        window: DocumentWindow | None = None,
     ) -> ParagraphResult:
         inner = tuple(r for r in sentence_results if paragraph.span.contains(r.span))
         intermediate = _reassemble(
@@ -522,7 +564,7 @@ class Pipeline:
                     rejected.append(RejectedProposal(transformation, reason))
         candidates = self._generator.generate(paragraph.index, intermediate, proposals)
         validation_ctx = ValidationContext(paragraph.text, original_protected)
-        evaluated, best = self._evaluate(candidates, validation_ctx, document)
+        evaluated, best = self._evaluate(candidates, validation_ctx, document, window)
         fusions = sum(
             1
             for e in evaluated
@@ -564,6 +606,7 @@ class Pipeline:
         candidates: tuple[Candidate, ...],
         validation_ctx: ValidationContext,
         document: AdaptationContext | None = None,
+        window: DocumentWindow | None = None,
         cache: dict[str, EvaluatedCandidate] | None = None,
     ) -> tuple[tuple[EvaluatedCandidate, ...], EvaluatedCandidate]:
         evaluated: list[EvaluatedCandidate] = []
@@ -572,7 +615,7 @@ class Pipeline:
             if known is not None:
                 evaluated.append(known)
                 continue
-            evaluated.append(self._evaluated(candidate, validation_ctx, document))
+            evaluated.append(self._evaluated(candidate, validation_ctx, document, window))
         accepted = [e for e in evaluated if e.accepted]
         best = select_best(accepted, lambda e: e.candidate, _score_of)
         if best is None:
@@ -606,6 +649,21 @@ class Pipeline:
                 f"{self._min_confidence:.2f}"
             )
         return None
+
+
+def _sentence_window(sentences: Sequence[Sentence], position: int) -> DocumentWindow:
+    """Veïnat immediat d'una frase durant la passada de frases.
+
+    Aquí encara no hi ha res decidit —cada frase es tria pel seu compte i el
+    feix de paràgraf pot revisar-ho després—, així que els dos costats són
+    l'original. Com que el candidat i el seu original es mesuren sobre la
+    mateixa finestra, això no penalitza conservar el text de l'autor: només
+    es cobra el que la frase hi afegeix de nou.
+    """
+    return DocumentWindow.around(
+        before=[s.text for s in sentences[max(0, position - WINDOW_SENTENCES) : position]],
+        after=[s.text for s in sentences[position + 1 : position + 1 + WINDOW_SENTENCES]],
+    )
 
 
 def _context(stats: Mapping[int, UnitStats], own: set[int]) -> AdaptationContext | None:

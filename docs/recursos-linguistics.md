@@ -298,11 +298,66 @@ Mesures en un ordinador de proves: arrencada del servidor 2,1 s; primera
 comprovació 4,4 s (LanguageTool hi carrega el model català); comprovacions
 repetides, immediates per la memòria cau.
 
+## Diccionari de sinònims
+
+### Per a què serveix
+
+Només per a la **pantalla de composició frase a frase**, on una persona clica
+una paraula i tria entre les formes equivalents. El motor no el fa servir mai
+per substituir res pel seu compte: triar un sinònim exigeix saber de quin
+sentit es parla, i això el projecte no ho endevina. Amb algú davant, el sentit
+el tria ell.
+
+### Instal·lació
+
+```bash
+python scripts/install_thesaurus.py --info    # què es baixa i d'on
+python scripts/install_thesaurus.py           # demana confirmació
+```
+
+Es baixa un sol fitxer de menys d'un megabyte i se'n genera un recurs SQLite
+local. No cal git ni cap altra eina.
+
+### Origen i llicència
+
+Font: [Softcatalà, «sinonims-cat»](https://github.com/Softcatala/sinonims-cat),
+autor principal Jaume Ortolà i Font. Les **dades** són Creative Commons CC-BY
+4.0 i el programari del repositori d'origen, GPL-2.0. Com la resta de recursos
+externs, no es versionen amb el projecte: cada usuari se les baixa, de manera
+que l'atribució queda al costat de qui les ha fetes.
+
+### Què s'importa i què no
+
+Cada línia del fitxer d'origen és un **grup de significat**: una categoria, una
+glossa opcional i les formes equivalents, algunes amb un marcador de registre.
+
+- **Els antònims no s'importen mai.** Un antònim és el contrari, no un
+  equivalent: guardar-lo seria posar a l'abast una substitució que inverteix el
+  sentit del text. No hi és, de manera que no es pot servir.
+- **El registre s'anota, no filtra.** Una forma col·loquial, vulgar, antiga o
+  dialectal entra al recurs amb l'etiqueta corresponent i la interfície la
+  mostra; qui tria decideix.
+- Les formes que el diccionari posa darrere de `#` (equivalències més fluixes)
+  es marquen com a secundàries.
+- Un grup que es queda amb una sola forma no s'importa: no ofereix cap
+  alternativa.
+
+### Com es consulta
+
+La cerca es fa per la forma tal com surt al text **i pel seu lema**, perquè el
+diccionari està escrit amb formes de diccionari («saber», «casa») i els textos
+porten formes flexionades («sabem», «cases»). El que es proposa torna a passar
+per la morfologia perquè concordi amb la forma que substitueix; si no se'n pot
+generar cap de compatible —el gènere d'un nom no és flexionable—, la proposta
+no s'ofereix.
+
 ## Estat dels recursos
 
 Segons el que hi hagi instal·lat, el motor treballa en **mode lingüístic
 complet** (morfologia, parser i LanguageTool) o en **mode bàsic** (només els
-components interns: menys cobertura i més prudència). La interfície ho diu en
+components interns: menys cobertura i més prudència). El diccionari de sinònims
+no hi compta: el motor reescriu igual sense ell, perquè només serveix la
+pantalla de composició. La interfície ho diu en
 una línia i, si falta algun recurs, hi posa el botó per instal·lar-lo.
 
 ```
@@ -312,6 +367,7 @@ Morfologia catalana      ✓ activa
 Parser sintàctic català  ✓ activa
 LanguageTool local       ✓ actiu
 Java                     ✓ disponible
+Diccionari de sinònims   ✓ actiu
 Mode fora de línia       ✓ disponible
 ```
 

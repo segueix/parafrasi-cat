@@ -37,7 +37,10 @@ class ScoringWeights:
       entre alternatives segures; no inventa cap connector ni força cap
       substitució, i conservar la repetició que l'autor ja havia escrit no costa
       res. Des de la 1.3.17 no depèn del mode d'origen: amb text propi el motor
-      també tria entre connectors, i per tant també hi ha de decidir.
+      també tria entre connectors, i per tant també hi ha de decidir. Des de la
+      1.3.18 es mesura sobre una finestra curta i determinista de dues frases a
+      cada costat, de manera que també veu la repetició que travessa la frontera
+      entre dos paràgrafs consecutius; fora d'aquesta finestra no es mesura res.
     - ``structure``: pes del grau de reredacció estructural (famílies de
       transformació ponderades: un canvi sintàctic segur pesa més que un
       connector, i un canvi entre frases més que un de dins de la frase). Val 0

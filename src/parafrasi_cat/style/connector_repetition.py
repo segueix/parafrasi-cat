@@ -16,9 +16,17 @@ segura. Aquest mòdul mesura exactament això:
 2. **Distància.** Cada aparició es compara amb l'anterior de la mateixa forma i
    pesa ``1 / (1 + frases de distància)``: dins de la mateixa frase 1,00, a la
    següent 0,50, dues més enllà 0,33, tres 0,25… Decreix sempre, és acotat, no
-   té cap llindar i s'explica en una línia. Fora de la unitat que es puntua
-   (un altre paràgraf) no es mesura res.
-3. **Introduïda contra heretada.** Es calcula la severitat per forma del
+   té cap llindar i s'explica en una línia.
+3. **Finestra curta de document.** La unitat que es puntua no es mesura sola:
+   se li encaixen les :data:`WINDOW_SENTENCES` frases immediatament anteriors
+   (el text que el motor ja ha decidit) i les immediatament posteriors (el text
+   original, que encara no s'ha decidit). Les tres parts es numeren
+   consecutivament, de manera que una mateixa llei de distància cobreix les
+   quatre escales del problema: dins de la mateixa frase, entre frases
+   consecutives, dins del paràgraf i **a la frontera entre dos paràgrafs**.
+   Fora d'aquesta finestra no es mesura res: no hi ha cap penalització global
+   il·limitada a tot el document.
+4. **Introduïda contra heretada.** Es calcula la severitat per forma del
    candidat i la de l'original, i només es penalitza l'excés:
    ``introduïda(F) = max(0, severitat_candidat(F) - severitat_original(F))``.
    Si l'autor ja repetia «perquè», conservar-ho no costa res; canviar-ho per
@@ -38,10 +46,48 @@ from dataclasses import dataclass, field
 from parafrasi_cat.analyzer.analysis import Analyzer
 from parafrasi_cat.analyzer.lexicon import normalize_form
 from parafrasi_cat.analyzer.tokens import TokenKind
-from parafrasi_cat.style.adaptation import AdaptationContext
 
-NEIGHBOUR_DISTANCE = 1
-"""Distància que s'atribueix a la coincidència amb la unitat contigua del document."""
+WINDOW_SENTENCES = 2
+"""Frases de context que es miren a cada costat de la unitat que es puntua.
+
+Dues frases arriben a la frontera entre paràgrafs (l'última d'un i la primera
+del següent són veïnes immediates) sense obrir la mesura a tot el document: el
+cost és fix i la penalització no pot créixer amb la llargada del text.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentWindow:
+    """Context immediat de la unitat que es puntua, ja retallat a la finestra.
+
+    ``before`` és el text que el motor **ja ha decidit** just abans (la sortida,
+    no l'original: és el que el lector llegirà). ``after`` és el text que ve just
+    després i que **encara no s'ha decidit**, de manera que s'hi mira l'original.
+    Cadascú paga, doncs, la repetició que introdueix contra el que ja hi ha escrit
+    i contra el que hi havia; cap unitat no paga dues vegades la mateixa parella.
+    """
+
+    before: tuple[str, ...] = ()
+    after: tuple[str, ...] = ()
+
+    @classmethod
+    def around(
+        cls,
+        before: Iterable[str] = (),
+        after: Iterable[str] = (),
+        size: int = WINDOW_SENTENCES,
+    ) -> DocumentWindow:
+        """Finestra retallada a les ``size`` frases més properes de cada costat."""
+        limit = max(0, size)
+        if not limit:
+            return cls()
+        head = tuple(t for t in before if t.strip())
+        tail = tuple(t for t in after if t.strip())
+        return cls(head[-limit:], tail[:limit])
+
+    @property
+    def empty(self) -> bool:
+        return not self.before and not self.after
 
 
 def distance_weight(distance: int) -> float:
@@ -126,7 +172,7 @@ class ConnectorRepetition:
                 phrases.setdefault(words, " ".join(words))
         self._phrases = phrases
         self._longest = max((len(words) for words in phrases), default=0)
-        self._cache: dict[str, tuple[ConnectorUse, ...]] = {}
+        self._cache: dict[str, tuple[tuple[ConnectorUse, ...], int]] = {}
 
     @property
     def forms(self) -> frozenset[str]:
@@ -141,12 +187,17 @@ class ConnectorRepetition:
 
     def uses(self, text: str) -> tuple[ConnectorUse, ...]:
         """Connectors de l'inventari que apareixen al text, amb l'índex de frase."""
+        return self._scan(text)[0]
+
+    def _scan(self, text: str) -> tuple[tuple[ConnectorUse, ...], int]:
+        """Usos de l'inventari i nombre de frases del text (memoritzat)."""
         if not text or not self._phrases:
-            return ()
+            return (), 0
         cached = self._cache.get(text)
         if cached is not None:
             return cached
         found: list[ConnectorUse] = []
+        index = -1
         for index, sentence in enumerate(self._analyzer.analyze(text).sentences):
             words = [normalize_form(t.text) for t in sentence.tokens if t.kind is TokenKind.WORD]
             position = 0
@@ -158,9 +209,38 @@ class ConnectorRepetition:
                 form, length = match
                 found.append(ConnectorUse(form, index))
                 position += length
-        result = tuple(found)
+        result = (tuple(found), index + 1)
         self._cache[text] = result
         return result
+
+    def window_uses(
+        self, text: str, window: DocumentWindow | None
+    ) -> tuple[tuple[ConnectorUse, ...], int, int]:
+        """Usos de tota la finestra i el rang de frases ``[inici, fi)`` que ocupa el text.
+
+        Les tres parts (context anterior, unitat i context posterior) es numeren
+        de manera consecutiva: així la distància entre una forma del final del
+        paràgraf anterior i una del principi d'aquest es mesura exactament com
+        la distància entre dues frases del mateix paràgraf.
+        """
+        own, n_own = self._scan(text)
+        if window is None or window.empty:
+            return own, 0, n_own
+        uses: list[ConnectorUse] = []
+        offset = 0
+        for sentence in window.before:
+            found, count = self._scan(sentence)
+            uses.extend(ConnectorUse(u.form, u.sentence + offset) for u in found)
+            offset += count
+        start = offset
+        uses.extend(ConnectorUse(u.form, u.sentence + offset) for u in own)
+        offset += n_own
+        end = offset
+        for sentence in window.after:
+            found, count = self._scan(sentence)
+            uses.extend(ConnectorUse(u.form, u.sentence + offset) for u in found)
+            offset += count
+        return tuple(uses), start, end
 
     def _match_at(self, words: Sequence[str], position: int) -> tuple[str, int] | None:
         """Forma més llarga de l'inventari que comença en aquesta posició."""
@@ -178,17 +258,23 @@ class ConnectorRepetition:
     # --- repetició ------------------------------------------------------------------------
 
     def pairs(
-        self, uses: Sequence[ConnectorUse], context: AdaptationContext | None = None
+        self, uses: Sequence[ConnectorUse], start: int = 0, end: int | None = None
     ) -> tuple[tuple[str, int], ...]:
-        """Repeticions (forma, distància en frases) del text i, si escau, del seu veïnat."""
+        """Repeticions (forma, distància en frases) que toquen el rang ``[start, end)``.
+
+        Amb el rang per defecte es mesuren totes. Amb el rang de la unitat que es
+        puntua, les repeticions que viuen senceres al context queden fora: no són
+        cosa d'aquesta unitat i, com que apareixerien igual al candidat i a
+        l'original, tampoc no canviarien la diferència.
+        """
+        limit = end if end is not None else max((u.sentence for u in uses), default=0) + 1
         previous: dict[str, int] = {}
         found: list[tuple[str, int]] = []
         for use in uses:
             last = previous.get(use.form)
-            if last is not None:
+            if last is not None and (start <= use.sentence < limit or start <= last < limit):
                 found.append((use.form, use.sentence - last))
             previous[use.form] = use.sentence
-        found.extend(self._boundary(uses, context))
         return tuple(found)
 
     def severity(self, pairs: Sequence[tuple[str, int]]) -> dict[str, float]:
@@ -202,54 +288,43 @@ class ConnectorRepetition:
         self,
         text: str,
         source_text: str = "",
-        context: AdaptationContext | None = None,
+        window: DocumentWindow | None = None,
     ) -> RepetitionAssessment:
-        """Repetició de connectors del text, descomptant la que l'original ja tenia."""
+        """Repetició de connectors del text dins de la finestra, descomptant l'heretada.
+
+        El candidat i el seu original es mesuren **sobre la mateixa finestra**:
+        el context és idèntic als dos costats i la diferència aïlla exactament
+        el que aquesta unitat hi afegeix. Una repetició que ja existia —dins de
+        la unitat o contra el veïnat— no es cobra; una de nova, sí.
+        """
         if not self._phrases or not text:
             return RepetitionAssessment()
-        uses = self.uses(text)
+        own = self.uses(text)
+        uses, start, end = self.window_uses(text, window)
         if not uses:
             return RepetitionAssessment()
-        candidate_pairs = self.pairs(uses, context)
+        candidate_pairs = self.pairs(uses, start, end)
         if not candidate_pairs:
-            return RepetitionAssessment(profile=tuple(use.form for use in uses))
+            return RepetitionAssessment(profile=tuple(use.form for use in own))
         # Sense original de referència no es pot distingir la repetició nova de la
         # que l'autor ja havia escrit: davant del dubte, no es penalitza res.
-        source_uses = self.uses(source_text) if source_text and source_text != text else uses
+        if source_text and source_text != text:
+            source_uses, source_start, source_end = self.window_uses(source_text, window)
+        else:
+            source_uses, source_start, source_end = uses, start, end
         current = self.severity(candidate_pairs)
-        inherited = self.severity(self.pairs(source_uses, context))
+        inherited = self.severity(self.pairs(source_uses, source_start, source_end))
         introduced = {
             form: max(0.0, weight - inherited.get(form, 0.0)) for form, weight in current.items()
         }
         return RepetitionAssessment(
             penalty=round(min(1.0, sum(introduced.values())), 4),
-            profile=tuple(use.form for use in uses),
+            profile=tuple(use.form for use in own),
             repeats=tuple(
                 RepeatedConnector(form, distance, distance_weight(distance), introduced[form] > 0.0)
                 for form, distance in candidate_pairs
             ),
         )
-
-    def _boundary(
-        self, uses: Sequence[ConnectorUse], context: AdaptationContext | None
-    ) -> list[tuple[str, int]]:
-        """Coincidència amb el connector contigu de la unitat anterior o següent.
-
-        Serveix per a les unitats que es puntuen soles (una frase, amb la resta
-        del document al voltant). Dins d'un paràgraf, la distància real entre
-        frases ja la mesura ``pairs``; en un altre paràgraf no es mesura res.
-        """
-        if context is None or not uses:
-            return []
-        known = self.forms
-        before = [form for form in context.before.connectors if form in known]
-        after = [form for form in context.after.connectors if form in known]
-        found: list[tuple[str, int]] = []
-        if before and before[-1] == uses[0].form:
-            found.append((uses[0].form, NEIGHBOUR_DISTANCE))
-        if after and after[0] == uses[-1].form:
-            found.append((uses[-1].form, NEIGHBOUR_DISTANCE))
-        return found
 
 
 def connector_forms(rules: Iterable[object]) -> tuple[str, ...]:
@@ -272,8 +347,10 @@ def connector_forms(rules: Iterable[object]) -> tuple[str, ...]:
 
 
 __all__ = [
+    "WINDOW_SENTENCES",
     "ConnectorRepetition",
     "ConnectorUse",
+    "DocumentWindow",
     "RepeatedConnector",
     "RepetitionAssessment",
     "connector_forms",

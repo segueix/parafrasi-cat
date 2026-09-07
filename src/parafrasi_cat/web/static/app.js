@@ -13,7 +13,26 @@ const estat = {
   componentPendent: "",
 };
 
-const CLAUS_RECURSOS = ["morphology", "syntax", "languagetool", "java", "offline"];
+// Composició frase a frase. «edicions» guarda, per a cada redacció triada, les
+// substitucions que ha fet la persona: {inici, fi, text}. Es desen per separat
+// del text base perquè canviar una paraula mou les posicions de les següents i
+// cal poder recalcular-ho tot des de zero.
+const composicio = {
+  esborrany: null,
+  triada: new Map(),
+  edicions: new Map(),
+  fetes: new Map(),
+  obert: null,
+};
+
+const CLAUS_RECURSOS = [
+  "morphology",
+  "syntax",
+  "languagetool",
+  "thesaurus",
+  "java",
+  "offline",
+];
 
 function llegeixFitxer(fitxer) {
   return new Promise((resol, rebutja) => {
@@ -821,6 +840,302 @@ async function exportarHistorial() {
 
 // --- arrencada ---------------------------------------------------------------
 
+
+// --- composició frase a frase ------------------------------------------------
+
+function clauEdicio(indexFrase, idRedaccio) {
+  return `${indexFrase}::${idRedaccio}`;
+}
+
+function textEditat(indexFrase, opcio) {
+  // El text base amb les substitucions aplicades d'esquerra a dreta. Es
+  // reconstrueix sencer cada cop: així no cal mantenir cap desplaçament.
+  const edicions = composicio.edicions.get(clauEdicio(indexFrase, opcio.option_id));
+  if (!edicions || edicions.size === 0) return opcio.text;
+  const trossos = [];
+  let posicio = 0;
+  for (const token of opcio.tokens) {
+    const canvi = edicions.get(token.start);
+    if (canvi === undefined) continue;
+    trossos.push(opcio.text.slice(posicio, token.start), canvi);
+    posicio = token.end;
+  }
+  trossos.push(opcio.text.slice(posicio));
+  return trossos.join("");
+}
+
+function frasePerIndex(index) {
+  return composicio.esborrany.sentences.find((frase) => frase.index === index);
+}
+
+function opcioTriada(frase) {
+  const id = composicio.triada.get(frase.index);
+  return frase.options.find((opcio) => opcio.option_id === id) || frase.options[0];
+}
+
+function textActual(frase) {
+  const feta = composicio.fetes.get(frase.index);
+  if (feta !== undefined) return feta;
+  return textEditat(frase.index, opcioTriada(frase));
+}
+
+function muntarParagraf() {
+  const esborrany = composicio.esborrany;
+  if (!esborrany) return "";
+  const parts = [];
+  esborrany.sentences.forEach((frase, posicio) => {
+    parts.push(esborrany.separators[posicio] ?? "");
+    parts.push(textActual(frase));
+  });
+  parts.push(esborrany.tail || "");
+  return parts.join("");
+}
+
+function refrescarParagraf() {
+  $("compon-final").value = muntarParagraf();
+  const fetes = composicio.fetes.size;
+  const total = composicio.esborrany ? composicio.esborrany.sentences.length : 0;
+  missatge($("compon-estat"), total ? `${fetes} de ${total} frases donades per bones.` : "");
+}
+
+function pintarText(node, frase, opcio) {
+  // El text es pinta per trossos: el que no té alternativa, tal qual; el que en
+  // té, com un botó que obre el desplegable.
+  node.replaceChildren();
+  const edicions = composicio.edicions.get(clauEdicio(frase.index, opcio.option_id));
+  let posicio = 0;
+  for (const token of opcio.tokens) {
+    if (token.start < posicio) continue;
+    node.append(opcio.text.slice(posicio, token.start));
+    const canvi = edicions ? edicions.get(token.start) : undefined;
+    const boto = document.createElement("button");
+    boto.type = "button";
+    boto.className = canvi === undefined ? "mot" : "mot canviat";
+    boto.textContent = canvi === undefined ? token.text : canvi;
+    boto.title = `${token.n_options} alternatives`;
+    boto.addEventListener("click", (esdeveniment) => {
+      obrirDesplegable(esdeveniment.currentTarget, frase, opcio, token);
+    });
+    node.append(boto);
+    posicio = token.end;
+  }
+  node.append(opcio.text.slice(posicio));
+}
+
+function pintarRedaccions(article, frase) {
+  const llista = article.querySelector(".redaccions");
+  llista.replaceChildren();
+  const triada = opcioTriada(frase);
+  for (const opcio of frase.options) {
+    const node = $("plantilla-redaccio").content.cloneNode(true);
+    const element = node.querySelector(".redaccio");
+    const radio = node.querySelector(".tria-redaccio");
+    radio.name = `redaccio-${frase.index}`;
+    radio.value = opcio.option_id;
+    radio.checked = opcio.option_id === triada.option_id;
+    radio.disabled = composicio.fetes.has(frase.index);
+    radio.addEventListener("change", () => {
+      composicio.triada.set(frase.index, opcio.option_id);
+      pintarFrase(frase);
+      refrescarParagraf();
+    });
+    element.classList.toggle("triada", radio.checked);
+    node.querySelector(".etiqueta-redaccio").textContent = opcio.original
+      ? "Text original"
+      : opcio.summary;
+    pintarText(node.querySelector(".text-redaccio"), frase, opcio);
+    llista.append(node);
+  }
+}
+
+function pintarFrase(frase) {
+  const article = $("frases").querySelector(`[data-frase="${frase.index}"]`);
+  if (!article) return;
+  const feta = composicio.fetes.has(frase.index);
+  article.classList.toggle("feta", feta);
+  article.querySelector(".estat-frase").textContent = feta ? "feta" : "pendent";
+  article.querySelector(".fet").hidden = feta;
+  article.querySelector(".refes").hidden = !feta;
+  pintarRedaccions(article, frase);
+}
+
+function crearFrase(frase) {
+  const node = $("plantilla-frase").content.cloneNode(true);
+  const article = node.querySelector(".frase");
+  article.dataset.frase = String(frase.index);
+  node.querySelector(".titol-frase").textContent = `Frase ${frase.index + 1}`;
+  node.querySelector(".original-frase").textContent = frase.source_text;
+  const nota = node.querySelector(".nota-frase");
+  nota.textContent = frase.note;
+  nota.hidden = !frase.note;
+  node.querySelector(".fet").addEventListener("click", () => {
+    composicio.fetes.set(frase.index, textEditat(frase.index, opcioTriada(frase)));
+    pintarFrase(frase);
+    refrescarParagraf();
+  });
+  node.querySelector(".refes").addEventListener("click", () => {
+    composicio.fetes.delete(frase.index);
+    pintarFrase(frase);
+    refrescarParagraf();
+  });
+  $("frases").append(node);
+  pintarFrase(frase);
+}
+
+function tancarDesplegable() {
+  $("desplegable").hidden = true;
+  composicio.obert = null;
+}
+
+function obrirDesplegable(ancora, frase, opcio, token) {
+  if (composicio.fetes.has(frase.index)) return;
+  const caixa = $("desplegable");
+  const cos = caixa.querySelector(".desplegable-cos");
+  caixa.querySelector(".desplegable-titol").textContent = `«${token.text}»`;
+  cos.replaceChildren();
+
+  const clau = clauEdicio(frase.index, opcio.option_id);
+  const edicions = composicio.edicions.get(clau);
+  const aplicar = (text) => {
+    const actuals = composicio.edicions.get(clau) || new Map();
+    if (text === null) actuals.delete(token.start);
+    else actuals.set(token.start, text);
+    composicio.edicions.set(clau, actuals);
+    tancarDesplegable();
+    pintarFrase(frase);
+    refrescarParagraf();
+  };
+
+  if (edicions && edicions.has(token.start)) {
+    const grup = document.createElement("div");
+    grup.className = "desplegable-grup";
+    const boto = document.createElement("button");
+    boto.type = "button";
+    boto.className = "desplegable-opcio";
+    boto.textContent = `↩ ${token.text}`;
+    boto.title = "Torna a la paraula original";
+    boto.addEventListener("click", () => aplicar(null));
+    grup.append(boto);
+    cos.append(grup);
+  }
+
+  for (const grupOpcions of token.groups) {
+    const grup = document.createElement("div");
+    grup.className = "desplegable-grup";
+    const etiqueta = document.createElement("span");
+    etiqueta.className = "desplegable-etiqueta";
+    etiqueta.textContent = `${grupOpcions.label} · ${grupOpcions.source_label}`;
+    grup.append(etiqueta);
+    for (const alternativa of grupOpcions.options) {
+      const boto = document.createElement("button");
+      boto.type = "button";
+      boto.className = "desplegable-opcio";
+      boto.append(alternativa.text);
+      if (alternativa.register) {
+        const marca = document.createElement("span");
+        marca.className = "registre";
+        marca.textContent = ` (${alternativa.register})`;
+        boto.append(marca);
+      }
+      if (alternativa.note) boto.title = alternativa.note;
+      boto.addEventListener("click", () => aplicar(alternativa.text));
+      grup.append(boto);
+    }
+    cos.append(grup);
+  }
+
+  const marc = ancora.getBoundingClientRect();
+  caixa.hidden = false;
+  caixa.style.top = `${window.scrollY + marc.bottom + 6}px`;
+  caixa.style.left = `${Math.max(8, window.scrollX + marc.left - 8)}px`;
+  composicio.obert = token;
+}
+
+function mostrarComposicio(esborrany) {
+  composicio.esborrany = esborrany;
+  composicio.triada = new Map();
+  composicio.edicions = new Map();
+  composicio.fetes = new Map();
+  tancarDesplegable();
+  $("compon-sense").hidden = true;
+  $("compon-resultat").hidden = false;
+  $("compon-fonts").textContent = `Alternatives: ${esborrany.suggestions}.`;
+  // Sense diccionari de sinònims la pantalla funciona igual, però la llista és
+  // molt més curta: val la pena oferir-lo aquí i no només al plafó de recursos.
+  const avis = $("compon-tesaurus");
+  avis.hidden = esborrany.thesaurus.active;
+  $("compon-tesaurus-avis").textContent = esborrany.thesaurus.active
+    ? ""
+    : esborrany.thesaurus.message;
+  $("frases").replaceChildren();
+  for (const frase of esborrany.sentences) crearFrase(frase);
+  refrescarParagraf();
+}
+
+async function componer() {
+  const text = $("text").value.trim();
+  if (!text) {
+    missatge($("estat"), "Cal escriure o enganxar un paràgraf.", true);
+    return;
+  }
+  canviarPestanya("compon");
+  $("compon").disabled = true;
+  missatge($("estat"), "Preparant les redaccions de cada frase…");
+  try {
+    const esborrany = await api("/api/compose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text,
+        mode: modeTriat(),
+        level: Number($("nivell").value),
+        style_profile: $("estil").value,
+        dictionaries: diccionarisTriats(),
+        preferences: $("preferencies").value,
+        languagetool: $("languagetool").checked,
+        source_mode: origenTriat(),
+        assertive_language: $("assertiu").checked,
+      }),
+    });
+    mostrarComposicio(esborrany);
+    missatge($("estat"), `${esborrany.n_sentences} frases preparades.`);
+  } catch (error) {
+    missatge($("estat"), error.message, true);
+  } finally {
+    $("compon").disabled = false;
+  }
+}
+
+function canviarPestanya(quina) {
+  const compon = quina === "compon";
+  $("vista-compon").hidden = !compon;
+  $("vista-reredacta").hidden = compon;
+  $("pestanya-compon").classList.toggle("activa", compon);
+  $("pestanya-reredacta").classList.toggle("activa", !compon);
+  $("pestanya-compon").setAttribute("aria-selected", String(compon));
+  $("pestanya-reredacta").setAttribute("aria-selected", String(!compon));
+  if (!compon) tancarDesplegable();
+}
+
+async function copiarComposicio() {
+  const text = $("compon-final").value;
+  try {
+    await navigator.clipboard.writeText(text);
+    missatge($("compon-estat"), "Copiat al porta-retalls.");
+  } catch {
+    $("compon-final").select();
+    missatge($("compon-estat"), "Premeu Ctrl+C per copiar el text seleccionat.", true);
+  }
+}
+
+function exportarComposicio() {
+  baixar(
+    new Blob([$("compon-final").value], { type: "text/plain;charset=utf-8" }),
+    "parafrasi-cat-composicio.txt",
+  );
+  missatge($("compon-estat"), "Fitxer exportat.");
+}
+
 async function iniciar() {
   try {
     await carregarOpcions();
@@ -829,6 +1144,26 @@ async function iniciar() {
     missatge($("estat"), `No s'han pogut carregar les opcions: ${error.message}`, true);
   }
   $("formulari").addEventListener("submit", generar);
+  $("compon").addEventListener("click", componer);
+  $("pestanya-compon").addEventListener("click", () => canviarPestanya("compon"));
+  $("pestanya-reredacta").addEventListener("click", () => canviarPestanya("reredacta"));
+  $("compon-copia").addEventListener("click", copiarComposicio);
+  $("compon-instal-la").addEventListener("click", () => {
+    canviarPestanya("reredacta");
+    demanarInstalacio("thesaurus");
+  });
+  $("compon-exporta").addEventListener("click", exportarComposicio);
+  $("desplegable").querySelector(".desplegable-tanca").addEventListener("click", tancarDesplegable);
+  document.addEventListener("keydown", (esdeveniment) => {
+    if (esdeveniment.key === "Escape") tancarDesplegable();
+  });
+  document.addEventListener("click", (esdeveniment) => {
+    const caixa = $("desplegable");
+    if (caixa.hidden) return;
+    if (!caixa.contains(esdeveniment.target) && !esdeveniment.target.classList.contains("mot")) {
+      tancarDesplegable();
+    }
+  });
   $("copia").addEventListener("click", copiar);
   $("exporta").addEventListener("click", exportar);
   $("desa").addEventListener("click", desarAlRegistre);

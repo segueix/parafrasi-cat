@@ -38,9 +38,9 @@ from parafrasi_cat.resources import ProjectPaths
 from parafrasi_cat.rules import RuleSetConfig, build_rule_set, default_registry
 from parafrasi_cat.scoring.scorer import CONNECTOR_COMPONENT, ScoreBreakdown, ScoringContext
 from parafrasi_cat.scoring.weights import ScoringWeights
-from parafrasi_cat.style.adaptation import AdaptationContext, UnitStats
 from parafrasi_cat.style.connector_repetition import (
     ConnectorRepetition,
+    DocumentWindow,
     connector_forms,
     distance_weight,
 )
@@ -168,11 +168,11 @@ def test_without_a_reference_nothing_is_penalised(repetition: ConnectorRepetitio
 def test_the_neighbouring_unit_counts_as_one_sentence_away(
     repetition: ConnectorRepetition,
 ) -> None:
-    context = AdaptationContext(before=UnitStats(connectors=("tanmateix",)))
-    fresh = repetition.assess("Tanmateix, no plou.", "Per tant, no plou.", context)
+    window = DocumentWindow(before=("Tanmateix, plou.",))
+    fresh = repetition.assess("Tanmateix, no plou.", "Per tant, no plou.", window)
     assert fresh.penalty == pytest.approx(0.5)
     # Si l'original ja coincidia amb el veí, la coincidència no és nova.
-    assert repetition.assess("Tanmateix, no plou.", "Tanmateix, no plou.", context).penalty == 0.0
+    assert repetition.assess("Tanmateix, no plou.", "Tanmateix, no plou.", window).penalty == 0.0
 
 
 def test_the_assessment_is_traceable(repetition: ConnectorRepetition) -> None:

@@ -3,6 +3,7 @@
 Detecta, sense fallar mai i sense sortir de l'ordinador:
 
 - el recurs morfològic català importat de Softcatalà;
+- el diccionari de sinònims, que fa servir la pantalla de composició;
 - Java;
 - una instal·lació local de LanguageTool.
 
@@ -12,12 +13,18 @@ component està actiu i, si no hi és, què cal fer.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
 from parafrasi_cat.adapters.languagetool import find_installation, find_java
 from parafrasi_cat.morphology.catalan import RESOURCE_RELATIVE, CatalanMorphology
+from parafrasi_cat.synonyms.thesaurus import (
+    RESOURCE_RELATIVE as THESAURUS_RELATIVE,
+)
+from parafrasi_cat.synonyms.thesaurus import (
+    CatalanThesaurus,
+)
 from parafrasi_cat.syntax.spacy_parser import DEFAULT_MODEL, SpacySyntax
 
 
@@ -54,10 +61,13 @@ INSTALLERS: dict[str, str] = {
     "Morfologia catalana": "morphology",
     "Parser sintàctic català": "parser",
     "LanguageTool local": "languagetool",
+    "Diccionari de sinònims": "thesaurus",
 }
 
 MORPHOLOGY_ACTIVE = "activa"
 MORPHOLOGY_FALLBACK = "reserva"
+THESAURUS_ACTIVE = "actiu"
+THESAURUS_MISSING = "no instal·lat"
 LANGUAGETOOL_ACTIVE = "actiu"
 LANGUAGETOOL_MISSING = "no instal·lat"
 
@@ -90,10 +100,18 @@ class LinguisticResources:
     syntax: ComponentStatus
     languagetool: ComponentStatus
     java: ComponentStatus
+    thesaurus: ComponentStatus = field(
+        default_factory=lambda: ComponentStatus(
+            component="Diccionari de sinònims",
+            state=THESAURUS_MISSING,
+            active=False,
+            message="",
+        )
+    )
 
     @property
     def components(self) -> tuple[ComponentStatus, ...]:
-        return (self.morphology, self.syntax, self.languagetool, self.java)
+        return (self.morphology, self.syntax, self.languagetool, self.java, self.thesaurus)
 
     @property
     def offline_ready(self) -> bool:
@@ -102,6 +120,8 @@ class LinguisticResources:
         El motor sempre funciona sense connexió; això indica que a més hi són
         tots els components opcionals.
         """
+        # El diccionari de sinònims no hi entra: només serveix la pantalla de
+        # composició, on qui tria és una persona. El motor reescriu igual sense ell.
         return self.morphology.active and self.syntax.active and self.languagetool.active
 
     @property
@@ -129,6 +149,7 @@ class LinguisticResources:
             "syntax": self.syntax.to_dict(),
             "languagetool": self.languagetool.to_dict(),
             "java": self.java.to_dict(),
+            "thesaurus": self.thesaurus.to_dict(),
             "mode": {
                 "id": mode.value,
                 "label": mode.label,
@@ -182,6 +203,34 @@ def morphology_status(language_dir: str | Path) -> ComponentStatus:
             f"{metadata.get('source_repository', '')} @ "
             f"{metadata.get('source_commit', '')[:12]} · {metadata.get('license', '')}"
         ),
+    )
+
+
+def thesaurus_status(language_dir: str | Path) -> ComponentStatus:
+    """Estat del diccionari de sinònims que fa servir la pantalla de composició."""
+    resource = CatalanThesaurus.discover(language_dir)
+    if resource is None:
+        return ComponentStatus(
+            component="Diccionari de sinònims",
+            state=THESAURUS_MISSING,
+            active=False,
+            message=(
+                "La pantalla de composició només ofereix connectors equivalents i les "
+                "formes dels diccionaris del projecte. Instal·leu el diccionari de "
+                "sinònims per poder triar entre més paraules."
+            ),
+            detail=str(Path(language_dir) / THESAURUS_RELATIVE),
+        )
+    metadata = resource.metadata
+    return ComponentStatus(
+        component="Diccionari de sinònims",
+        state=THESAURUS_ACTIVE,
+        active=True,
+        message=(
+            f"{metadata.get('n_forms', '?')} formes en "
+            f"{metadata.get('n_groups', '?')} grups de significat."
+        ),
+        detail=str(metadata.get("attribution", "")),
     )
 
 
@@ -261,4 +310,5 @@ def resources_status(
         syntax=syntax_status(),
         languagetool=languagetool_status(root, java=java),
         java=java_status(java),
+        thesaurus=thesaurus_status(language_dir),
     )
