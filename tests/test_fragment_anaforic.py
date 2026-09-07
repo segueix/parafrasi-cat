@@ -7,7 +7,12 @@ import pytest
 from parafrasi_cat.analyzer import ClosedClassLexicon, RuleBasedAnalyzer
 from parafrasi_cat.protected import default_protector
 from parafrasi_cat.resources import ProjectPaths
-from parafrasi_cat.rules import ParagraphContext, ParagraphRule, default_registry, load_rule_definitions
+from parafrasi_cat.rules import (
+    ParagraphContext,
+    ParagraphRule,
+    default_registry,
+    load_rule_definitions,
+)
 from parafrasi_cat.syntax import NullSyntax, SpacySyntax, SyntaxProvider
 
 

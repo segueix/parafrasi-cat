@@ -107,7 +107,8 @@ RULE_IDS = [
     "assertiu.normalitza_modalitzacio", "assertiu.hipotesi_explicita", "assertiu.com_detalla_font",
     "assertiu.limitacio_documental_inicial", "assertiu.limitacio_documental",
     "assertiu.plantejament_directe",
-    "blocs.subordinada_adverbial", "blocs.complement_del_verb", "blocs.participial_del_subjecte",
+    "blocs.subordinada_adverbial", "blocs.circumstancial_curt",
+    "blocs.complement_del_verb", "blocs.participial_del_subjecte",
     "ordre.pero_medial_a_inicial",
 ]  # fmt: skip
 

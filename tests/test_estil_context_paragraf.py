@@ -45,9 +45,9 @@ def test_academic_draft_uses_selected_paragraph_context(academic_profile, monkey
     contexts = []
     search = ParagraphBeam.search
 
-    def record(self, paragraph, sentences, protected, document=None):
+    def record(self, paragraph, sentences, protected, document=None, window=None):
         contexts.append(document)
-        return search(self, paragraph, sentences, protected, document)
+        return search(self, paragraph, sentences, protected, document, window)
 
     monkeypatch.setattr(ParagraphBeam, "search", record)
     result = pipeline.run(ORFIL)

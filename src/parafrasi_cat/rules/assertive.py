@@ -92,9 +92,7 @@ class AssertiveNormalizationRule(Rule):
                 transformation_type=self._definition.transformation_type,
                 confidence=self._definition.confidence,
                 semantic_risk=self._definition.semantic_risk,
-                explanation=(
-                    f"{self._definition.description} — «{before}» → «{replacement}»"
-                ),
+                explanation=(f"{self._definition.description} — «{before}» → «{replacement}»"),
                 metadata={
                     "category": self._definition.category,
                     "level": str(self._definition.level),

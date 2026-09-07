@@ -87,9 +87,7 @@ class AnaphoricFragmentRepairRule(ParagraphRule):
             # «que» ha de formar part de la relativa que depèn del nom. Acceptem
             # que pengi del verb de la relativa o d'un node intern del seu subarbre.
             relative_members = {
-                member.index
-                for clause in relatives
-                for member in analysis.subtree(clause)
+                member.index for clause in relatives for member in analysis.subtree(clause)
             }
             if relative_syntax.index not in relative_members:
                 continue
@@ -109,9 +107,7 @@ class AnaphoricFragmentRepairRule(ParagraphRule):
                 transformation_type=self._definition.transformation_type,
                 confidence=self._definition.confidence,
                 semantic_risk=self._definition.semantic_risk,
-                explanation=(
-                    f"{self._definition.description}: «{before}» → «{replacement}»"
-                ),
+                explanation=(f"{self._definition.description}: «{before}» → «{replacement}»"),
                 metadata={
                     "category": self._definition.category,
                     "level": str(self._definition.level),

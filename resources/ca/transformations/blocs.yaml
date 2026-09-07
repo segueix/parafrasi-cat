@@ -52,6 +52,46 @@ rules:
       negative:
         - "El monument fou encarregat pel mercader Oddo Altoviti."
 
+  # Un circumstancial curt sense preposició —un adverbi sol («Ara») o un
+  # sintagma nominal temporal («l'any passat»)— que obre o tanca l'oració.
+  # «blocs.complement_del_verb» no els pot veure perquè demana una preposició
+  # al davant, i són la forma més freqüent que quedava sense cap alternativa
+  # a les frases curtes.
+  #
+  # «excluded» són els adverbis que no es mouen mai: la seva posició en marca
+  # l'abast, de manera que moure'ls canvia què afirma la frase, no com ho diu.
+  # La negació ja la bloqueja el motor (block_check i is_negation); això hi
+  # afegeix el focus, la modalitat i els ordinals del discurs.
+  - rule_id: blocs.circumstancial_curt
+    engine: block_move
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.65
+    description: "Circumstancial curt sense preposició mogut d'un extrem a l'altre («Ara X.» ↔ «X ara.»)"
+    kind: circumstantial
+    min_words: 1
+    max_words: 4
+    excluded: [només, solament, únicament, tan sols, sols, fins i tot, encara, ja, tampoc,
+               almenys, si més no, sobretot, especialment, particularment, precisament,
+               justament, potser, probablement, possiblement, segurament, certament,
+               evidentment, sens dubte, realment, efectivament, en realitat, de fet,
+               primer, primerament, després, finalment, en primer lloc, en darrer lloc,
+               per tant, tanmateix, però, doncs, així doncs, en canvi, a més, també]
+    conditions:
+      syntax:
+        requires_parser: true
+    examples:
+      positive:
+        - input: "Ara l'aigua és neta."
+          output: "L'aigua és neta ara."
+        - input: "El campanar es va restaurar l'any passat."
+          output: "L'any passat, el campanar es va restaurar."
+      negative:
+        - "Només l'aigua és neta."
+        - "Tampoc hi passa ningú."
+
   - rule_id: blocs.participial_del_subjecte
     engine: block_move
     category: ordre

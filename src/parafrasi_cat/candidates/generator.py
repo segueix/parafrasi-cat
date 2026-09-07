@@ -658,7 +658,9 @@ def _architecture_id(transformation: Transformation) -> str:
         for key in ("architecture", "movement", "block_kind")
         if str(transformation.metadata.get(key, "")).strip()
     ]
-    return transformation.rule_id if not details else f"{transformation.rule_id}[{';'.join(details)}]"
+    return (
+        transformation.rule_id if not details else f"{transformation.rule_id}[{';'.join(details)}]"
+    )
 
 
 def _csv(value: object) -> tuple[str, ...]:
@@ -672,7 +674,10 @@ def _operation_records(
     rules = transformation.operation_rule_ids
     families = transformation.operation_families
     types = transformation.operation_types
-    architectures = (_architecture_id(transformation), *_csv(transformation.metadata.get(CHAINED_ARCHITECTURES_KEY)))
+    architectures = (
+        _architecture_id(transformation),
+        *_csv(transformation.metadata.get(CHAINED_ARCHITECTURES_KEY)),
+    )
     records: list[tuple[str, TransformationFamily, TransformationType, str]] = []
     for index, rule_id in enumerate(rules):
         family = families[index] if index < len(families) else transformation.family

@@ -287,9 +287,7 @@ class Candidate:
 
 def _architecture_id(rule_id: str, metadata: Mapping[str, str]) -> str:
     details = [
-        f"{key}={metadata[key]}"
-        for key in _ARCHITECTURE_KEYS
-        if str(metadata.get(key, "")).strip()
+        f"{key}={metadata[key]}" for key in _ARCHITECTURE_KEYS if str(metadata.get(key, "")).strip()
     ]
     return rule_id if not details else f"{rule_id}[{';'.join(details)}]"
 

@@ -46,6 +46,10 @@ from dataclasses import dataclass, field
 from parafrasi_cat.analyzer.analysis import Analyzer
 from parafrasi_cat.analyzer.lexicon import normalize_form
 from parafrasi_cat.analyzer.tokens import TokenKind
+from parafrasi_cat.style.adaptation import AdaptationContext
+
+NEIGHBOUR_DISTANCE = 1
+"""Distància que s'atribueix a la coincidència amb la unitat contigua del document."""
 
 WINDOW_SENTENCES = 2
 """Frases de context que es miren a cada costat de la unitat que es puntua.
@@ -289,6 +293,7 @@ class ConnectorRepetition:
         text: str,
         source_text: str = "",
         window: DocumentWindow | None = None,
+        context: AdaptationContext | None = None,
     ) -> RepetitionAssessment:
         """Repetició de connectors del text dins de la finestra, descomptant l'heretada.
 
@@ -303,7 +308,7 @@ class ConnectorRepetition:
         uses, start, end = self.window_uses(text, window)
         if not uses:
             return RepetitionAssessment()
-        candidate_pairs = self.pairs(uses, start, end)
+        candidate_pairs = self.pairs(uses, start, end) + self._boundary(own, context)
         if not candidate_pairs:
             return RepetitionAssessment(profile=tuple(use.form for use in own))
         # Sense original de referència no es pot distingir la repetició nova de la
@@ -313,7 +318,10 @@ class ConnectorRepetition:
         else:
             source_uses, source_start, source_end = uses, start, end
         current = self.severity(candidate_pairs)
-        inherited = self.severity(self.pairs(source_uses, source_start, source_end))
+        inherited = self.severity(
+            self.pairs(source_uses, source_start, source_end)
+            + self._boundary(self.uses(source_text) if source_text else own, context)
+        )
         introduced = {
             form: max(0.0, weight - inherited.get(form, 0.0)) for form, weight in current.items()
         }
@@ -325,6 +333,31 @@ class ConnectorRepetition:
                 for form, distance in candidate_pairs
             ),
         )
+
+    def _boundary(
+        self, uses: Sequence[ConnectorUse], context: AdaptationContext | None
+    ) -> tuple[tuple[str, int], ...]:
+        """Coincidència amb el connector contigu de la unitat anterior o següent.
+
+        La finestra cobreix el veïnat quan qui puntua el coneix: el paràgraf
+        anterior ja decidit i el següent encara original. Això en cobreix un
+        altre que la finestra no veu: la passada de frases, on el veïnat arriba
+        pels recomptes de l'adaptació autoral, que a partir del segon paràgraf
+        ja porten el text seleccionat. Són dos camins cap al mateix fenomen, i
+        mesurar-lo per tots dos no el cobra dues vegades: la severitat es
+        compara igual amb la de l'original.
+        """
+        if context is None or not uses:
+            return ()
+        known = self.forms
+        before = [form for form in context.before.connectors if form in known]
+        after = [form for form in context.after.connectors if form in known]
+        found: list[tuple[str, int]] = []
+        if before and before[-1] == uses[0].form:
+            found.append((uses[0].form, NEIGHBOUR_DISTANCE))
+        if after and after[0] == uses[-1].form:
+            found.append((uses[-1].form, NEIGHBOUR_DISTANCE))
+        return tuple(found)
 
 
 def connector_forms(rules: Iterable[object]) -> tuple[str, ...]:
