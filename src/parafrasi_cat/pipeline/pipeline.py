@@ -399,7 +399,8 @@ class Pipeline:
     ) -> SentenceResult:
         ctx = self._sentence_context(sentence, protected, document_text)
         max_level = self._level_for(ctx)
-        proposals, rejected = self._collect_proposals(ctx, max_level)
+        rule_counts: dict[str, int] = {}
+        proposals, rejected = self._collect_proposals(ctx, max_level, rule_counts)
         validation_ctx = ValidationContext(sentence.text, ctx.protected_spans)
         # La reparació, la validació i la puntuació es fan **abans** de repartir les
         # places: un candidat que no supera la validació no n'ha d'ocupar cap que
@@ -427,6 +428,7 @@ class Pipeline:
             notes=tuple(ctx.notes),
             opportunities=_opportunities(len(proposals), len(rejected), evaluated, best),
             generation=search.trace,
+            rule_proposals=rule_counts,
         )
 
     def _admission(
@@ -477,14 +479,19 @@ class Pipeline:
         return EvaluatedCandidate(candidate, validation, score)
 
     def _collect_proposals(
-        self, ctx: RuleContext, max_level: int | None = None
+        self, ctx: RuleContext, max_level: int | None = None,
+        counts: dict[str, int] | None = None,
     ) -> tuple[list[Transformation], list[RejectedProposal]]:
         proposals: list[Transformation] = []
         rejected: list[RejectedProposal] = []
         for rule in self._rule_set.sentence_rules:
             if max_level is not None and rule.level > max_level:
                 continue
+            if counts is not None:
+                counts[rule.rule_id] = 0
             for transformation in rule.propose(ctx):
+                if counts is not None:
+                    counts[rule.rule_id] += 1
                 reason = self._rejection_reason(transformation, ctx.text, ctx.protected_conflict)
                 if reason is None:
                     proposals.append(transformation)
@@ -556,7 +563,11 @@ class Pipeline:
         proposals: list[Transformation] = []
         rejected: list[RejectedProposal] = []
         for rule in self._rule_set.paragraph_rules:
+            if counts is not None:
+                counts[rule.rule_id] = 0
             for transformation in rule.propose(ctx):
+                if counts is not None:
+                    counts[rule.rule_id] += 1
                 reason = self._rejection_reason(transformation, ctx.text, ctx.protected_conflict)
                 if reason is None:
                     proposals.append(transformation)

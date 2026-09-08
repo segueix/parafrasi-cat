@@ -270,6 +270,9 @@ class SentenceResult(_UnitResult):
     """Quantes alternatives hi havia, quantes eren segures i què s'ha triat."""
     generation: GenerationTrace = field(default_factory=GenerationTrace)
     """Com ha anat la cerca de candidats: què s'ha generat i per què cau la resta."""
+    rule_proposals: dict[str, int] = field(default_factory=dict)
+    """Nombre de propostes de cada regla en el text inicial, abans dels filtres."""
+
 
     @property
     def changed(self) -> bool:
@@ -277,6 +280,7 @@ class SentenceResult(_UnitResult):
 
     def to_dict(self) -> dict[str, object]:
         return {
+            "rule_proposals": dict(self.rule_proposals),
             "index": self.index,
             "source_text": self.source_text,
             "span": self.span.to_dict(),

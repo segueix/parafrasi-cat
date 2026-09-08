@@ -156,6 +156,9 @@ class SentenceDraft:
     note: str = ""
     """Per què no n'hi ha tres, quan no n'hi ha tres."""
 
+    diagnostics: dict[str, object] = field(default_factory=dict)
+    """Traça de la generació i dels filtres, sense tornar a executar-los."""
+
     @property
     def n_rewrites(self) -> int:
         return sum(1 for option in self.options if not option.original)
@@ -166,6 +169,7 @@ class SentenceDraft:
             "source_text": self.source_text,
             "note": self.note,
             "n_rewrites": self.n_rewrites,
+            "diagnostics": self.diagnostics,
             "options": [option.to_dict() for option in self.options],
         }
 

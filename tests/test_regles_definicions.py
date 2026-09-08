@@ -110,6 +110,7 @@ RULE_IDS = [
     "blocs.subordinada_adverbial", "blocs.circumstancial_curt",
     "blocs.complement_del_verb", "blocs.participial_del_subjecte",
     "ordre.pero_medial_a_inicial",
+    "ordre.observacio_inicial_a_final", "ordre.observacio_inicial_a_medial",
 ]  # fmt: skip
 
 

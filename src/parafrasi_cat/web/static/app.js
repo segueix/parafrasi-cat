@@ -963,6 +963,21 @@ function crearFrase(frase) {
   const node = $("plantilla-frase").content.cloneNode(true);
   const article = node.querySelector(".frase");
   article.dataset.frase = String(frase.index);
+  if (frase.diagnostics?.messages?.length) {
+    const details = document.createElement("details");
+    details.className = "detall";
+    const summary = document.createElement("summary");
+    summary.textContent = "Per què hi ha aquestes alternatives?";
+    const list = document.createElement("ul");
+    list.className = "ajuda";
+    for (const message of frase.diagnostics.messages) {
+      const item = document.createElement("li");
+      item.textContent = message;
+      list.append(item);
+    }
+    details.append(summary, list);
+    article.append(details);
+  }
   node.querySelector(".titol-frase").textContent = `Frase ${frase.index + 1}`;
   node.querySelector(".original-frase").textContent = frase.source_text;
   const nota = node.querySelector(".nota-frase");

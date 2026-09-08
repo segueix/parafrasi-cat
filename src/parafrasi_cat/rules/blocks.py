@@ -252,6 +252,12 @@ class BlockMoveRule(Rule):
         afirma la frase segons on és («només», «no», «potser»), de manera que
         moure'l no és reordenar sinó reescriure.
         """
+        # «Com» can be mistagged as an isolated advmod in «Com es pot
+        # observar». It is not a free circumstantial: never detach it.
+        if token.pos not in {"ADV", "NOUN"} or token.text.lower() in {
+            "com", "que", "quan", "on", "si", "perquè",
+        }:
+            return None
         if token.dep == "obl:agent" or token.is_negation:
             return None
         start, end = analysis.subtree_span(token)

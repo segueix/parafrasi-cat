@@ -32,6 +32,7 @@ _MANDATORY_CONTRACTIONS = re.compile(
 )
 _DOUBLE_SPACE = re.compile(r"[^\S\n]{2,}")
 _SPACE_BEFORE_PUNCT = re.compile(r"\s[,;:.!?»)]")
+_DUPLICATED_COMMA = re.compile(r",(?:\s*,)+")
 _REPEATED_PUNCT = re.compile(r"[,;:]{2,}|\.{2}(?!\.)")
 _REPEATED_WORD = re.compile(rf"(?<!{LETTER})({LETTER}{{2,}})\s+\1(?!{LETTER})", re.IGNORECASE)
 _SPACE_AFTER_APOSTROPHE = re.compile(rf"{LETTER}['’]\s+{LETTER}")
@@ -71,6 +72,8 @@ def assess_grammar(text: str, reference: str = "") -> GrammarAssessment:
         and text.strip()[-1] not in _TERMINAL
     ):
         errors.append("falta la puntuació final de la frase")
+    for problem in _new_matches(_DUPLICATED_COMMA, text, reference):
+        errors.append(f"comes duplicades: «{problem}»")
     for problem in _new_matches(_REPEATED_WORD, text, reference):
         warnings.append(f"paraula repetida: «{problem}»")
     for problem in _new_matches(_REPEATED_PUNCT, text, reference):

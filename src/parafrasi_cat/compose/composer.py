@@ -140,6 +140,7 @@ class Composer:
             index=result.index,
             source_text=result.source_text,
             options=tuple(options),
+            diagnostics=_diagnostics(result, self._pipeline.syntax.available),
             note=_note(len(rewrites), self._wanted) + (
                 " No s’ha trobat cap alternativa estructural validada; "
                 "les alternatives disponibles són canvis locals."
@@ -160,6 +161,33 @@ class Composer:
             rules=() if original else _rule_ids(candidate),
             tokens=self._suggester.options(candidate.text, protected),
         )
+
+
+def _diagnostics(result: SentenceResult, parser_available: bool) -> dict[str, object]:
+    rejected = [e for e in result.candidates if not e.accepted]
+    structural = sum(e.accepted and e.candidate.is_structural
+                     for e in result.candidates if not e.candidate.is_identity)
+    messages = [
+        "Analitzador sintàctic disponible." if parser_available else
+        "Sense analitzador sintàctic: les regles que el necessiten no s’apliquen.",
+        f"{len(result.rule_proposals)} regles provades sobre el text inicial; "
+        f"{sum(n > 0 for n in result.rule_proposals.values())} han generat propostes.",
+        result.generation.describe(),
+        f"{structural} candidats estructurals han superat els filtres; "
+        f"{len(rejected)} candidats han estat rebutjats.",
+        *result.notes,
+    ]
+    if not any(result.rule_proposals.values()):
+        messages.append("Cap regla ha generat una proposta: cal revisar l’anàlisi o la cobertura dels patrons.")
+    if result.generation.truncated:
+        messages.append("La cerca ha arribat al límit configurat; no s’han explorat totes les combinacions.")
+    reasons = list(dict.fromkeys(
+        [r.reason for r in result.rejected_proposals] + [e.rejection_reason for e in rejected]
+    ))
+    messages.extend("Motiu de rebuig: " + reason for reason in reasons[:8])
+    return {"messages": messages, "initial_rule_proposals": result.rule_proposals,
+            "search": result.generation.to_dict(), "rejection_reasons": reasons,
+            "accepted_structural": structural, "parser_available": parser_available}
 
 
 def _identity(result: SentenceResult) -> Candidate:

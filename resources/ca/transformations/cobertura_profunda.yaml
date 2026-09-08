@@ -97,11 +97,12 @@ rules:
     pattern:
       - {start: true}
       - {text: però}
+      - {text: ",", optional: true}
       - {seq: true, group: rest, greedy: true, min_tokens: 2}
       - {sentence_end: true}
     conditions:
       groups:
-        rest: {has_finite_verb: true}
+        rest: {has_finite_verb: true, not_starts_with: [","]}
     transformation: "Tanmateix, {rest}"
     examples:
       positive:

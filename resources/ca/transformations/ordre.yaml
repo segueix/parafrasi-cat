@@ -374,3 +374,60 @@ rules:
           output: "La hipòtesi, per tant, continua oberta."
       negative:
         - "Segons l'autor, la hipòtesi continua oberta."
+
+  # Locucions metadiscursives completes: mai moure «com» tot sol.
+  - rule_id: ordre.observacio_inicial_a_final
+    engine: pattern
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.8
+    description: "Mou l'incís complet «com es pot observar/veure» al final"
+    pattern:
+      - {start: true}
+      - {seq: true, group: marker, min_tokens: 4, max_tokens: 4, no_punct: true}
+      - {text: ","}
+      - {seq: true, group: main, greedy: true, min_tokens: 3}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        marker: {starts_with: [com es pot observar, com es pot veure, com hom pot observar, com hom pot veure]}
+        main: {has_finite_verb: true, not_starts_with: [que, si, quan, perquè, ","], not_ends_with: [",", ";", ":"]}
+    transformation: "{main|cap}, {marker|lower}"
+    examples:
+      positive:
+        - input: "Com es pot observar, la torre conserva la porta."
+          output: "La torre conserva la porta, com es pot observar."
+      negative:
+        - "Com es pot observar la torre?"
+        - "Com es podria observar, la torre conserva la porta."
+
+  - rule_id: ordre.observacio_inicial_a_medial
+    engine: pattern
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.75
+    description: "Col·loca l'incís d'observació després del subjecte verificat"
+    pattern:
+      - {start: true}
+      - {seq: true, group: marker, min_tokens: 4, max_tokens: 4, no_punct: true}
+      - {text: ","}
+      - {np: true, group: subj}
+      - {seq: true, group: rest, greedy: true, min_tokens: 2}
+      - {sentence_end: true}
+    conditions:
+      syntax: {requires_parser: true}
+      groups:
+        marker: {starts_with: [com es pot observar, com es pot veure, com hom pot observar, com hom pot veure]}
+        subj: {is_subject: true, no_finite_verb: true}
+        rest: {has_finite_verb: true, not_starts_with: [",", que, i, o, ni]}
+    transformation: "{subj|cap}, {marker|lower}, {rest}"
+    examples:
+      positive:
+        - input: "Com es pot observar, la torre conserva la porta."
+          output: "La torre, com es pot observar, conserva la porta."
+      negative:
+        - "Com es pot observar la torre?"
