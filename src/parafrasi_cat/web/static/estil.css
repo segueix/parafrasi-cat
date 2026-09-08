@@ -49,31 +49,31 @@ body {
   font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-.capçalera { max-width: 1180px; margin: 0 auto; padding: 1.5rem 0 1rem; }
+.capçalera { max-width: none; margin: 0 auto; padding: 1.5rem 0 1rem; }
 .capçalera h1 { margin: 0; font-size: 1.5rem; letter-spacing: -0.01em; }
 .nota { margin: 0.35rem 0 0; color: var(--suau); max-width: 62ch; }
 
 .disposicio {
-  max-width: 1180px;
+  width: 100%;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(320px, 400px) 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
 }
 
-@media (max-width: 900px) {
-  .disposicio { grid-template-columns: 1fr; }
-}
-
 .plafó {
+  min-width: 0;
+  overflow-wrap: anywhere;
   background: var(--plafo);
   border: 1px solid var(--vora);
   border-radius: 8px;
   padding: 1.1rem;
 }
 
-.controls { position: sticky; top: 1rem; }
+.controls { position: static; }
+.controls input[type="file"] { max-width: 100%; }
+.linia, .pestanyes, .capçalera-candidat { flex-wrap: wrap; }
 
 h2 { margin: 0 0 0.9rem; font-size: 1.05rem; }
 h3 { margin: 1.4rem 0 0.5rem; font-size: 0.95rem; }
