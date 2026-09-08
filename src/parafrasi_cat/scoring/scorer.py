@@ -384,10 +384,17 @@ class CompositeScorer:
             components["pressio_reescriptura"] = round(rewrite_bonus, 4)
             parts.append(f"pressió de reescriptura {rewrite_bonus:+.3f}")
 
+        extra_words = max(0, len(candidate.text.split()) - len(candidate.source_text.split()))
+        nominal_expansion = any("nominal.verb_a_nom" in t.operation_rule_ids for t in candidate.transformations)
+        nominal_penalty = min(0.25, 0.05 * extra_words) if nominal_expansion else 0.0
+        if nominal_penalty:
+            components["nominalitzacio_feixuga"] = -round(nominal_penalty, 4)
+            parts.append(f"nominalització més llarga {-nominal_penalty:+.3f}")
         valid = not invalidating
         total = (
             gain
             - style_penalty
+            - nominal_penalty
             - grammar_penalty
             - degradation_penalty
             - rhythm_penalty

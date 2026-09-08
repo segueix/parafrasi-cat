@@ -140,6 +140,12 @@ class NominalizationRule(Rule):
             if found is None or token.kind is not TokenKind.WORD:
                 continue
             pair, form = found
+            window_start = tokens[max(0, index - 3)].span.start
+            if any(t.kind is TokenKind.CLITIC for t in tokens[max(0, index - 3):index]) or any(
+                window_start <= pronoun.span.start and pronoun.span.end <= token.span.start
+                for pronoun in ctx.sentence.pronouns
+            ):
+                continue  # el pronom feble no es pot traslladar a un nom d'acció
             if form == "inf" and (index == 0 or tokens[index - 1].lower not in _AUX):
                 continue
             if index + 1 >= len(tokens) or tokens[index + 1].kind is TokenKind.CLITIC:

@@ -26,12 +26,14 @@ FEMININES = {"restaurat": "restaurada", "publicat": "publicada", "catalogat": "c
               "editat": "editada", "inventariat": "inventariada", "transcrit": "transcrita"}
 
 
-def lower_determiner(text: str) -> str:
+def lower_determiner(text: str, proper: bool = False) -> str:
+    if not proper and text.startswith(("L'", "L’")):
+        return "l" + text[1:]
     return text[0].lower() + text[1:] if text.split()[0] in ("El", "La", "Els", "Les") else text
 
 
-def agent_phrase(text: str) -> str:
-    text = lower_determiner(text)
+def agent_phrase(text: str, proper: bool = False) -> str:
+    text = lower_determiner(text, proper)
     if text.startswith("el "):
         return "pel " + text[3:]
     if text.startswith("els "):
@@ -91,7 +93,7 @@ class VoiceRule(Rule):
             else:
                 return
             verb = "va" if obj.number == "sg" else "van"
-            after = f"{agent[0].upper() + agent[1:]} {verb} {root.lemma} {lower_determiner(left)}."
+            after = f"{agent[0].upper() + agent[1:]} {verb} {root.lemma} {lower_determiner(left, subject.pos == 'PROPN')}."
         else:
             if root.verb_form != "Inf" or obj.gender not in ("m", "f"):
                 return
@@ -107,7 +109,7 @@ class VoiceRule(Rule):
                 if part not in forms:
                     return  # cap forma triada arbitràriament entre lectures
             verb = "va" if obj.number == "sg" else "van"
-            after = f"{right[0].upper() + right[1:]} {verb} ser {part} {agent_phrase(left)}."
+            after = f"{right[0].upper() + right[1:]} {verb} ser {part} {agent_phrase(left, subject.pos == 'PROPN')}."
         span = Span(0, len(ctx.text))
         if ctx.protected_conflict(span, after) is not None:
             return

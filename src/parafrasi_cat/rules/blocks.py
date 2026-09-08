@@ -126,6 +126,13 @@ class BlockMoveRule(Rule):
         if not analysis.confident or not analysis.tokens:
             return
         text = ctx.text
+        # Evita encadenar l'avantposició d'un complement amb un incís
+        # participial que ja separa el subjecte del verb.
+        if self._kind in {"adjunct", "circumstantial"} and any(
+            t.verb_form == "Part" and t.dep in {"acl", "amod", "acl:relcl"}
+            for t in analysis.tokens
+        ):
+            return
         body_end = max((t.end for t in analysis.tokens if t.pos != "PUNCT"), default=0)
         if body_end <= 0:
             return
@@ -224,6 +231,8 @@ class BlockMoveRule(Rule):
             return None
         start, end = analysis.subtree_span(token)
         block_text = text[start:end]
+        if _leading_marker(block_text, ("per", "pel", "pels")):
+            return None  # no confondre un agent amb un circumstancial
         if not _leading_marker(block_text, self._prepositions):
             return None
         if len(block_text.split()) < self._min_words:
@@ -262,6 +271,8 @@ class BlockMoveRule(Rule):
             return None
         start, end = analysis.subtree_span(token)
         block_text = text[start:end]
+        if _leading_marker(block_text, ("per", "pel", "pels")):
+            return None  # no confondre un agent amb un circumstancial
         words = block_text.split()
         if not (self._min_words <= len(words) <= self._max_words):
             return None
