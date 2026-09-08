@@ -1,0 +1,24 @@
+description: Canvi controlat del subjecte mitjançant activa i passiva amb agent explícit.
+language: ca
+rules:
+  - rule_id: veu.activa_passiva
+    engine: voice
+    category: veu
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.8
+    description: Activa ↔ passiva al passat perifràstic, sense perdre agent ni pacient.
+    conditions:
+      syntax:
+        requires_parser: true
+    examples:
+      positive:
+        - input: "El taller va restaurar la pintura."
+          output: "La pintura va ser restaurada pel taller."
+        - input: "La pintura va ser restaurada pel taller."
+          output: "El taller va restaurar la pintura."
+      negative:
+        - "El taller no va restaurar la pintura."
+        - "El taller podria restaurar la pintura."
+        - "Tots els tallers van restaurar una pintura."

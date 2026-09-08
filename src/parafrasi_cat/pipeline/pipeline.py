@@ -563,11 +563,7 @@ class Pipeline:
         proposals: list[Transformation] = []
         rejected: list[RejectedProposal] = []
         for rule in self._rule_set.paragraph_rules:
-            if counts is not None:
-                counts[rule.rule_id] = 0
             for transformation in rule.propose(ctx):
-                if counts is not None:
-                    counts[rule.rule_id] += 1
                 reason = self._rejection_reason(transformation, ctx.text, ctx.protected_conflict)
                 if reason is None:
                     proposals.append(transformation)

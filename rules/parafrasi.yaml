@@ -6,6 +6,7 @@ description: Totes les famílies de regles de parafraseig (lèxic, connectors, v
 max_semantic_risk: medium
 min_confidence: 0.55
 include:
+  - resources/ca/transformations/veu.yaml
   - resources/ca/transformations/substitucions_lexiques.yaml
   - resources/ca/transformations/connectors_equivalents.yaml
   - resources/ca/transformations/verbal.yaml

@@ -1,0 +1,24 @@
+# sent_id = 3LB-CAT-06010100-24-s3
+# text = La remodelació ha costat 110 milions de pessetes.
+# orig_file_sentence 002#10
+1	La	el	DET	da0fs0	Definite=Def|Gender=Fem|Number=Sing|PronType=Art	2	det	2:det	_
+2	remodelació	remodelació	NOUN	ncfs000	Gender=Fem|Number=Sing	4	nsubj	4:nsubj	ArgTem=arg1:tem
+3	ha	haver	AUX	vaip3s0	Mood=Ind|Number=Sing|Person=3|Tense=Pres|VerbForm=Fin	4	aux	4:aux	_
+4	costat	costar	VERB	vmp00sm	Gender=Masc|Number=Sing|Tense=Past|VerbForm=Part	0	root	0:root	_
+5	110	110	NUM	_	NumForm=Digit|NumType=Card	6	nummod	6:nummod	Entity=(NOCOREF:Spec.number-number-2-gstype:spec
+6	milions	milió	NOUN	ncmp000	Gender=Masc|Number=Plur	4	obj	4:obj	ArgTem=arg2:ext
+7	de	de	ADP	sps00	_	8	case	8:case	_
+8	pessetes	pesseta	NOUN	zm	Gender=Fem|Number=Plur	6	nmod	6:nmod	Currency=Yes|Entity=(NOCOREF:Spec.number-number-1-gstype:spec)NOCOREF:Spec.number)|SpaceAfter=No
+9	.	.	PUNCT	fp	PunctType=Peri	4	punct	4:punct	_
+
+# sent_id = 3LB-CAT-06010100-28-s2
+# text = Aquesta situació ha durat dues hores.
+# orig_file_sentence 002#54
+1	Aquesta	aquest	DET	dd0fs0	Gender=Fem|Number=Sing|PronType=Dem	2	det	2:det	_
+2	situació	situació	NOUN	ncfs000	Gender=Fem|Number=Sing	4	nsubj	4:nsubj	ArgTem=arg1:tem
+3	ha	haver	AUX	vaip3s0	Mood=Ind|Number=Sing|Person=3|Tense=Pres|VerbForm=Fin	4	aux	4:aux	_
+4	durat	durar	VERB	vmp00sm	Gender=Masc|Number=Sing|Tense=Past|VerbForm=Part	0	root	0:root	_
+5	dues	dos	NUM	dn0fp0	Gender=Fem|Number=Plur|NumForm=Word|NumType=Card	6	nummod	6:nummod	Entity=(NOCOREF:Spec.number-number-2-gstype:spec
+6	hores	hora	NOUN	ncfp000	Gender=Fem|Number=Plur	4	obj	4:obj	SpaceAfter=No|ArgTem=arg2:ext|Entity=NOCOREF:Spec.number)
+7	.	.	PUNCT	fp	PunctType=Peri	4	punct	4:punct	_
+

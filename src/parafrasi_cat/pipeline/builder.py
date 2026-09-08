@@ -43,6 +43,7 @@ from parafrasi_cat.style.observations import StyleResources
 from parafrasi_cat.style.profile import load_style_profile
 from parafrasi_cat.syntax.analysis import CachedSyntax, NullSyntax, SyntaxProvider
 from parafrasi_cat.syntax.spacy_parser import SpacySyntax
+from parafrasi_cat.syntax.freeling_parser import FreeLingSyntax, PreferredSyntax
 from parafrasi_cat.validation.agreement import AgreementValidator
 from parafrasi_cat.validation.base import Validator
 from parafrasi_cat.validation.conditional_scope import ConditionalScopeValidator
@@ -289,10 +290,16 @@ def build_syntax_provider(
 ) -> SyntaxProvider:
     if config.syntax in ("none", "null", ""):
         return NullSyntax()
+    if config.syntax in ("auto", "freeling"):
+        freeling = FreeLingSyntax()
+        if freeling.available:
+            return PreferredSyntax(freeling, SpacySyntax(morphology=morphology)) if config.syntax == "auto" else freeling
+        if config.syntax == "freeling":
+            return NullSyntax()
     if config.syntax in ("auto", "spacy"):
         parser = SpacySyntax(morphology=morphology)
         return parser if parser.available else NullSyntax()
-    raise ConfigError(f"Analitzador sintàctic desconegut: «{config.syntax}» (auto, spacy, none)")
+    raise ConfigError(f"Analitzador sintàctic desconegut: «{config.syntax}» (auto, freeling, spacy, none)")
 
 
 def build_languagetool_validator(

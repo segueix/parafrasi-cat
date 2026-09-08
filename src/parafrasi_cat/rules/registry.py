@@ -23,6 +23,7 @@ from parafrasi_cat.rules.lexical import LexicalSubstitutionRule
 from parafrasi_cat.rules.nominal import nominalization_rule_from_params
 from parafrasi_cat.rules.pattern_rule import HintsCache, PatternRule
 from parafrasi_cat.rules.relative import RelativeArchitectureRule
+from parafrasi_cat.rules.voice import VoiceRule
 from parafrasi_cat.rules.verbal import periphrastic_rule_from_params
 
 RuleFactory = Callable[[str, Mapping[str, object], ProjectPaths], AnyRule]
@@ -134,6 +135,10 @@ def _block_move_factory(rule_id: str, params: Mapping[str, object], paths: Proje
     return BlockMoveRule(definition_from_params(params, rule_id))
 
 
+def _voice_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPaths) -> AnyRule:
+    return VoiceRule(definition_from_params(params, rule_id))
+
+
 def _relative_factory(rule_id: str, params: Mapping[str, object], paths: ProjectPaths) -> AnyRule:
     del paths
     return RelativeArchitectureRule(definition_from_params(params, rule_id))
@@ -158,6 +163,7 @@ def _anaphoric_fragment_factory(
 
 def default_registry() -> RuleRegistry:
     registry = RuleRegistry()
+    registry.register("voice", _voice_factory, description="Activa ↔ passiva amb agent explícit")
     registry.register(
         "lexical.substitution",
         _lexical_factory,

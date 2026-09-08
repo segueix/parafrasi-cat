@@ -31,6 +31,7 @@ DIMENSIONS: tuple[str, ...] = (
     "grau_de_canvi",
     "grau_superficial",
     "grau_estructural",
+    "structural_change_score",
     "qualitat_sintactica",
     "ritme_fusio",
     "assertivitat",
@@ -58,6 +59,7 @@ _DIMENSION_LABELS = {
     "grau_de_canvi": "grau de canvi",
     "grau_superficial": "canvi superficial",
     "grau_estructural": "reredacció estructural",
+    "structural_change_score": "canvi sintàctic net",
     "qualitat_sintactica": "qualitat sintàctica",
     "ritme_fusio": "ritme de la fusió",
     "assertivitat": "llenguatge assertiu",
@@ -300,8 +302,9 @@ class CompositeScorer:
         change = candidate.change_ratio()
         dimensions["grau_de_canvi"] = round(change, 4)
         dimensions["grau_superficial"] = candidate.surface_degree()
-        degree = candidate.structural_degree()
+        degree = candidate.structural_change_score
         dimensions["grau_estructural"] = degree
+        dimensions["structural_change_score"] = degree
 
         degradation_penalty = 0.0
         degradation_reasons: tuple[str, ...] = ()

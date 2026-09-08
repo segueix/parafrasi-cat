@@ -138,6 +138,7 @@ class DraftOption:
             "original": self.original,
             "signature": self.signature,
             "structural_degree": self.structural_degree,
+            "structural_change_score": self.structural_degree,
             "change_ratio": self.change_ratio,
             "summary": self.summary,
             "rules": list(self.rules),

@@ -153,7 +153,22 @@ class Candidate:
         per composició profunda, totes les famílies conegudes continuen comptant;
         la mateixa família manté rendiments decreixents.
         """
+        # Una anada i tornada nominal no és canvi estructural net.
+        def skeleton(text: str) -> str:
+            text = " ".join(text.replace("’", "'").lower().split())
+            for variants, base in ((r"\b(?:dur a terme|realitzar)\b", "fer"),
+                                   (r"\b(?:duu a terme|realitza)\b", "fa"),
+                                   (r"\b(?:duen a terme|realitzen)\b", "fan")):
+                text = re.sub(variants, base, text)
+            return text
+        if skeleton(self.source_text) == skeleton(self.text):
+            return 0.0
         return _combine(self._impacts(structural=True))
+
+    @property
+    def structural_change_score(self) -> float:
+        """Àlies públic del grau estructural; no duplica el bonus de selecció."""
+        return self.structural_degree()
 
     def surface_degree(self) -> float:
         """Grau de canvi superficial (0-1): mots, connectors, puntuació i flexió."""
@@ -281,6 +296,7 @@ class Candidate:
             "families": [f.value for f in self.families],
             "structural_families": [f.value for f in self.structural_families],
             "structural_degree": self.structural_degree(),
+            "structural_change_score": self.structural_change_score,
             "surface_degree": self.surface_degree(),
         }
 
