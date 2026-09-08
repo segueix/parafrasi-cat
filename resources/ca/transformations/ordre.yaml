@@ -431,3 +431,64 @@ rules:
           output: "La torre, com es pot observar, conserva la porta."
       negative:
         - "Com es pot observar la torre?"
+
+  # Concessió nominal completa. Exemples propis; cap frase del corpus distribuïda.
+  - rule_id: ordre.concessio_nominal_inicial_a_final
+    engine: pattern
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.75
+    description: "Mou una concessió nominal completa al final d'una oració simple"
+    pattern:
+      - {start: true}
+      - {seq: true, group: comp, min_tokens: 3, max_tokens: 16, no_comma: true}
+      - {text: ","}
+      - {seq: true, group: main, greedy: true, min_tokens: 3, no_comma: true}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        comp:
+          starts_with: [tot i el, tot i la, tot i els, tot i les, "tot i l'", malgrat el, malgrat la, malgrat els, malgrat les, "malgrat l'"]
+          no_finite_verb: true
+          no_relative: true
+        main: {has_finite_verb: true, no_relative: true, not_starts_with: [que, si, quan, i, o, ni, ","], not_ends_with: [",", ";", ":"]}
+    transformation: "{main|cap}, {comp|lower}"
+    examples:
+      positive:
+        - input: "Tot i la pluja, la porta és oberta."
+          output: "La porta és oberta, tot i la pluja."
+      negative:
+        - "Tot i que plou, la porta és oberta."
+        - "Tot i la pluja, si neva, la gent marxarà."
+
+  - rule_id: ordre.concessio_nominal_final_a_inicial
+    engine: pattern
+    category: ordre
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.75
+    description: "Avantposa una concessió nominal delimitada per una coma"
+    pattern:
+      - {start: true}
+      - {seq: true, group: main, min_tokens: 3, no_comma: true}
+      - {text: ","}
+      - {seq: true, group: comp, greedy: true, min_tokens: 3, max_tokens: 16, no_comma: true}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        comp:
+          starts_with: [tot i el, tot i la, tot i els, tot i les, "tot i l'", malgrat el, malgrat la, malgrat els, malgrat les, "malgrat l'"]
+          no_finite_verb: true
+          no_relative: true
+        main: {has_finite_verb: true, no_relative: true, not_starts_with: [que, si, quan, encara que, tot i que, perquè], not_ends_with: [i, o, ni, que]}
+    transformation: "{comp|cap}, {main|lower}"
+    examples:
+      positive:
+        - input: "La porta és oberta, tot i la pluja."
+          output: "Tot i la pluja, la porta és oberta."
+      negative:
+        - "La porta és oberta tot i la pluja."
+        - "La porta és oberta, tot i que plou."

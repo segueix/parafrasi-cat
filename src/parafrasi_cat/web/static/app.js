@@ -940,9 +940,10 @@ function pintarRedaccions(article, frase) {
       refrescarParagraf();
     });
     element.classList.toggle("triada", radio.checked);
+    const modificat = textEditat(frase.index, opcio) !== opcio.text;
     node.querySelector(".etiqueta-redaccio").textContent = opcio.original
-      ? "Text original"
-      : opcio.summary;
+      ? (modificat ? "Original amb canvis manuals · pendent de revisió" : "Text original")
+      : `${opcio.summary} · ${modificat ? "canvis manuals pendents de revisió" : "filtres automàtics superats"}`;
     pintarText(node.querySelector(".text-redaccio"), frase, opcio);
     llista.append(node);
   }

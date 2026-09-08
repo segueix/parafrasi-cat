@@ -1,0 +1,26 @@
+{
+  "parafraseja": {
+    "homepage": "https://huggingface.co/datasets/projecte-aina/Parafraseja",
+    "license": "CC-BY-NC-ND-4.0",
+    "attribution": "Projecte AINA, Barcelona Supercomputing Center (BSC), Generalitat de Catalunya",
+    "revision": "0f56ee42feeede263e251006d80d7de43b9527cd",
+    "url_template": "https://huggingface.co/datasets/projecte-aina/Parafraseja/resolve/{revision}/OLD/{file}",
+    "files": {"train": "parafraseja_train.jsonl", "validation": "parafraseja_validation.jsonl", "test": "parafraseja_test.jsonl"}
+  },
+  "paws-ca": {
+    "homepage": "https://huggingface.co/datasets/projecte-aina/PAWS-ca",
+    "license": "CC-BY-4.0",
+    "attribution": "Projecte AINA, BSC, Generalitat de Catalunya; PAWS original: Google LLC",
+    "revision": "4b5077ecb12717dcddb3f3476b3215af9dadd6e0",
+    "url_template": "https://huggingface.co/datasets/projecte-aina/PAWS-ca/resolve/{revision}/OLD/{file}",
+    "files": {"train": "train.json", "validation": "dev_2k.json", "test": "test_2k.json"}
+  },
+  "ancora": {
+    "homepage": "https://github.com/UniversalDependencies/UD_Catalan-AnCora",
+    "license": "CC-BY-4.0",
+    "attribution": "AnCora (Universitat de Barcelona); conversió Universal Dependencies. Taulé, Martí i Recasens (2008)",
+    "revision": "7f3d23e85abc0656e8e88535d28174b030eb4d20",
+    "url_template": "https://raw.githubusercontent.com/UniversalDependencies/UD_Catalan-AnCora/{revision}/{file}",
+    "files": {"train": "ca_ancora-ud-train.conllu", "validation": "ca_ancora-ud-dev.conllu", "test": "ca_ancora-ud-test.conllu"}
+  }
+}

@@ -142,7 +142,7 @@ class Composer:
             options=tuple(options),
             diagnostics=_diagnostics(result, self._pipeline.syntax.available),
             note=_note(len(rewrites), self._wanted) + (
-                " No s’ha trobat cap alternativa estructural validada; "
+                " No s’ha trobat cap alternativa estructural que superi els filtres automàtics; "
                 "les alternatives disponibles són canvis locals."
                 if rewrites and not any(e.candidate.is_structural for e in rewrites) else ""
             ),
@@ -256,15 +256,15 @@ def _note(found: int, wanted: int) -> str:
         return ""
     if found == 0:
         return (
-            "El motor no ha trobat cap alternativa validada d'aquesta frase. Pots "
+            "El motor no ha trobat cap alternativa que superi els filtres automàtics d'aquesta frase. Pots "
             "canviar-hi paraules i connectors clicant-los."
         )
     return (
-        f"El motor només ha trobat {found} alternativa validada d'aquesta frase "
+        f"El motor només ha trobat {found} alternativa que supera els filtres automàtics d'aquesta frase "
         f"de les {wanted} demanades. La resta de canvis els pots fer clicant les paraules."
         if found == 1
         else (
-            f"El motor només ha trobat {found} alternatives validades d'aquesta frase "
+            f"El motor només ha trobat {found} alternatives que superen els filtres automàtics d'aquesta frase "
             f"de les {wanted} demanades. La resta de canvis els pots fer clicant les paraules."
         )
     )

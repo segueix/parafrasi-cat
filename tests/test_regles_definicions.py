@@ -111,6 +111,7 @@ RULE_IDS = [
     "blocs.complement_del_verb", "blocs.participial_del_subjecte",
     "ordre.pero_medial_a_inicial",
     "ordre.observacio_inicial_a_final", "ordre.observacio_inicial_a_medial",
+    "ordre.concessio_nominal_inicial_a_final", "ordre.concessio_nominal_final_a_inicial",
 ]  # fmt: skip
 
 

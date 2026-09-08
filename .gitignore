@@ -43,3 +43,6 @@ vendor/
 .vscode/
 *.swp
 .DS_Store
+
+# Corpus externs i revisions locals: es conserva la procedència, no es publiquen dades.
+resources/ca/paraphrases/generated/
