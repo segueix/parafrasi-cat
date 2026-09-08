@@ -60,6 +60,7 @@ STATIC_FILES: dict[str, str] = {
     "index.html": "text/html; charset=utf-8",
     "entrada.html": "text/html; charset=utf-8",
     "app.js": "text/javascript; charset=utf-8",
+    "composicio.js": "text/javascript; charset=utf-8",
     "entrada.js": "text/javascript; charset=utf-8",
     "estil.css": "text/css; charset=utf-8",
 }

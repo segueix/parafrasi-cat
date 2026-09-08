@@ -22,6 +22,7 @@ const composicio = {
   triada: new Map(),
   edicions: new Map(),
   fetes: new Map(),
+  manuals: new Map(),
   obert: null,
 };
 
@@ -876,7 +877,7 @@ function opcioTriada(frase) {
 function textActual(frase) {
   const feta = composicio.fetes.get(frase.index);
   if (feta !== undefined) return feta;
-  return textEditat(frase.index, opcioTriada(frase));
+  return composicio.manuals.get(frase.index) ?? textEditat(frase.index, opcioTriada(frase));
 }
 
 function muntarParagraf() {
@@ -958,6 +959,81 @@ function pintarFrase(frase) {
   article.querySelector(".fet").hidden = feta;
   article.querySelector(".refes").hidden = !feta;
   pintarRedaccions(article, frase);
+  const editor = article.querySelector(".editor-frase textarea");
+  if (editor && !composicio.manuals.has(frase.index)) editor.value = textActual(frase);
+  article.querySelectorAll(".editor-frase textarea, .editor-frase button").forEach(el => { el.disabled = feta; });
+}
+
+function afegirComprovacioPuntuacio(editor, contenidor) {
+  const boto = document.createElement("button");
+  boto.type = "button";
+  boto.className = "secundari";
+  boto.textContent = "Comprova la puntuació";
+  const resposta = document.createElement("div");
+  resposta.className = "ajuda";
+  resposta.setAttribute("role", "status");
+  editor.addEventListener("input", () => resposta.replaceChildren());
+  boto.addEventListener("click", () => {
+    resposta.replaceChildren();
+    const original = editor.value;
+    const proposta = EinesComposicio.puntuacio(original);
+    const nota = document.createElement("p");
+    nota.textContent = proposta === original
+      ? "Comprovació bàsica: cap canvi proposat. No avalua totes les comes ni la sintaxi."
+      : "Proposta de puntuació bàsica (espais i comes duplicades). Revisa-la abans d’aplicar-la:";
+    resposta.append(nota);
+    if (proposta === original) return;
+    const vista = document.createElement("p");
+    vista.className = "text-bloc";
+    vista.textContent = proposta;
+    const aplicar = document.createElement("button");
+    aplicar.type = "button";
+    aplicar.textContent = "Aplica la puntuació proposada";
+    aplicar.addEventListener("click", () => {
+      if (editor.value !== original) return;
+      editor.value = proposta;
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    resposta.append(vista, aplicar);
+  });
+  contenidor.append(boto, resposta);
+}
+
+function crearEditorFrase(article, frase) {
+  const caixa = document.createElement("div");
+  caixa.className = "editor-frase";
+  const boto = document.createElement("button");
+  boto.type = "button";
+  boto.className = "secundari";
+  boto.textContent = "Fusiona els canvis en verd";
+  const etiqueta = document.createElement("label");
+  etiqueta.htmlFor = `editor-frase-${frase.index}`;
+  etiqueta.textContent = "Redacció editable";
+  const editor = document.createElement("textarea");
+  editor.id = etiqueta.htmlFor;
+  editor.rows = 4;
+  editor.value = textActual(frase);
+  const nota = document.createElement("p");
+  nota.className = "ajuda";
+  nota.setAttribute("role", "status");
+  nota.textContent = "La fusió manté l’ordre de la redacció seleccionada. Els canvis incompatibles es mostren per resoldre’ls manualment.";
+  editor.addEventListener("input", () => {
+    composicio.manuals.set(frase.index, editor.value);
+    refrescarParagraf();
+  });
+  boto.addEventListener("click", () => {
+    if (composicio.manuals.has(frase.index) && !window.confirm("Vols substituir l’esborrany editable per una nova fusió?")) return;
+    const edicions = new Map(frase.options.map(o => [o.option_id, composicio.edicions.get(clauEdicio(frase.index, o.option_id))]));
+    const resultat = EinesComposicio.fusionar(opcioTriada(frase), frase.options, edicions);
+    editor.value = resultat.text;
+    editor.dispatchEvent(new Event("input", { bubbles: true }));
+    nota.textContent = `${resultat.aplicats} canvis fusionats. ` + (resultat.pendents.length
+      ? `Pendents de resoldre manualment: ${resultat.pendents.join("; ")}.`
+      : "Revisa el sentit i la concordança abans de prémer Fet.");
+  });
+  caixa.append(boto, etiqueta, editor, nota);
+  afegirComprovacioPuntuacio(editor, caixa);
+  article.querySelector(".accions-frase").before(caixa);
 }
 
 function crearFrase(frase) {
@@ -985,7 +1061,7 @@ function crearFrase(frase) {
   nota.textContent = frase.note;
   nota.hidden = !frase.note;
   node.querySelector(".fet").addEventListener("click", () => {
-    composicio.fetes.set(frase.index, textEditat(frase.index, opcioTriada(frase)));
+    composicio.fetes.set(frase.index, textActual(frase));
     pintarFrase(frase);
     refrescarParagraf();
   });
@@ -994,6 +1070,7 @@ function crearFrase(frase) {
     pintarFrase(frase);
     refrescarParagraf();
   });
+  crearEditorFrase(article, frase);
   $("frases").append(node);
   pintarFrase(frase);
 }
@@ -1072,6 +1149,7 @@ function mostrarComposicio(esborrany) {
   composicio.triada = new Map();
   composicio.edicions = new Map();
   composicio.fetes = new Map();
+  composicio.manuals = new Map();
   tancarDesplegable();
   $("compon-sense").hidden = true;
   $("compon-resultat").hidden = false;
@@ -1195,3 +1273,5 @@ async function iniciar() {
 }
 
 document.addEventListener("DOMContentLoaded", iniciar);
+
+afegirComprovacioPuntuacio($("compon-final"), $("compon-final").parentElement);
