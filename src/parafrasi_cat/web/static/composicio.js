@@ -180,6 +180,19 @@ const EinesComposicio = (() => {
     return { ...instant };
   }
 
+  function referenciesAssistides(frase) {
+    const original = typeof frase?.source_text === "string" ? frase.source_text : "";
+    const reformulacions = (Array.isArray(frase?.options) ? frase.options : [])
+      .filter(opcio => opcio && typeof opcio.text === "string" && !opcio.original)
+      .map((opcio, index) => ({
+        option_id: opcio.option_id || "",
+        label: `Reformulació ${index + 1}`,
+        summary: typeof opcio.summary === "string" ? opcio.summary : "",
+        text: opcio.text,
+      }));
+    return { original, reformulacions };
+  }
+
   return {
     fusionar,
     puntuacio,
@@ -188,6 +201,7 @@ const EinesComposicio = (() => {
     creaEstatAssistit,
     registraAssistit,
     mouHistorialAssistit,
+    referenciesAssistides,
   };
 })();
 
@@ -198,14 +212,35 @@ if (typeof window !== "undefined") {
     const estatsAssistits = new Map();
     const estil = document.createElement("style");
     estil.textContent = `
-      .reescriptura-assistida { background: var(--plafo); border: 1px solid var(--vora); border-radius: 6px; margin: .7rem 0; padding: .75rem; }
-      .reescriptura-assistida h5 { color: var(--accent); font-size: 1rem; margin: 0 0 .45rem; }
-      .reescriptura-assistida .original-assistit { background: var(--fons); border-left: 3px solid var(--vora); color: var(--text); margin: .35rem 0 .6rem; padding: .45rem .6rem; }
-      .reescriptura-assistida textarea { width: 100%; box-sizing: border-box; }
+      .reescriptura-assistida { background: var(--plafo); border: 1px solid var(--vora); border-radius: 8px; margin: .9rem 0; padding: .9rem; }
+      .reescriptura-assistida h5 { color: var(--accent); font-size: 1.05rem; margin: 0; }
+      .reescriptura-assistida .introduccio-assistida { color: var(--suau); font-size: .88em; margin: .25rem 0 .75rem; }
+      .espai-assistit { display: grid; gap: .9rem; grid-template-columns: minmax(19rem, .9fr) minmax(28rem, 1.1fr); align-items: start; }
+      .referencies-assistides { background: var(--fons); border: 1px solid var(--vora); border-radius: 7px; max-height: min(62vh, 42rem); overflow: auto; padding: .65rem; }
+      .cap-referencies { align-items: baseline; display: flex; gap: .5rem; justify-content: space-between; margin: 0 0 .5rem; }
+      .cap-referencies h6, .taller-assistit h6 { color: var(--accent); font-size: .92rem; margin: 0; }
+      .comptador-referencies { color: var(--suau); font-size: .78em; white-space: nowrap; }
+      .referencia-assistida { background: var(--plafo); border: 1px solid var(--vora); border-radius: 6px; margin: 0 0 .55rem; padding: .55rem .65rem; }
+      .referencia-assistida:last-child { margin-bottom: 0; }
+      .referencia-original { border-left: 4px solid var(--accent); position: sticky; top: -.65rem; z-index: 2; box-shadow: 0 2px 7px rgba(0, 0, 0, .08); }
+      .referencia-sistema { border-left: 4px solid var(--alternativa); }
+      .referencia-etiqueta { align-items: baseline; display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .28rem; }
+      .referencia-etiqueta strong { color: var(--text); font-size: .82em; }
+      .referencia-resum { color: var(--suau); font-size: .75em; }
+      .referencia-text { color: var(--text); line-height: 1.5; margin: 0; }
+      .sense-reformulacions { color: var(--suau); font-size: .84em; margin: .45rem 0 0; }
+      .taller-assistit { align-self: start; background: var(--plafo); border: 1px solid var(--vora); border-radius: 7px; padding: .75rem; position: sticky; top: .75rem; }
+      .taller-assistit .etiqueta-editor-assistit { display: block; font-weight: 600; margin: .5rem 0 .35rem; }
+      .reescriptura-assistida textarea { box-sizing: border-box; min-height: 8.5rem; resize: vertical; width: 100%; }
       .reescriptura-assistida .barra-assistida, .reescriptura-assistida .suggeriments-assistits { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .45rem; }
       .reescriptura-assistida .suggeriment-assistit { background: var(--alternativa-fons); border: 1px solid var(--alternativa); color: var(--alternativa); }
       .reescriptura-assistida .suggeriment-assistit:hover, .reescriptura-assistida .suggeriment-assistit:focus-visible { background: var(--seleccio-fons); }
-      .reescriptura-assistida .nota-assistida { color: var(--suau); font-size: .86em; margin: .45rem 0 0; }
+      .reescriptura-assistida .nota-assistida { color: var(--suau); font-size: .86em; margin: .55rem 0 0; }
+      @media (max-width: 960px) {
+        .espai-assistit { grid-template-columns: 1fr; }
+        .referencies-assistides { max-height: 24rem; }
+        .taller-assistit { position: static; }
+      }
     `;
     document.head.append(estil);
 
@@ -273,24 +308,74 @@ if (typeof window !== "undefined") {
       actualitzaSuggeriments(article, frase);
     }
 
+    function creaTargetaReferencia(label, text, resum, original) {
+      const targeta = document.createElement("article");
+      targeta.className = `referencia-assistida ${original ? "referencia-original" : "referencia-sistema"}`;
+      const cap = document.createElement("div");
+      cap.className = "referencia-etiqueta";
+      const nom = document.createElement("strong");
+      nom.textContent = label;
+      cap.append(nom);
+      if (resum) {
+        const detall = document.createElement("span");
+        detall.className = "referencia-resum";
+        detall.textContent = resum;
+        cap.append(detall);
+      }
+      const par = document.createElement("p");
+      par.className = "referencia-text";
+      par.textContent = text;
+      targeta.append(cap, par);
+      return targeta;
+    }
+
     function crearAssistida(article, frase) {
       if (article.querySelector(".reescriptura-assistida")) return;
       const estat = estatDe(frase);
+      const referencies = EinesComposicio.referenciesAssistides(frase);
       const caixa = document.createElement("section");
       caixa.className = "reescriptura-assistida";
       const titol = document.createElement("h5");
       titol.textContent = "Reescriptura assistida";
-      const originalEtiqueta = document.createElement("strong");
-      originalEtiqueta.textContent = "Frase original";
-      const original = document.createElement("p");
-      original.className = "original-assistit";
-      original.textContent = frase.source_text;
+      const introduccio = document.createElement("p");
+      introduccio.className = "introduccio-assistida";
+      introduccio.textContent = "Consulta l'original i totes les reformulacions mentre redactes la teva versió, sense perdre de vista l'editor.";
+
+      const espai = document.createElement("div");
+      espai.className = "espai-assistit";
+      const referencia = document.createElement("aside");
+      referencia.className = "referencies-assistides";
+      referencia.setAttribute("aria-label", "Textos de referència per a la reescriptura");
+      const capReferencies = document.createElement("div");
+      capReferencies.className = "cap-referencies";
+      const titolReferencies = document.createElement("h6");
+      titolReferencies.textContent = "Textos de referència";
+      const comptador = document.createElement("span");
+      comptador.className = "comptador-referencies";
+      comptador.textContent = `${referencies.reformulacions.length} reformulació${referencies.reformulacions.length === 1 ? "" : "ns"}`;
+      capReferencies.append(titolReferencies, comptador);
+      referencia.append(capReferencies, creaTargetaReferencia("Original", referencies.original, "", true));
+      for (const reformulacio of referencies.reformulacions) {
+        referencia.append(creaTargetaReferencia(reformulacio.label, reformulacio.text, reformulacio.summary, false));
+      }
+      if (!referencies.reformulacions.length) {
+        const buit = document.createElement("p");
+        buit.className = "sense-reformulacions";
+        buit.textContent = "El sistema no ha generat cap reformulació addicional per a aquesta frase.";
+        referencia.append(buit);
+      }
+
+      const taller = document.createElement("div");
+      taller.className = "taller-assistit";
+      const titolTaller = document.createElement("h6");
+      titolTaller.textContent = "La teva redacció";
       const etiqueta = document.createElement("label");
+      etiqueta.className = "etiqueta-editor-assistit";
       etiqueta.htmlFor = `assistida-frase-${frase.index}`;
       etiqueta.textContent = "Reescriu-la manualment";
       const editor = document.createElement("textarea");
       editor.id = etiqueta.htmlFor;
-      editor.rows = 3;
+      editor.rows = 5;
       editor.value = estat.text;
       editor.autocomplete = "off";
       editor.spellcheck = true;
@@ -378,7 +463,9 @@ if (typeof window !== "undefined") {
       });
 
       barra.append(desfer, refer, utilitza, desferTransferencia);
-      caixa.append(titol, originalEtiqueta, original, etiqueta, editor, suggeriments, barra, nota);
+      taller.append(titolTaller, etiqueta, editor, suggeriments, barra, nota);
+      espai.append(referencia, taller);
+      caixa.append(titol, introduccio, espai);
       const editable = article.querySelector(".editor-frase");
       if (editable) editable.after(caixa);
       actualitzaSuggeriments(article, frase);

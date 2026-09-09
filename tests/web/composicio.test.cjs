@@ -8,6 +8,7 @@ const {
   creaEstatAssistit,
   registraAssistit,
   mouHistorialAssistit,
+  referenciesAssistides,
 } = require('../../src/parafrasi_cat/web/static/composicio.js');
 const base = { option_id: 'a', text: 'La porta és oberta.', tokens: [
   { text: 'porta', start: 3, end: 8 }, { text: 'oberta', start: 12, end: 18 }
@@ -92,4 +93,24 @@ test('estat assistit conserva historial independent amb desfer i refer', () => {
   assert.deepEqual(mouHistorialAssistit(una, -1), { text: 'El taller', cursor: 9 });
   assert.equal(dues.text, 'La pintura');
   assert.deepEqual(mouHistorialAssistit(una, 1), { text: 'El taller va restaurar', cursor: 22 });
+});
+
+test('referències assistides separen original i mostren totes les reformulacions del sistema', () => {
+  const frase = {
+    source_text: 'La pintura va ser restaurada pel taller.',
+    options: [
+      { option_id: 'o', original: true, text: 'La pintura va ser restaurada pel taller.' },
+      { option_id: 'a', original: false, summary: 'veu activa', text: 'El taller va restaurar la pintura.' },
+      { option_id: 'b', original: false, summary: 'temps simple', text: 'El taller restaurà la pintura.' },
+      { option_id: 'c', original: false, summary: 'ordre alternatiu', text: 'La pintura, el taller la va restaurar.' },
+    ],
+  };
+  assert.deepEqual(referenciesAssistides(frase), {
+    original: 'La pintura va ser restaurada pel taller.',
+    reformulacions: [
+      { option_id: 'a', label: 'Reformulació 1', summary: 'veu activa', text: 'El taller va restaurar la pintura.' },
+      { option_id: 'b', label: 'Reformulació 2', summary: 'temps simple', text: 'El taller restaurà la pintura.' },
+      { option_id: 'c', label: 'Reformulació 3', summary: 'ordre alternatiu', text: 'La pintura, el taller la va restaurar.' },
+    ],
+  });
 });
