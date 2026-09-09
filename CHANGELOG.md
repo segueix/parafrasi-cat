@@ -5,6 +5,52 @@ projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
 ## Pendent de publicació
 
+### Construccions que quedaven bloquejades (segona entrega)
+
+**Identificació darrere dels dos punts**
+(`presentatiu.hi_ha_np_amb_aposicio_a_identificacio`, nivell 3). «Hi ha X que P:
+N» presenta X, l'atribueix P i després diu quin és. Quan l'analitzador confirma
+que N és **aposició de X** —i no una explicació, una enumeració ni un comentari—,
+la frase es pot dir com una identificació directa:
+
+```
+Però hi ha una peça que no encaixa tan fàcilment: l'orfil.
+→ Però l'orfil és una peça que no encaixa tan fàcilment.
+```
+
+La condició de patró nova `apposition_of: <grup>` és el que verifica la
+identificació: sense una relació `appos` que pengi del sintagma presentat, no
+es proposa res. Amb «Hi ha un rei que va regnar al segle XV: el Magnànim.»
+l'analitzador penja l'aposició de «segle» i la regla calla: és ambigüitat, no
+manca de cobertura.
+
+**Reflexius lligats al seu verb.** L'adaptador no llegia `Reflex` del model, de
+manera que un «es» de «quan es consolida» —lligat al seu propi verb, sense cap
+antecedent fora del bloc— bloquejava el moviment igual que un pronom acusatiu
+com el «el» de «el fan transparent», que sí que assenyala enfora.
+`SyntaxToken.reflexive` recull ara el tret i `SentenceSyntax.bound_reflexives`
+allibera **només** els reflexius que tenen el verb dins del bloc, amb anàlisi
+fiable i sense endevinar-ne cap. La resta de restriccions sobre pronoms es
+mantenen intactes.
+
+**Coordinacions que no es poden partir.** El canvi anterior va destapar que el
+motor movia un sol membre d'una coordinació i deixava la conjunció orfe («Quan
+apareix o quan es consolida, …» → «O quan es consolida, …»). Un bloc que
+deixaria un `cc` despenjat, o que en comença per un, ja no es mou.
+
+```
+La reina, quan apareix o quan es consolida, tampoc no necessita una explicació excessiva: ocupa el lloc…
+→ Quan apareix o quan es consolida, la reina tampoc no necessita una explicació excessiva: ocupa el lloc…
+```
+
+**Relatives amb perífrasi.** `relative_subject_of` accepta que la concordança la
+porti l'auxiliar («que va circular»), no només un verb conjugat simple.
+
+**Bateria.** 826 passen, 23 fallen, 78 s'ometen. Cap fallada nova respecte de
+`f47b469` (23 abans, 23 ara): les que queden ja hi eren i no tenen res a veure
+amb aquests canvis.
+
+
 ### Cobertura sintàctica i selecció (aquesta entrega)
 
 **Analitzador.** `ca_core_news_sm` analitza malament les frases amb un incís

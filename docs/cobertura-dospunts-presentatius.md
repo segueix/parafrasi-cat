@@ -122,6 +122,43 @@ calla. Amb el recurs morfològic de Softcatalà instal·lat
 (`scripts/install_morphology.py`) el gènere sí que hi és per a molts noms i la
 regla s'hi aplica.
 
+### Identificació darrere dels dos punts
+
+`presentatiu.hi_ha_np_amb_aposicio_a_identificacio` (nivell 3, família
+`SYNTACTIC`).
+
+```
+Però hi ha una peça que no encaixa tan fàcilment: l'orfil.
+→ Però l'orfil és una peça que no encaixa tan fàcilment.
+```
+
+El que autoritza la transformació és la condició nova `apposition_of: <grup>`:
+l'analitzador ha de veure una relació `appos` que pengi **del sintagma
+presentat**. Sense això, uns dos punts poden obrir una explicació, una
+enumeració o un comentari, i el motor no sabria què identifica què. Casos reals
+en què la regla calla per ambigüitat, no per manca de cobertura:
+
+| Frase | Què hi diu l'arbre |
+|---|---|
+| Hi ha un càrrec medieval que no té equivalent modern: el veguer. | «el veguer» hi penja com a **objecte de «té»** |
+| Hi ha un rei que va regnar al segle XV: el Magnànim. | l'aposició hi penja de **«segle»**, no del sintagma presentat |
+| Hi ha una peça que no encaixa: és la més antiga. | darrere dels dos punts hi ha una clàusula, no cap sintagma |
+
+### Reflexius lligats i coordinacions senceres
+
+L'adaptador no llegia el tret `Reflex` del model. Per això un «es» de «quan es
+consolida» —lligat al seu propi verb, sense cap antecedent fora del bloc—
+bloquejava el moviment exactament igual que el «el» de «el fan transparent», que
+sí que assenyala enfora. `SyntaxToken.reflexive` el recull ara, i
+`SentenceSyntax.bound_reflexives` allibera **només** els reflexius que tenen el
+verb dins del bloc, amb anàlisi fiable. La resta de restriccions sobre pronoms
+no s'han tocat: el cas del cavaller continua bloquejat, i amb el mateix motiu.
+
+El canvi va destapar un error real: el motor movia un sol membre d'una
+coordinació i deixava la conjunció orfe («Quan apareix o quan es consolida, …» →
+«O quan es consolida, …»). Un bloc que deixaria un `cc` despenjat, o que en
+comença per un, ja no es mou.
+
 ## 3. Selecció i puntuacions
 
 ### Què és `qualitat_sintactica`

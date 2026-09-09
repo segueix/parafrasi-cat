@@ -252,7 +252,14 @@ def _convert(token: Any, original: str = "") -> SyntaxToken:
         verb_form=_first(morph.get("VerbForm"), None),
         pron_type=_first(morph.get("PronType"), None),
         adv_type=_first(morph.get("AdvType"), None),
+        reflexive=_reflexive(morph),
     )
+
+
+def _reflexive(morph: Any) -> bool | None:
+    """``Reflex=Yes`` del model; ``None`` si el model no en diu res."""
+    values = morph.get("Reflex")
+    return str(values[0]) == "Yes" if values else None
 
 
 def _first(values: Any, table: dict[str, str] | None) -> str | None:

@@ -215,3 +215,63 @@ rules:
         - "No hi ha llibres que expliquin la història del joc."
         - "Hi ha llibres que llegeixo cada any."
         - "Hi ha una peça que no encaixa."
+
+  # «Hi ha X que P: N» presenta X, l'atribueix P i, després dels dos punts,
+  # diu quin és: N. Quan l'analitzador confirma que N és **aposició de X** —i
+  # no una explicació, una enumeració ni un comentari—, la mateixa frase es pot
+  # dir com una identificació directa: «N és X que P». No s'hi perd res: X, la
+  # relativa i N hi són tots tres, amb el mateix contingut i el mateix ordre
+  # intern; l'única cosa que canvia és quina de les dues peces fa de subjecte.
+  - rule_id: presentatiu.hi_ha_np_amb_aposicio_a_identificacio
+    engine: pattern
+    category: presencia
+    family: SYNTACTIC
+    structural_weight: 0.7
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.65
+    description: "«hi ha X que P: N» → «N és X que P» (identificació confirmada per l'aposició)"
+    pattern:
+      - {text: hi}
+      - {text: ha}
+      - {np: true, group: np}
+      - {text: que, group: rel}
+      - {seq: true, group: rest, min_tokens: 1, no_punct: true}
+      - {text: ":"}
+      - {np: true, group: ident}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        np:
+          starts_with: ["@determiner", "@number"]
+          no_finite_verb: true
+        rel: {relative_subject_of: np}
+        rest: {has_finite_verb: true}
+        # El que ve darrere dels dos punts ha de ser un sintagma definit sense
+        # verb i, sobretot, l'aposició del sintagma presentat: si els dos punts
+        # obrissin una explicació o una llista, no hi hauria cap aposició.
+        ident:
+          definite: true
+          no_finite_verb: true
+          apposition_of: np
+      context:
+        preceded_by: ["@start", "@conjunction"]
+        not_preceded_by: [ni, o, si, com, que, mai]
+      sentence:
+        no_relative_before: true
+        no_comma_before: true
+      syntax:
+        requires_parser: true
+    transformation: "{ident|sentcase} {ident|agree(és,són)} {np} que {rest}"
+    examples:
+      positive:
+        - input: "Però hi ha una peça que no encaixa tan fàcilment: l'orfil."
+          output: "Però l'orfil és una peça que no encaixa tan fàcilment."
+        - input: "Hi ha un càrrec que no encaixa tan bé: el veguer."
+          output: "El veguer és un càrrec que no encaixa tan bé."
+      negative:
+        - "No hi ha cap peça que encaixi: l'orfil."
+        - "Hi ha una peça que no encaixa: és la més antiga."
+        - "Hi ha tres peces que no encaixen: rei, reina i cavaller."
+        - "Hi ha coses que no entenc: l'orfil."

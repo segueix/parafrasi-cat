@@ -94,6 +94,13 @@ class SyntaxToken:
     """Tipus de pronom («Rel», «Prs», «Dem»...), per reconèixer relatives."""
     adv_type: str | None = None
     """Tipus adverbial («Tim», «Loc»), per reconèixer complements temporals i locatius."""
+    reflexive: bool | None = None
+    """Cert si l'analitzador marca el pronom com a reflexiu (``Reflex=Yes``).
+
+    És el tret que separa un «es» lligat al seu propi verb («es consolida») d'un
+    pronom acusatiu que assenyala un antecedent de fora («el fan transparent»).
+    ``None`` vol dir que l'analitzador no en diu res: aleshores no se'n dedueix
+    res tampoc."""
 
     @property
     def is_root(self) -> bool:
@@ -132,6 +139,7 @@ class SyntaxToken:
             "verb_form": self.verb_form,
             "pron_type": self.pron_type,
             "adv_type": self.adv_type,
+            "reflexive": self.reflexive,
         }
 
 
@@ -399,6 +407,26 @@ class SentenceSyntax:
         first, last = self.subtree_span(token)
         return first == start and last == end
 
+    def bound_reflexives(self, start: int, end: int) -> frozenset[int]:
+        """Índexs dels pronoms reflexius de l'interval que hi tenen el verb a dins.
+
+        Un «es» que l'analitzador marca com a reflexiu no assenyala cap
+        antecedent de fora del bloc: acompanya el seu verb («es consolida») i
+        el subjecte a què remet és el del mateix verb. Si el verb viatja dins
+        del bloc, el pronom hi viatja amb ell i no perd res.
+
+        Només compta el que diu l'analitzador, i només amb una anàlisi fiable:
+        no s'endevina mai quin «es» és reflexiu.
+        """
+        if not self.confidence.confident:
+            return frozenset()
+        inside = {t.index for t in self.tokens_in(start, end)}
+        return frozenset(
+            t.index
+            for t in self.tokens_in(start, end)
+            if t.pos == "PRON" and t.reflexive is True and t.head in inside
+        )
+
     def block_check(
         self,
         start: int,
@@ -416,27 +444,40 @@ class SentenceSyntax:
         al davant del que el precedia (``to_front``), que no contingui cap
         pronom, possessiu o demostratiu de tercera persona que perdria el
         referent.
+
+        L'excepció, i l'única, són els reflexius lligats al seu propi verb
+        (:meth:`bound_reflexives`): viatgen amb el verb i no assenyalen res de
+        fora del bloc. Qualsevol altre pronom continua bloquejant el moviment.
         """
         reasons: list[str] = []
         head = self.closed_subtree(start, end)
         if head is None:
             reasons.append("no és un subarbre sintàctic tancat")
+        elif head.dep == "conj" or self._splits_coordination(start, end):
+            # Moure un sol membre d'una coordinació la trenca i deixa la
+            # conjunció orfe («Quan apareix o quan es consolida» → «O quan es
+            # consolida, ...»): el bloc no és tot el que la coordinació lliga.
+            reasons.append("és un membre d'una coordinació i no es pot moure tot sol")
         inside = [t for t in self.tokens_in(start, end) if t.pos != "PUNCT"]
+        bound = self.bound_reflexives(start, end)
+        free = [t for t in inside if t.index not in bound]
+        reflexive_spans = [(t.start, t.end) for t in inside if t.index in bound]
         for span in clitic_spans:
             span_start = getattr(span, "start", None)
             span_end = getattr(span, "end", None)
-            if (
-                isinstance(span_start, int)
-                and isinstance(span_end, int)
-                and span_start < end
-                and span_end > start
-            ):
-                reasons.append("conté un pronom feble")
-                break
+            if not isinstance(span_start, int) or not isinstance(span_end, int):
+                continue
+            if span_start >= end or span_end <= start:
+                continue
+            # Un reflexiu lligat al seu verb no és un pronom que es pugui perdre.
+            if any(span_start == a and span_end == b for a, b in reflexive_spans):
+                continue
+            reasons.append("conté un pronom feble")
+            break
         if to_front:
             anaphoric = [
                 t.text
-                for t in inside
+                for t in free
                 if (t.pos in ("PRON", "DET") and t.lemma.lower() in ANAPHORIC_LEMMAS)
                 or (t.pos == "PRON" and t.pron_type in ("Prs", "Dem") and t.person in (None, "3"))
             ]
@@ -447,6 +488,18 @@ class SentenceSyntax:
                     + "»)"
                 )
         return BlockCheck(head, tuple(reasons))
+
+    def _splits_coordination(self, start: int, end: int) -> bool:
+        """Cert si moure el bloc deixaria una conjunció coordinant despenjada.
+
+        Passa quan el bloc és el membre esquerre d'una coordinació —el mot que
+        el segueix és la conjunció— o quan comença per la conjunció mateixa.
+        """
+        after = [t for t in self.tokens if t.start >= end and t.pos != "PUNCT"]
+        if after and after[0].dep == "cc":
+            return True
+        inside = [t for t in self.tokens_in(start, end) if t.pos != "PUNCT"]
+        return bool(inside) and inside[0].dep == "cc"
 
     def closed_subtree(self, start: int, end: int) -> SyntaxToken | None:
         """Nucli del subarbre tancat que ocupa exactament l'interval, o ``None``.

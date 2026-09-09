@@ -33,6 +33,7 @@ from parafrasi_cat.syntax.spacy_parser import SpacySyntax
 COLON_RULE = "dospunts.explicacio_a_relativa_del_subjecte"
 PRESENTATIVE_RULE = "presentatiu.hi_ha_np_relativa_a_subjecte"
 BARE_PRESENTATIVE_RULE = "presentatiu.hi_ha_plural_nu_a_quantificador"
+IDENTIFICATION_RULE = "presentatiu.hi_ha_np_amb_aposicio_a_identificacio"
 
 
 @pytest.fixture(scope="module")
@@ -111,7 +112,7 @@ def propose(  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.parametrize(
-    "rule_id", [COLON_RULE, PRESENTATIVE_RULE, BARE_PRESENTATIVE_RULE]
+    "rule_id", [COLON_RULE, PRESENTATIVE_RULE, BARE_PRESENTATIVE_RULE, IDENTIFICATION_RULE]
 )
 def test_declared_examples_hold(  # type: ignore[no-untyped-def]
     rule_set: RuleSet, propose, rule_id: str
@@ -309,3 +310,94 @@ def test_the_engine_offers_the_connector_reordering(deep_level3) -> None:  # typ
     result = deep_level3.run("La hipòtesi, per tant, continua oberta.")
     texts = [c.candidate.text for s in result.sentences for c in s.candidates]
     assert "Per tant, la hipòtesi continua oberta." in texts
+
+
+# --- identificació darrere dels dos punts ------------------------------------------------------
+
+
+def test_the_identification_becomes_a_copular_sentence(propose) -> None:  # type: ignore[no-untyped-def]
+    assert propose(
+        IDENTIFICATION_RULE, "Però hi ha una peça que no encaixa tan fàcilment: l'orfil."
+    ) == ("Però l'orfil és una peça que no encaixa tan fàcilment.",)
+
+
+def test_the_identification_works_with_other_words(propose) -> None:
+    """Mateixa estructura, vocabulari diferent: no hi ha cap excepció programada."""
+    assert propose(
+        IDENTIFICATION_RULE, "Hi ha una moneda que va circular molt: el florí."
+    ) == ("El florí és una moneda que va circular molt.",)
+    assert propose(
+        IDENTIFICATION_RULE, "Hi ha un càrrec que no encaixa tan bé: el veguer."
+    ) == ("El veguer és un càrrec que no encaixa tan bé.",)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # L'analitzador hi penja «el veguer» com a objecte de «té», no com a
+        # aposició de «càrrec».
+        "Hi ha un càrrec medieval que no té equivalent modern: el veguer.",
+        # I aquí, com a aposició de «segle», no del sintagma presentat.
+        "Hi ha un rei que va regnar al segle XV: el Magnànim.",
+    ],
+)
+def test_the_identification_declines_when_the_parse_does_not_confirm_it(propose, text: str) -> None:
+    """La identificació és plausible, però l'arbre no la diu: no es transforma.
+
+    Són casos d'ambigüitat real, no de cobertura: si l'aposició no penja del
+    sintagma presentat, el motor no pot saber què identifica què.
+    """
+    assert propose(IDENTIFICATION_RULE, text) == ()
+
+
+def test_the_identification_agrees_in_number(propose) -> None:  # type: ignore[no-untyped-def]
+    produced = propose(
+        IDENTIFICATION_RULE, "Hi ha uns oficials que depenen del rei: els veguers."
+    )
+    assert produced == ("Els veguers són uns oficials que depenen del rei.",)
+
+
+def test_the_identification_keeps_negation_and_hedges(propose) -> None:  # type: ignore[no-untyped-def]
+    text = "Hi ha una peça que no sembla conservar el nom llatí: l'orfil."
+    for produced in propose(IDENTIFICATION_RULE, text):
+        assert "no sembla" in produced
+        assert produced.startswith("L'orfil és una peça")
+
+
+def test_the_identification_keeps_dates_and_roman_numerals(propose) -> None:
+    produced = propose(
+        IDENTIFICATION_RULE, "Hi ha una moneda del 1481 que va circular molt: el florí."
+    )
+    for text in produced:
+        assert "1481" in text
+    romans = propose(
+        IDENTIFICATION_RULE, "Hi ha una moneda del segle XV que va circular molt: el florí."
+    )
+    for text in romans:
+        assert "segle XV" in text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # Negació de l'existencial.
+        "No hi ha cap peça que encaixi: l'orfil.",
+        # Darrere dels dos punts hi ha una clàusula, no una identificació.
+        "Hi ha una peça que no encaixa: és la més antiga.",
+        # Enumeració: l'analitzador no hi veu una aposició del sintagma presentat.
+        "Hi ha tres peces que no encaixen: rei, reina i cavaller.",
+        # El relatiu no és el subjecte.
+        "Hi ha coses que no entenc: l'orfil.",
+        # El que ve darrere dels dos punts és indefinit: no identifica.
+        "Hi ha una peça que no encaixa tan fàcilment: una de sola.",
+        # Existencial subordinat.
+        "Si hi ha una peça que no encaixa, la partida canvia: l'orfil.",
+    ],
+)
+def test_the_identification_declines(propose, text: str) -> None:  # type: ignore[no-untyped-def]
+    assert propose(IDENTIFICATION_RULE, text) == ()
+
+
+def test_the_engine_offers_the_identification(deep_level3) -> None:  # type: ignore[no-untyped-def]
+    result = deep_level3.run("Però hi ha una peça que no encaixa tan fàcilment: l'orfil.")
+    assert result.output_text == "Però l'orfil és una peça que no encaixa tan fàcilment."
