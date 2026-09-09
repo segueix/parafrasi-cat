@@ -399,3 +399,35 @@ input::file-selector-button { background: var(--fons); color: var(--accent); bor
 .etiquetes li { color: var(--alternativa); }
 .vot[data-verdicte="acceptable"] { color: var(--afegit); border-color: var(--afegit); }
 .vot[data-verdicte="rejected"] { color: var(--rebuig); border-color: var(--rebuig); }
+
+/* Escriptori de composició: referència, alternatives i redacció pròpia. */
+.frase { padding: clamp(1rem, 2vw, 1.75rem); border-radius: 16px; margin-bottom: 1.5rem; }
+.capçalera-frase { border-bottom: 1px solid var(--vora); padding-bottom: .8rem; margin-bottom: 1rem; }
+.capçalera-frase h4 { font-size: 1.15rem; }
+.estat-frase { padding: .2rem .65rem; border-radius: 99px; background: var(--fons); }
+.referencia-original { border-left: 4px solid var(--accent); background: var(--seleccio-fons); padding: 1rem 1.2rem; border-radius: 8px; }
+.referencia-original strong { color: var(--accent); font-size: .85rem; }
+.referencia-original .original-frase { margin: .5rem 0 0; color: var(--text); font-size: 1.05rem; }
+.cap-reformulacions h5 { font-size: 1rem; color: var(--text); margin-bottom: .25rem; }
+.cap-reformulacions .ajuda { margin-top: 0; }
+.frase > .redaccions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: .85rem; align-items: stretch; }
+.frase .redaccio { min-width: 0; margin: 0; padding: 1rem; border: 1px solid var(--vora); border-top: 3px solid var(--alternativa); border-radius: 10px; background: var(--plafo); }
+.frase .redaccio.triada { border-color: var(--accent); background: var(--seleccio-fons); box-shadow: inset 0 0 0 1px var(--accent); }
+.frase .redaccio.amb-canvis { border-top-color: var(--afegit); }
+.frase .redaccio.es-original { border-top-color: var(--suau); }
+.numero-redaccio { display: block; color: var(--alternativa); font-size: .8rem; font-weight: 700; }
+.amb-canvis .numero-redaccio { color: var(--afegit); }
+.es-original .numero-redaccio { color: var(--suau); }
+.frase .redaccio .tria { margin-top: .45rem; }
+.frase .text-redaccio { margin-bottom: 0; font-size: 1rem; line-height: 1.75; overflow-wrap: anywhere; }
+.editor-frase { margin-top: 1.4rem; padding: clamp(1rem, 2vw, 1.5rem); background: var(--fons); border: 1px solid var(--vora); border-top: 4px solid var(--afegit); border-radius: 12px; }
+.editor-frase label { font-size: 1.1rem; color: var(--afegit); margin-top: 1rem; }
+.editor-frase textarea { min-height: 10rem; padding: 1rem; font: inherit; font-size: 1.05rem; line-height: 1.75; background: var(--plafo); color: var(--text); resize: vertical; }
+.editor-frase button { white-space: normal; }
+.accions-frase { margin-top: 1rem; flex-wrap: wrap; }
+.frase > .detall { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--vora); }
+@media (max-width: 640px) {
+  body { padding-left: .5rem; padding-right: .5rem; }
+  .frase > .redaccions { grid-template-columns: minmax(0, 1fr); }
+  .editor-frase textarea { min-height: 12rem; }
+}
