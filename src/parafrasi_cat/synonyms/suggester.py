@@ -52,7 +52,7 @@ from parafrasi_cat.dictionaries.dictionary import DictionarySet, FormStatus, nor
 from parafrasi_cat.morphology.provider import MorphologyProvider, inflect_like
 from parafrasi_cat.protected.spans import ProtectedSpan
 from parafrasi_cat.synonyms.thesaurus import CatalanThesaurus, SynonymGroup, normalize
-from parafrasi_cat.syntax.analysis import SentenceSyntax, SyntaxProvider
+from parafrasi_cat.syntax.analysis import SentenceSyntax, SyntaxProvider, SyntaxToken
 from parafrasi_cat.synonyms.agreement import nominal_span, replacement
 
 MAX_PHRASE_TOKENS = 4
@@ -301,7 +301,7 @@ class SynonymSuggester:
         """El nom i la concordança formen un únic fragment editable/desfés."""
         assert self._morphology is not None
         for noun in parsed.tokens:
-            if noun.pos != "NOUN":
+            if noun.pos != "NOUN" or _inside_fixed_expression(parsed, noun):
                 continue
             span = nominal_span(parsed, noun)
             # Never leave an isolated noun replacement bypassing agreement.
@@ -624,3 +624,21 @@ __all__ = [
     "TokenOptions",
     "connector_index",
 ]
+
+
+#: Relacions amb què l'analitzador marca una locució: els seus mots no són
+#: substituïbles per separat.
+FIXED_DEPS = frozenset({"fixed", "flat"})
+
+
+def _inside_fixed_expression(parsed: SentenceSyntax, noun: SyntaxToken) -> bool:
+    """Cert si el nom forma part d'una locució («a causa de», «a més de»).
+
+    El «causa» de «a causa de» és un nom per a l'analitzador, però no és cap
+    nom que es pugui canviar: és un tros d'una preposició. Sense aquesta
+    comprovació, la passada de concordança treia la locució sencera de la
+    llista de propostes i no hi posava res al lloc.
+    """
+    if noun.dep in FIXED_DEPS:
+        return True
+    return any(t.head == noun.index and t.dep in FIXED_DEPS for t in parsed.tokens)

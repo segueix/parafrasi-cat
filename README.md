@@ -132,8 +132,15 @@ els seus components interns.
 
 A la secció **Empremta de l'autor**: poseu-hi un nom, trieu els vostres textos
 `.txt` o `.md` i premeu **Crea l'empremta**. L'anàlisi es fa en aquest
-ordinador, els textos no van a Internet i **no s'entrena cap model**: només se'n
-desen recomptes i estadístics robustos a `style/<nom>.json`.
+ordinador, els textos no van a Internet i **no s'entrena cap model**.
+
+Què es desa a `style/<nom>.json`: recomptes i estadístics robustos i, a més,
+**fragments literals curts del corpus** —fins a tres per tret i retallats (per
+defecte a 110 caràcters; `examples_per_feature` i `example_max_chars` a
+`resources/ca/style/estilometria.yaml`)— que il·lustren cada connector, cada
+expressió recurrent i cada variant preferida. No és només un recompte: si els
+textos són sensibles, teniu-ho present abans de compartir el fitxer. L'informe
+diu quants n'hi ha.
 
 També des del terminal:
 
@@ -141,6 +148,34 @@ També des del terminal:
 parafrasi-cat style build corpus/author/ --profile resources/style/autor.yaml
 parafrasi-cat style show style/autor.json
 ```
+
+Opcions útils de `style build`:
+
+| Opció | Què fa |
+| --- | --- |
+| `--validation DIR` | Textos **reservats** per comprovar l'estabilitat de l'empremta. No entren al perfil. |
+| `--corpus-type TEXT` | Etiqueta lliure de la mena de corpus («prosa d'investigació»). No canvia cap càlcul. |
+| `--exclude RUTA\|PATRÓ` | Fitxer, directori o patró a excloure (es pot repetir). |
+
+**Documents repetits.** Dos fitxers amb el mateix contingut compten una sola
+vegada, encara que tinguin noms diferents; només s'hi normalitzen els salts de
+línia, l'espai al final de cada línia i les línies en blanc dels extrems. Un
+document que és al corpus principal i al de validació es conserva al principal i
+s'exclou del de validació, perquè un text no es pot validar a si mateix. Cap
+fitxer original no s'esborra ni es modifica, i no s'hi dedueix autoria ni
+procedència amb cap detector: només es comparen continguts.
+
+**Com llegir l'informe.** `style build` i `style show` diuen amb què s'ha fet
+l'empremta (documents, paraules, exclusions), quantes frases s'han pogut
+analitzar sintàcticament i amb quin model, la confiança de cada component i el
+resultat de la validació. La confiança és un **indicador intern** derivat del
+nombre d'observacions i de documents: no és cap probabilitat estadística
+demostrada. I la validació distingeix **«sense dades suficients»** —poc text
+reservat, i llavors la distància no decideix res— de **«estil poc coincident»**.
+
+L'empremta serveix per **triar entre candidats que ja són segurs**: mai no
+canvia el que una frase afirma ni la seguretat amb què ho afirma per assemblar-se
+més a l'autor.
 
 ## L'empremta: estructura i ritme
 
@@ -723,4 +758,5 @@ Documentació addicional: [`docs/recursos-linguistics.md`](docs/recursos-linguis
 [`docs/arquitectura.md`](docs/arquitectura.md),
 [`docs/principis-de-preservacio.md`](docs/principis-de-preservacio.md),
 [`docs/cobertura-dospunts-presentatius.md`](docs/cobertura-dospunts-presentatius.md),
+[`docs/fiabilitat-motor-i-empremta.md`](docs/fiabilitat-motor-i-empremta.md),
 [`CHANGELOG.md`](CHANGELOG.md).

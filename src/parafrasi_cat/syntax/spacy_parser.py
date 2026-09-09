@@ -52,6 +52,22 @@ MODEL_ENV = "PARAFRASI_SPACY_MODEL"
 
 SOURCE = "spacy"
 
+#: Categories del recurs morfològic local comparables amb cada etiqueta del parser.
+#:
+#: El nombre només vol dir el mateix dins d'una mateixa categoria. Sense aquesta
+#: correspondència, un nom com «arxiu» que el conjecturador llegeix com si fos
+#: una segona persona del plural («arxiu» de «arxir») semblava contradir el
+#: parser i feia declarar poc fiable una anàlisi correcta.
+COMPARABLE_POS: dict[str, frozenset[str]] = {
+    "NOUN": frozenset({"noun"}),
+    "PROPN": frozenset({"noun"}),
+    "ADJ": frozenset({"adj"}),
+    "VERB": frozenset({"verb"}),
+    "AUX": frozenset({"verb"}),
+    "PRON": frozenset({"pron"}),
+    "DET": frozenset({"det"}),
+}
+
 
 def installed_models(candidates: tuple[str, ...] = PREFERRED_MODELS) -> tuple[str, ...]:
     """Models de la llista que estan instal·lats, en el mateix ordre.
@@ -202,17 +218,26 @@ class SpacySyntax:
         return SentenceSyntax(text, tokens, confidence, SOURCE)
 
     @property
-    def _numbers_of(self) -> Callable[[str], frozenset[str]] | None:
-        """Nombres que el recurs morfològic local admet per a una forma."""
+    def _numbers_of(self) -> Callable[[str, str], frozenset[str]] | None:
+        """Nombres que el recurs morfològic local admet per a una forma i categoria.
+
+        Només es tornen els nombres de les lectures que **comparteixen la
+        categoria** que el parser ha assignat al mot. Si el recurs no coneix la
+        forma amb aquella categoria, no hi ha res a comparar i es torna un
+        conjunt buit: comparar el nombre d'un verb amb el d'un nom és un error
+        de categoria, no una contradicció.
+        """
         morphology = self._morphology
         if morphology is None:
             return None
 
-        def numbers(form: str) -> frozenset[str]:
+        def numbers(form: str, upos: str) -> frozenset[str]:
+            entries = morphology.analyze(form)
+            classes = COMPARABLE_POS.get(upos)
+            if classes is not None:
+                entries = tuple(e for e in entries if e.features.pos in classes)
             return frozenset(
-                entry.features.number
-                for entry in morphology.analyze(form)
-                if entry.features.number is not None
+                entry.features.number for entry in entries if entry.features.number is not None
             )
 
         return numbers

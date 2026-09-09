@@ -173,7 +173,7 @@ TRUSTED = SyntaxConfidence(True)
 def assess_confidence(
     tokens: Sequence[SyntaxToken],
     *,
-    numbers_of: Callable[[str], frozenset[str]] | None = None,
+    numbers_of: Callable[[str, str], frozenset[str]] | None = None,
 ) -> SyntaxConfidence:
     """Criteri explícit de confiança sintàctica.
 
@@ -187,7 +187,9 @@ def assess_confidence(
     5. el nucli és un verb o un predicat amb còpula;
     6. el parser ha sabut classificar totes les relacions;
     7. la morfologia local no contradiu el parser en el nombre del subjecte
-       ni del verb principal (només si hi ha recurs morfològic).
+       ni del verb principal (només si hi ha recurs morfològic, i només entre
+       lectures de la mateixa categoria: vegeu
+       :func:`_morphology_contradictions`).
 
     Davant del dubte no s'inventa una anàlisi: es diu que no és fiable i el
     motor recorre a les heurístiques conservadores.
@@ -247,20 +249,27 @@ def _is_predicate(root: SyntaxToken, tokens: Sequence[SyntaxToken]) -> bool:
 def _morphology_contradictions(
     tokens: Sequence[SyntaxToken],
     roots: Sequence[SyntaxToken],
-    numbers_of: Callable[[str], frozenset[str]],
+    numbers_of: Callable[[str, str], frozenset[str]],
 ) -> list[str]:
     """Contradiccions de nombre entre el parser i el recurs morfològic local.
 
     Només es miren el subjecte i el nucli: són els mots dels quals depenen les
     condicions sintàctiques, i comparar-los tots dispararia falses alarmes amb
     formes ambigües.
+
+    ``numbers_of`` rep la forma **i la categoria que hi ha posat el parser**,
+    perquè el nombre només és comparable dins d'una mateixa categoria: el «pl»
+    d'una segona persona del plural no diu res del nombre d'un nom. Sense
+    aquesta condició, «arxiu» —que el conjecturador llegeix com si fos el verb
+    «arxiu» de «arxir»— feia declarar poc fiable una anàlisi correcta i deixava
+    la frase al nivell 2.
     """
     problems: list[str] = []
     interesting = [t for t in tokens if t.is_subject or t in roots]
     for token in interesting:
         if token.number is None:
             continue
-        known = numbers_of(token.text)
+        known = numbers_of(token.text, token.pos)
         if known and token.number not in known:
             problems.append(
                 f"la morfologia diu que «{token.text}» és {'/'.join(sorted(known))} "

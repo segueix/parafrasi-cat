@@ -883,6 +883,16 @@ def number_of(state: MatchState, tokens: Sequence[Token]) -> str | None:
     return None
 
 
+def _is_acronym(text: str) -> bool:
+    """Cert per a «UE» o «XVI», fals per a l'article elidit «L'».
+
+    Es compten les **lletres**, no els caràcters: «L'» té dos caràcters però
+    una sola lletra, i deixar-lo en majúscula posava «Quan es va constituir…,
+    L'arxiu no tenia…» al mig de la frase.
+    """
+    return text.isupper() and sum(1 for c in text if c.isalpha()) > 1
+
+
 def _apply_filter(
     name: str, text: str, tokens: Sequence[Token], state: MatchState, protected_first: bool
 ) -> str | None:
@@ -891,7 +901,7 @@ def _apply_filter(
     if name == "cap":
         return text[:1].upper() + text[1:]
     if name == "lower":
-        if protected_first or (tokens and tokens[0].text.isupper() and len(tokens[0].text) > 1):
+        if protected_first or (tokens and _is_acronym(tokens[0].text)):
             return text
         return text[:1].lower() + text[1:]
     if name == "de":

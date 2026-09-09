@@ -552,6 +552,12 @@ def _is_relative_subject(
     nombre amb l'antecedent que la regla ha capturat: si el relatiu es refereix
     a un altre nom del sintagma («una peça dels escacs que semblen antigues»),
     la concordança no quadra i no es transforma res.
+
+    També es demana que el verb **no tingui cap altre subjecte**. En «hi ha una
+    condició que cal complir», l'analitzador marca «que» com a ``nsubj`` de
+    «cal» i alhora «complir» com a ``csubj``: dos subjectes per a un verb és una
+    contradicció de l'arbre, i llavors la lectura de subjecte del relatiu no és
+    de fiar (el relatiu hi és, de fet, el complement directe).
     """
     if not syntax.confident or len(tokens) != 1 or not antecedent:
         return False
@@ -562,6 +568,8 @@ def _is_relative_subject(
         return False
     verb = next((t for t in syntax.tokens if t.index == parsed.head), None)
     if verb is None:
+        return False
+    if _has_another_subject(syntax, verb.index, parsed.index):
         return False
     if not verb.is_finite_verb:
         # Perífrasi («que va circular»): qui porta la concordança és l'auxiliar.
@@ -575,6 +583,18 @@ def _is_relative_subject(
         verb = auxiliaries[0]
     number = number_of(state, antecedent)
     return number is not None and verb.number == number
+
+
+def _has_another_subject(syntax: SentenceSyntax, verb_index: int, subject_index: int) -> bool:
+    """Cert si el verb té un segon subjecte a més del mot indicat.
+
+    Un verb en té un, de subjecte. Dos vol dir que l'arbre es contradiu, i cap
+    de les dues lectures no és prou segura per reescriure la frase.
+    """
+    return any(
+        t.head == verb_index and t.dep in SUBJECT_DEPS and t.index != subject_index
+        for t in syntax.tokens
+    )
 
 
 #: Relacions d'un complement circumstancial que es pot desplaçar sencer.

@@ -28,6 +28,7 @@ from parafrasi_cat.style.observations import StyleResources
 from parafrasi_cat.style.preferences import StylePreferences
 from parafrasi_cat.style.profile import StyleProfile
 from parafrasi_cat.style.profiler import build_fingerprint
+from parafrasi_cat.style.report import fingerprint_report
 from parafrasi_cat.style.schema import SCHEMA_FILE, load_schema, validate
 from parafrasi_cat.syntax.spacy_parser import SpacySyntax
 
@@ -65,6 +66,12 @@ def build_style_parser() -> argparse.ArgumentParser:
         default=[],
         metavar="RUTA|PATRÓ",
         help="fitxer, directori o patró a excloure (es pot repetir)",
+    )
+    build.add_argument(
+        "--corpus-type",
+        default="",
+        metavar="TEXT",
+        help="mena de corpus («prosa d'investigació»); només queda desada a l'empremta",
     )
     build.add_argument(
         "--profile",
@@ -109,7 +116,12 @@ def _build(args: argparse.Namespace) -> int:
     paths = ProjectPaths.discover(args.home)
     corpus_dir = Path(args.corpus)
     name = args.name or corpus_dir.resolve().name
-    corpus = load_corpus(corpus_dir, validation_dir=args.validation, exclude=args.exclude)
+    corpus = load_corpus(
+        corpus_dir,
+        validation_dir=args.validation,
+        exclude=args.exclude,
+        corpus_type=args.corpus_type,
+    )
     lexicon = ClosedClassLexicon.load(paths.language())
     resources = StyleResources.load(paths, lexicon=lexicon)
     analyzer = RuleBasedAnalyzer(lexicon=lexicon)
@@ -135,31 +147,15 @@ def _build(args: argparse.Namespace) -> int:
             encoding="utf-8",
         )
     if not args.quiet:
-        print(_build_summary(fingerprint, output, corpus.excluded))
+        print(_build_summary(fingerprint, output))
     return EXIT_OK
 
 
-def _build_summary(fingerprint: StyleFingerprint, output: Path, excluded: Sequence[object]) -> str:
-    corpus = fingerprint.corpus
-    lines = [
-        f"Empremta «{fingerprint.name}» desada a {output}",
-        f"  documents: {corpus.get('n_documents')} · paràgrafs: {corpus.get('n_paragraphs')} · "
-        f"frases: {corpus.get('n_sentences')} · paraules: {corpus.get('n_words')}",
-    ]
-    if excluded:
-        lines.append(f"  textos exclosos: {len(excluded)}")
-    preferences = StylePreferences(fingerprint)
-    lines.append(preferences.summary())
-    validation = fingerprint.validation
-    if validation is not None:
-        distance = validation.get("distance")
-        divergent = validation.get("divergent_features")
-        assert isinstance(distance, float) and isinstance(divergent, list)
-        lines.append(
-            f"  validació: {validation.get('n_documents')} documents, distància {distance:.3f}"
-            + (f", divergents: {', '.join(map(str, divergent[:5]))}" if divergent else "")
-        )
-    return "\n".join(lines)
+def _build_summary(fingerprint: StyleFingerprint, output: Path) -> str:
+    report = fingerprint_report(
+        fingerprint, header=f"Empremta «{fingerprint.name}» desada a {output}"
+    )
+    return f"{report}\n{StylePreferences(fingerprint).summary()}"
 
 
 def _compare(args: argparse.Namespace) -> int:
@@ -178,13 +174,8 @@ def _compare(args: argparse.Namespace) -> int:
 def _show(args: argparse.Namespace) -> int:
     fingerprint = StyleFingerprint.load(args.file)
     preferences = StylePreferences(fingerprint)
-    corpus = fingerprint.corpus
-    lines = [
-        f"Empremta «{fingerprint.name}» (esquema {fingerprint.schema_version})",
-        f"  documents: {corpus.get('n_documents')} · frases: {corpus.get('n_sentences')} · "
-        f"paraules: {corpus.get('n_words')}",
-        preferences.summary(),
-    ]
+    header = f"Empremta «{fingerprint.name}» (esquema {fingerprint.schema_version})"
+    lines = [fingerprint_report(fingerprint, header=header), preferences.summary()]
     for label, path in (
         ("comes per 100 paraules", "punctuation.comma.per_100_words"),
         ("punts i coma per 100 paraules", "punctuation.semicolon.per_100_words"),
