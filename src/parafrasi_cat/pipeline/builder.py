@@ -296,10 +296,16 @@ def build_syntax_provider(
             return PreferredSyntax(freeling, SpacySyntax(morphology=morphology)) if config.syntax == "auto" else freeling
         if config.syntax == "freeling":
             return NullSyntax()
-    if config.syntax in ("auto", "spacy"):
-        parser = SpacySyntax(morphology=morphology)
+    if config.syntax in ("auto", "spacy") or config.syntax.startswith("spacy:"):
+        # «spacy:<model>» fixa el model; «spacy»/«auto» fan servir el més exacte
+        # dels instal·lats (vegeu parafrasi_cat.syntax.spacy_parser).
+        _, _, model = config.syntax.partition(":")
+        parser = SpacySyntax(model.strip(), morphology=morphology)
         return parser if parser.available else NullSyntax()
-    raise ConfigError(f"Analitzador sintàctic desconegut: «{config.syntax}» (auto, freeling, spacy, none)")
+    raise ConfigError(
+        f"Analitzador sintàctic desconegut: «{config.syntax}» "
+        "(auto, freeling, spacy, spacy:<model>, none)"
+    )
 
 
 def build_languagetool_validator(

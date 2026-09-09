@@ -178,7 +178,10 @@ class Candidate:
         by_family: dict[TransformationFamily, list[float]] = {}
         length = max(1, len(self.source_text))
         for transformation in self.transformations:
-            coverage = min(1.0, transformation.changed_span.length / length)
+            extent = transformation.changed_span.length
+            if structural:
+                extent = transformation.structural_extent
+            coverage = min(1.0, extent / length)
             for index, family in enumerate(transformation.operation_families):
                 if family.structural is not structural or family is TransformationFamily.REPAIR:
                     continue

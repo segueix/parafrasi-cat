@@ -13,7 +13,7 @@ from parafrasi_cat.rules.examples import verify_examples
 
 REQUIRED_CATEGORIES = {
     "lexic", "connector", "verbal", "nominalitzacio", "copula", "agent", "presencia", "ordre",
-    "temporal", "subordinada", "impersonal", "fusio", "divisio", "puntuacio", "assertiu",
+    "temporal", "subordinada", "impersonal", "fusio", "divisio", "puntuacio", "assertiu", "veu",
 }  # fmt: skip
 
 #: Regles de paràgraf (nivell 5): fusions i reparació anafòrica amb context.
@@ -31,7 +31,7 @@ def rule_set(paths: ProjectPaths) -> RuleSet:
 
 
 def test_rule_set_covers_all_families(rule_set: RuleSet) -> None:
-    assert 25 <= len(rule_set.rules) <= 70
+    assert 25 <= len(rule_set.rules) <= 80
     assert {d.category for d in rule_set.definitions} == REQUIRED_CATEGORIES
     assert {d.level for d in rule_set.definitions} == {1, 2, 3, 4, 5}
     assert len(rule_set.paragraph_rules) == len(PARAGRAPH_RULES)
@@ -98,6 +98,9 @@ RULE_IDS = [
     "ordre.complement_interposat_a_inicial", "ordre.concessiva_inicial_a_final",
     "ordre.connector_medial_a_inicial", "ordre.connector_inicial_a_medial",
     "impersonal.es_a_hom", "impersonal.hom_a_es",
+    "presentatiu.hi_ha_np_relativa_a_subjecte", "presentatiu.hi_ha_plural_nu_a_quantificador",
+    "dospunts.explicacio_a_relativa_del_subjecte",
+    "veu.activa_passiva", "assertiu.podria_potser",
     "cobertura.causal_perque_a_ja_que",
     "cobertura.temporals_coordinades_interposades_a_inicial",
     "cobertura.pero_inicial_a_tanmateix",
@@ -105,7 +108,7 @@ RULE_IDS = [
     "divisio.coordinada_i", "divisio.coordinada_pero", "puntuacio.punt_i_coma_a_punt",
     "puntuacio.parentesi_a_comes", "puntuacio.parentesi_final_a_coma", "puntuacio.guions_a_comes",
     "assertiu.normalitza_modalitzacio", "assertiu.hipotesi_explicita", "assertiu.com_detalla_font",
-    "assertiu.limitacio_documental_inicial", "assertiu.limitacio_documental",
+    "assertiu.limitacio_documental_inicial",
     "assertiu.plantejament_directe",
     "blocs.subordinada_adverbial", "blocs.circumstancial_curt",
     "blocs.complement_del_verb", "blocs.participial_del_subjecte",

@@ -5,6 +5,57 @@ projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
 ## Pendent de publicació
 
+### Cobertura sintàctica i selecció (aquesta entrega)
+
+**Analitzador.** `ca_core_news_sm` analitza malament les frases amb un incís
+temporal coordinat («La reina, quan apareix o quan es consolida, tampoc no
+necessita…»): hi posa el nom com a arrel, i el criteri de confiança —amb raó—
+degrada la frase al nivell 2. L'error és del model, no de l'adaptador ni de la
+interpretació de dependències: `ca_core_news_md`, amb el mateix esquema
+d'etiquetes i la mateixa llicència, analitza bé la mateixa frase. Per això el
+motor ara fa servir **el model català més exacte que hi hagi instal·lat**
+(`lg` → `md` → `sm`), es pot fixar amb `syntax: spacy:<model>` o amb
+`PARAFRASI_SPACY_MODEL`, i `scripts/install_parser.py` accepta `--model`. No
+s'imposa cap arrel per heurística: quan l'anàlisi continua sent incoherent, el
+bloqueig es manté igual.
+
+**Dos punts explicatius** (`dospunts.explicacio_a_relativa_del_subjecte`, nivell
+3). Quan el tros de darrere dels dos punts és una clàusula sense subjecte propi,
+en present d'indicatiu i concordant amb el subjecte de la principal, es pot dir
+com a relativa explicativa: «El rei no necessita gaire justificació: és el
+centre del tauler» → «El rei, que és el centre del tauler, no necessita gaire
+justificació». La regla **no afegeix cap connector causal**: els dos punts no
+declaren cap causa i el motor no n'inventa cap.
+
+**Presentatius «hi ha … que …»** (`presentatiu.hi_ha_np_relativa_a_subjecte` i
+`presentatiu.hi_ha_plural_nu_a_quantificador`, nivell 3). Amb el relatiu fent de
+subjecte, l'existencial es pot dir com a predicació directa: «Però hi ha una
+peça que no encaixa» → «Però una peça no encaixa». Amb un plural sense
+determinant cal un quantificador que concordi en gènere, i el gènere només
+s'accepta si l'analitzador o el recurs morfològic el demostren: sense evidència
+no es proposa res.
+
+**Condicions de patró noves**, generals i reutilitzables: `tense`,
+`agrees_with_subject`, `relative_subject_of`, `phrase_number`, el filtre
+`agree(msg,fsg,mpl,fpl)` i la classe de context `@conjunction`.
+
+**Selecció.** Un canvi que no reorganitza la frase ja no cobra res pel sol fet
+de ser un canvi: ha de millorar alguna dimensió mesurada (estil, preferències,
+afinitat, varietat de connectors o llenguatge assertiu). A més, la distància
+d'estil d'un canvi superficial ja no compta el component de longitud de frase
+—allargar el connector acostava la frase a la mitjana del perfil i feia guanyar
+«No obstant això» per damunt de l'original— i l'abast estructural d'una
+transformació composta només compta el que hi han canviat les operacions
+estructurals, de manera que una substitució absorbida no infla el grau de
+reredacció. En cas d'empat guanya el candidat amb menys operacions reals.
+`qualitat_sintactica` és 1 − degradació estructural local (relatives
+consecutives, «que» acumulats, estructura repetida) i `structural_change_score`
+continua sent un indicador d'estructura, no cap percentatge de millora.
+
+**Interfície.** L'etiqueta «millor» del candidat guanyador passa a ser
+«preferit pel motor».
+
+
 - Els moviments de subordinades reconeixen els connectors amb majúscula:
   conserven la coma concessiva, adapten «Com que» a «ja que» en posició final
   i mantenen el bloqueig de «Perquè» final amb subjuntiu.

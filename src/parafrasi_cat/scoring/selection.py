@@ -19,16 +19,18 @@ def select_best(
     """Tria l'element vàlid amb puntuació més alta.
 
     Els candidats no vàlids (``ScoreBreakdown.valid`` fals) no es consideren
-    mai. En cas d'empat guanya el candidat amb menys transformacions (el més
-    conservador) i, si persisteix l'empat, el primer de la seqüència.
+    mai. En cas d'empat guanya el candidat amb menys operacions reals (el més
+    conservador: també compten les que una transformació composta ha absorbit)
+    i, si persisteix l'empat, el primer de la seqüència.
     """
     best: T | None = None
-    best_key: tuple[float, int] | None = None
+    best_key: tuple[float, int, int] | None = None
     for item in items:
         score = score_of(item)
         if not score.valid:
             continue
-        key = (score.total, -len(candidate_of(item).transformations))
+        candidate = candidate_of(item)
+        key = (score.total, -candidate.n_transformations, -len(candidate.transformations))
         if best_key is None or key > best_key:
             best, best_key = item, key
     return best
@@ -43,5 +45,9 @@ def rank(
     valid = [item for item in items if score_of(item).valid]
     return sorted(
         valid,
-        key=lambda item: (-score_of(item).total, len(candidate_of(item).transformations)),
+        key=lambda item: (
+            -score_of(item).total,
+            candidate_of(item).n_transformations,
+            len(candidate_of(item).transformations),
+        ),
     )

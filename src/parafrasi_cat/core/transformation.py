@@ -193,6 +193,8 @@ _FAMILY_BY_TYPE: dict[str, TransformationFamily] = {
 #: família (entre 0 i 1): moure un connector és una reordenació més lleu que
 #: moure una subordinada sencera.
 STRUCTURAL_WEIGHT_KEY = "structural_weight"
+STRUCTURAL_EXTENT_KEY = "structural_extent"
+"""Caràcters que ocupen, dins d'una transformació composta, les operacions estructurals."""
 
 #: Metadades de traçabilitat de les operacions absorbides dins d'una transformació
 #: composta. ``rule_id``/``family``/``transformation_type`` continuen descrivint
@@ -363,6 +365,23 @@ class Transformation:
                 return family.weight
             return max(0.0, min(1.0, value))
         return family.weight
+
+    @property
+    def structural_extent(self) -> int:
+        """Caràcters que toquen les operacions estructurals d'aquesta transformació.
+
+        En una transformació simple és tota la substitució. En una de composta,
+        només el que hi han canviat les operacions que reorganitzen la frase:
+        una substitució lèxica absorbida no ha d'eixamplar l'abast estructural
+        del candidat ni, per tant, el seu grau de reredacció.
+        """
+        declared = self.metadata.get(STRUCTURAL_EXTENT_KEY)
+        if declared is not None:
+            try:
+                return max(0, int(str(declared)))
+            except ValueError:
+                pass
+        return self.changed_span.length
 
     @property
     def result_span(self) -> Span:

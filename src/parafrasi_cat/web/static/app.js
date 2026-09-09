@@ -590,7 +590,7 @@ function dibuixaCandidat(unitat, candidat) {
   element.classList.toggle("rebutjat", !candidat.accepted);
 
   const marques = [];
-  if (candidat.selected) marques.push("millor");
+  if (candidat.selected) marques.push("preferit pel motor");
   if (candidat.is_identity) marques.push("original");
   if (!candidat.accepted) marques.push("rebutjat");
   if (candidat.score) marques.push(candidat.score.total.toFixed(3));

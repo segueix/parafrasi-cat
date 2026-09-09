@@ -67,7 +67,7 @@ s'executa com un procés local.
 | | |
 |---|---|
 | Codi | [spaCy](https://spacy.io) — **MIT** |
-| Model | `ca_core_news_sm` 3.8.0 — **GPL-3.0** |
+| Model | `ca_core_news_sm` / `md` / `lg` 3.8.0 — **GPL-3.0** |
 | Origen del model | https://github.com/explosion/spacy-models |
 | Dades d'entrenament | UD Catalan AnCora v2.8 |
 | Ús | Dependències, categories gramaticals, trets morfològics i lemes |

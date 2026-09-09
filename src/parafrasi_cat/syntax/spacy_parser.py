@@ -1,20 +1,33 @@
 """Analitzador sintàctic català local basat en spaCy.
 
-Model: ``ca_core_news_sm`` (spaCy), entrenat sobre UD Catalan AnCora. Aporta
-dependències, categories gramaticals, trets morfològics i lemes. Cap component
-no és generatiu: el model **només analitza**.
+Models: ``ca_core_news_sm`` / ``md`` / ``lg`` (spaCy), tots entrenats sobre UD
+Catalan AnCora. Aporten dependències, categories gramaticals, trets
+morfològics i lemes. Cap component no és generatiu: el model **només
+analitza**.
+
+Els tres models tenen el mateix esquema d'etiquetes i la mateixa llicència; es
+diferencien només en la mida i en l'exactitud de l'anàlisi. Per això, quan no
+se n'indica cap, es fa servir **el més exacte dels que hi ha instal·lats**
+(:data:`PREFERRED_MODELS`): triar un analitzador millor entrenat no és cap
+heurística sobre les frases, i el criteri de confiança
+(:func:`~parafrasi_cat.syntax.analysis.assess_confidence`) continua rebutjant
+igualment les anàlisis que no siguin coherents. Es pot fixar un model concret
+amb el paràmetre ``model``, amb ``syntax: spacy:<model>`` a la configuració o
+amb la variable d'entorn ``PARAFRASI_SPACY_MODEL``.
 
 És opcional i mandrós: el model es carrega la primera vegada que es demana i
-es reutilitza durant tota la sessió. Sense spaCy o sense el model instal·lat,
+es reutilitza durant tota la sessió. Sense spaCy o sense cap model instal·lat,
 :attr:`SpacySyntax.available` és fals i el motor continua amb les seves
 heurístiques.
 
-Llicència: spaCy MIT; model ``ca_core_news_sm`` GPL-3.0. Vegeu
+Llicència: spaCy MIT; models ``ca_core_news_*`` GPL-3.0. Vegeu
 ``THIRD_PARTY_LICENSES.md``.
 """
 
 from __future__ import annotations
 
+import importlib.util
+import os
 import threading
 from collections.abc import Callable
 from typing import Any
@@ -28,7 +41,45 @@ from parafrasi_cat.syntax.analysis import (
 )
 
 DEFAULT_MODEL = "ca_core_news_sm"
+"""Model mínim: el que instal·la ``scripts/install_parser.py`` per defecte."""
+
+#: Models catalans coneguts, del més exacte al més lleuger. Tots analitzen la
+#: mateixa llengua amb el mateix esquema d'etiquetes; el gran s'equivoca menys.
+PREFERRED_MODELS: tuple[str, ...] = ("ca_core_news_lg", "ca_core_news_md", DEFAULT_MODEL)
+
+#: Variable d'entorn que fixa el model, per damunt de la tria automàtica.
+MODEL_ENV = "PARAFRASI_SPACY_MODEL"
+
 SOURCE = "spacy"
+
+
+def installed_models(candidates: tuple[str, ...] = PREFERRED_MODELS) -> tuple[str, ...]:
+    """Models de la llista que estan instal·lats, en el mateix ordre.
+
+    Només es mira si el paquet del model existeix; no se'n carrega cap, de
+    manera que la comprovació és barata i no té cap efecte.
+    """
+    found: list[str] = []
+    for name in candidates:
+        try:
+            if importlib.util.find_spec(name) is not None:
+                found.append(name)
+        except (ImportError, ValueError):  # pragma: no cover - paquet malmès
+            continue
+    return tuple(found)
+
+
+def best_installed_model(candidates: tuple[str, ...] = PREFERRED_MODELS) -> str:
+    """El model més exacte que hi ha instal·lat; el mínim si no n'hi ha cap.
+
+    Amb ``PARAFRASI_SPACY_MODEL`` definida mana la variable d'entorn, encara
+    que el model no hi sigui: així l'error és explícit i no queda amagat.
+    """
+    forced = os.environ.get(MODEL_ENV, "").strip()
+    if forced:
+        return forced
+    found = installed_models(candidates)
+    return found[0] if found else (candidates[-1] if candidates else DEFAULT_MODEL)
 
 #: Components del model que no calen per analitzar l'estructura. Desactivar-los
 #: estalvia temps i memòria sense perdre res del que fan servir les regles.
@@ -45,12 +96,12 @@ class SpacySyntax:
 
     def __init__(
         self,
-        model: str = DEFAULT_MODEL,
+        model: str = "",
         *,
         eager: bool = False,
         morphology: MorphologyProvider | None = None,
     ) -> None:
-        self._model_name = model
+        self._model_name = model or best_installed_model()
         self._morphology = morphology
         self._nlp: Any = None
         self._loaded = False
@@ -211,7 +262,11 @@ def _first(values: Any, table: dict[str, str] | None) -> str | None:
     return table.get(value) if table is not None else value
 
 
-def discover(model: str = DEFAULT_MODEL) -> SpacySyntax | None:
-    """Analitzador si el model està instal·lat; ``None`` altrament."""
+def discover(model: str = "") -> SpacySyntax | None:
+    """Analitzador si hi ha model instal·lat; ``None`` altrament.
+
+    Sense nom de model es fa servir el més exacte dels instal·lats
+    (:func:`best_installed_model`).
+    """
     parser = SpacySyntax(model)
     return parser if parser.available else None
