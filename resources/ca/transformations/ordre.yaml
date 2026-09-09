@@ -338,6 +338,11 @@ rules:
         subj: {no_finite_verb: true}
         conn: {contains_any: [per tant, així doncs, tanmateix, no obstant això, en canvi, amb tot, d'altra banda, de fet, en efecte, per això]}
         rest: {has_finite_verb: true}
+      # Sense analitzador, «has_finite_verb» depèn de l'endevinador, que no
+      # reconeix formes tan corrents com «ocupa», «continua» o «roman»: la regla
+      # no s'aplicava mai. Amb analitzador, la finitud la diu l'arbre.
+      syntax:
+        requires_parser: true
     transformation: "{conn|cap}, {subj|lower} {rest}"
     examples:
       positive:

@@ -140,21 +140,42 @@ mètrica ho detecta bé. El problema era que el candidat guanyava igualment.
 Dues causes, totes dues corregides:
 
 1. **El guany per transformacions es cobrava pel sol fet d'haver-hi un canvi.**
-   Qualsevol substitució validada rebia entre +0,15 i +0,20, molt per damunt de
-   la penalització de −0,10 per degradació. Ara un canvi que no reorganitza la
-   frase només cobra si millora alguna dimensió mesurada: distància d'estil,
-   preferències explícites, afinitat amb l'empremta, varietat de connectors
-   (una repetició que el candidat **desfà**, no només la que introdueix) o
-   llenguatge assertiu. Si no en millora cap, el guany és zero i, en igualtat,
-   la selecció conserva l'original.
+   La substitució rebia +0,15, molt per damunt de la penalització de −0,10 per
+   degradació: el saldo era positiu i guanyava. Ara, un canvi que **no
+   reorganitza** la frase i que a sobre **degrada** l'estructura local no cobra
+   cap guany: amb la penalització, queda per sota de l'original. Un candidat
+   estructural sí que en cobra, perquè allà la degradació és el preu d'una
+   reestructuració real —i el component «estructura» ja la paga multiplicada per
+   la qualitat sintàctica.
 2. **La distància d'estil premiava allargar el connector.** Amb el perfil per
    defecte, la distància només depèn de la longitud mitjana de frase (objectiu:
    20 mots). «No obstant això, hi ha una peça…» és més llarga que «Però hi ha
    una peça…» i, per tant, més a prop de l'objectiu: guanyava per haver afegit
-   mots. Ara, per als canvis que no reorganitzen res, el component de longitud
-   es pren de l'original i s'anul·la a la comparació; la resta de components de
-   l'estil (mots evitats, connectors preferits, comes i variants de l'autor)
-   continuen comptant igual.
+   mots. Ara la longitud només compta quan el candidat canvia **quantes frases
+   hi ha** (una divisió o una fusió); mentre no en canviï cap, es pren de
+   l'original i s'anul·la a la comparació. La resta de components de l'estil
+   (mots evitats, connectors preferits, comes i variants de l'autor) continuen
+   comptant igual.
+
+### El que no s'ha fet, i per què
+
+La instrucció «conserva l'original quan no hi hagi un benefici justificat» es va
+implementar primer en la seva forma general: **cap** canvi superficial no cobra
+guany si no millora alguna dimensió mesurada. És una regla defensable, però
+contradiu un contracte del motor —«una transformació segura puntua positiu»,
+fixat a `tests/test_scoring.py::test_safe_transformation_scores_positive`— i,
+mesurat, canvia el resultat de **28 tests** existents que no tenen res a veure
+amb aquest problema (CLI, canonada, epistemologia, diccionaris). Un canvi
+d'aquesta mida és una decisió de producte, no una correcció d'abast acotat: es
+deixa proposada i no aplicada. El que s'aplica és la forma estreta, que és la
+que respon a la frase observada.
+
+Tres tests de la branca (`test_regressions_1313`, `test_seleccio_1317`,
+`test_seleccio_1318`) demanaven que dues causals arribessin a la selecció final.
+Amb la regla nova ja no hi arriben, perquè totes dues degraden. S'hi ha conservat
+la propietat que sí que hi és en joc —que una arquitectura repetitiva es
+consideri i no guanyi, i que dues causals seguides mai no siguin la mateixa— i
+s'ha tret l'exigència que en guanyés alguna.
 
 ### Estructures i variants
 
@@ -181,7 +202,24 @@ Dues causes, totes dues corregides:
 | La reina, quan apareix o quan es consolida, tampoc no necessita una explicació excessiva: ocupa el lloc… | Nivell efectiu 2 («el nucli "reina" no és un verb»); cap alternativa | Nivell 3; cap alternativa, amb la nota del bloc amb pronom feble |
 | El rei no necessita gaire justificació: és el centre del tauler i el centre del regne. | Cap alternativa | El rei, que és el centre del tauler i el centre del regne, no necessita gaire justificació. |
 | Però hi ha una peça que no encaixa tan fàcilment: l'orfil. | No obstant això, hi ha una peça que no encaixa tan fàcilment: l'orfil. | Però una peça no encaixa tan fàcilment: l'orfil. |
-| Hi ha peces dels escacs que semblen haver conservat el seu nom perquè la seva funció era clara. | …ja que la seva funció era clara. | Sense canvi: cap candidat no aporta un benefici mesurat |
+| Hi ha peces dels escacs que semblen haver conservat el seu nom perquè la seva funció era clara. | …ja que la seva funció era clara. | Sense canvi: l'única alternativa degrada l'estructura i no en reorganitza cap |
+
+### Una regla d'ordre que no s'aplicava mai
+
+Buscant per què la prosa expositiva rep tan poc canvi sintàctic, va aparèixer que
+`ordre.connector_medial_a_inicial` («La hipòtesi, per tant, continua oberta.» →
+«Per tant, la hipòtesi continua oberta.») no proposava res, ni tan sols per al
+seu exemple declarat. La causa: la condició `has_finite_verb` es resolia amb
+l'endevinador morfològic, que no reconeix formes tan corrents com «ocupa»,
+«continua» o «roman». La regla ara demana l'analitzador, que és qui sap on és el
+verb, i torna a funcionar.
+
+La seva bessona, `ordre.connector_inicial_a_medial` («Per tant, S V…» → «S, per
+tant, V…»), continua sense aplicar-se per un motiu diferent i més profund:
+l'element `{np: true}` del motor de patrons no ofereix cap encaix més curt quan
+el sintagma s'empassa el verb, de manera que el patró no arriba a encaixar. Es
+documenta i no es toca: canviar el retrocés de l'element nominal afecta totes les
+regles que en fan servir i necessita el seu propi mesurament.
 
 ## 4. Nivell de paràgraf
 

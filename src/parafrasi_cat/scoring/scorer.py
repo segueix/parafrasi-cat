@@ -61,11 +61,8 @@ SURFACE_PRESSURE_SHARE = 0.35
 LENGTH_COMPONENT = "longitud_frase"
 """Component de la distància d'estil que mesura la longitud mitjana de frase."""
 
-UNJUSTIFIED_SURFACE = "sense benefici mesurat: el canvi superficial no puntua"
-"""Explicació que rep un canvi superficial que no millora cap dimensió mesurada."""
-
-MEASURABLE = 1e-6
-"""Diferència mínima perquè una millora d'estil compti: per sota és soroll de càlcul."""
+UNJUSTIFIED_SURFACE = "canvi superficial que degrada l'estructura: sense guany"
+"""Explicació que rep un canvi sense reredacció que empitjora la forma de la frase."""
 
 _SOURCE_STYLE_CACHE = 512
 """Originals recordats a la memòria cau de distància d'estil abans de buidar-la."""
@@ -294,23 +291,22 @@ class CompositeScorer:
 
         surface_only = bool(candidate.transformations) and not candidate.is_structural
         style_penalty = 0.0
-        style_gain = 0.0
         if self._style is not None:
             distance = self._style.distance(candidate.text)
             total_distance = distance.total
-            source_total = total_distance
             if candidate.transformations:
+                # La longitud mitjana de frase és una propietat de
+                # l'arquitectura del text, no d'un canvi de dins d'una frase.
+                # Mentre el candidat no canviï quantes frases hi ha, n'hi
+                # hauria prou d'allargar el connector per acostar-se a la
+                # mitjana del perfil i guanyar-hi distància d'estil; per això,
+                # aleshores, el component de longitud es pren de l'original i
+                # s'anul·la a la comparació. En una divisió o una fusió sí que
+                # mesura una cosa real, i s'hi conserva.
                 source_style = self._source_style(candidate.source_text)
-                source_total = source_style.total
-                if surface_only:
-                    # Un canvi que no reorganitza res no canvia el ritme de
-                    # l'autor. Si se li comptés la longitud, n'hi hauria prou
-                    # d'allargar el connector per acostar la frase a la mitjana
-                    # del perfil i guanyar: el component de longitud es pren,
-                    # doncs, de l'original i s'anul·la a la comparació.
+                if distance.metrics.n_sentences == source_style.metrics.n_sentences:
                     total_distance = _with_source_length(distance, source_style)
             style_penalty = w.style_distance * total_distance
-            style_gain = source_total - total_distance
             components["estil"] = round(-style_penalty, 4)
             parts.append(f"distància d'estil {-style_penalty:+.3f}")
             dimensions["semblanca_estil"] = round(max(0.0, 1.0 - total_distance), 4)
@@ -345,7 +341,6 @@ class CompositeScorer:
                 dimensions["afinitat_autor"] = affinity.score
 
         connector_repetition_penalty = 0.0
-        connector_relief = 0.0
         connector_detail: dict[str, object] = {}
         if self._connectors is not None and w.connector_repetition > 0:
             # Es compara amb l'original de la unitat: només la repetició que el
@@ -356,7 +351,6 @@ class CompositeScorer:
             document = ctx.document if ctx is not None else None
             repetition = self._connectors.assess(candidate.text, reference, window, document)
             connector_detail = repetition.to_dict()
-            connector_relief = repetition.relief
             dimensions["varietat_connectors"] = round(1.0 - repetition.penalty, 4)
             if repetition.penalised:
                 connector_repetition_penalty = w.connector_repetition * repetition.penalty
@@ -423,30 +417,24 @@ class CompositeScorer:
                 )
 
         # Un canvi que no reorganitza la frase (lèxic, connector, puntuació,
-        # flexió) no cobra res pel sol fet de ser un canvi: ha de millorar
-        # alguna cosa que el motor mesuri —estil, preferències explícites,
-        # afinitat amb l'autor, varietat de connectors o llenguatge assertiu—.
-        # Si no en millora cap, el guany queda a zero i, en igualtat de
-        # condicions, la selecció conserva l'original (menys transformacions
-        # desempata). Els candidats estructurals no passen per aquí: el seu
-        # avantatge ja el paga el component «estructura», i el paga una vegada.
-        justified = (
-            style_gain > MEASURABLE
-            or preference_bonus > 0
-            or affinity_bonus > 0
-            or assertive_bonus > 0
-            or connector_relief > 0
-        )
-        if candidate.transformations and not justified:
-            gain = (
-                self.transformation_gain(candidate.transformations, surface=False)
-                * degradation_factor
-            )
+        # flexió) i que, a sobre, degrada l'estructura local —hi afegeix un
+        # subordinant «que», hi encadena relatives, hi repeteix l'estructura—
+        # no té res a oferir davant de l'original: ni en reorganitza
+        # l'arquitectura ni en millora la forma. Per això no cobra cap guany, i
+        # amb la penalització per degradació queda per sota de l'original.
+        # Un candidat estructural sí que en cobra: allà la degradació és el preu
+        # d'una reestructuració real, que el component «estructura» ja paga
+        # multiplicada per la qualitat sintàctica.
+        if surface_only and degradation_factor < 1.0:
+            gain = 0.0
+            components["transformacions"] = 0.0
+            parts.append(UNJUSTIFIED_SURFACE)
+        elif degradation_factor < 1.0:
+            # Un candidat estructural que degrada continua cobrant el que
+            # reorganitza, però no el que hi ha substituït pel camí.
+            gain = self.transformation_gain(candidate.transformations, surface=False)
+            gain *= degradation_factor
             components["transformacions"] = round(gain, 4)
-            if not candidate.is_structural or any(
-                not t.family.structural for t in candidate.transformations
-            ):
-                parts.append(UNJUSTIFIED_SURFACE)
 
         # El grau estructural es paga **una sola vegada**. Fins a la 1.3.16 el
         # cobrava el bonus d'estructura i, a més, la pressió de reescriptura
@@ -480,7 +468,9 @@ class CompositeScorer:
             parts.append(f"pressió de reescriptura {rewrite_bonus:+.3f}")
 
         extra_words = max(0, len(candidate.text.split()) - len(candidate.source_text.split()))
-        nominal_expansion = any("nominal.verb_a_nom" in t.operation_rule_ids for t in candidate.transformations)
+        nominal_expansion = any(
+            "nominal.verb_a_nom" in t.operation_rule_ids for t in candidate.transformations
+        )
         nominal_penalty = min(0.25, 0.05 * extra_words) if nominal_expansion else 0.0
         if nominal_penalty:
             components["nominalitzacio_feixuga"] = -round(nominal_penalty, 4)

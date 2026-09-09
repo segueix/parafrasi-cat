@@ -297,9 +297,11 @@ def test_an_introduced_repetition_loses_to_an_equally_structural_alternative(
     for paragraph in result.paragraphs:
         assessment = evaluator.assess(paragraph.output_text, paragraph.source_text)
         assert assessment.penalty == 0.0, assessment.describe()
+    # Una causal repetida no pot sortir a la selecció. Des que un canvi de
+    # connector que degrada l'estructura no cobra guany, el més habitual és que
+    # no en surti cap: el que no pot passar mai és que en surtin dues d'iguals.
     causals = _causals(pipeline, result.output_text)
-    assert len(causals) >= 2, causals
-    assert len(set(causals)) > 1, causals
+    assert len(causals) == len(set(causals)), causals
 
     # L'arquitectura repetitiva existia i s'ha considerat: no ha guanyat per casualitat.
     search = result.paragraphs[0].search

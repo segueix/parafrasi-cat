@@ -5,6 +5,11 @@ Les tres regles noves exigeixen l'analitzador sintàctic, i per això
 instal·lat: els exemples declarats a les regles, les proves negatives de
 negació, modalitat, ambigüitat, dates i nombres romans, i el text que el motor
 sencer acaba oferint.
+
+L'últim bloc cobreix `ordre.connector_medial_a_inicial`, que tampoc no es podia
+comprovar sense parser: la condició `has_finite_verb` la resolia l'endevinador
+morfològic, que no reconeix «ocupa», «continua» ni «roman», i la regla no
+s'aplicava mai.
 """
 
 from __future__ import annotations
@@ -283,3 +288,24 @@ def test_engine_offers_the_presentative_rewrite(deep_level3) -> None:  # type: i
     result = deep_level3.run("Però hi ha una peça que no encaixa tan fàcilment: l'orfil.")
     texts = [c.candidate.text for s in result.sentences for c in s.candidates]
     assert "Però una peça no encaixa tan fàcilment: l'orfil." in texts
+
+
+# --- ordre del connector: la regla que no s'aplicava mai --------------------------------------
+
+MEDIAL_RULE = "ordre.connector_medial_a_inicial"
+
+
+def test_the_medial_connector_moves_to_the_front(propose) -> None:  # type: ignore[no-untyped-def]
+    assert "Per tant, la reina ocupa el centre del tauler." in propose(
+        MEDIAL_RULE, "La reina, per tant, ocupa el centre del tauler."
+    )
+
+
+def test_the_medial_connector_rule_needs_a_real_connector(propose) -> None:  # type: ignore[no-untyped-def]
+    assert propose(MEDIAL_RULE, "La hipòtesi, segons l'autor, continua oberta.") == ()
+
+
+def test_the_engine_offers_the_connector_reordering(deep_level3) -> None:  # type: ignore[no-untyped-def]
+    result = deep_level3.run("La hipòtesi, per tant, continua oberta.")
+    texts = [c.candidate.text for s in result.sentences for c in s.candidates]
+    assert "Per tant, la hipòtesi continua oberta." in texts
