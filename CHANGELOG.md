@@ -71,6 +71,9 @@ morfològic, que no reconeix formes tan corrents com «ocupa», «continua» o
 **Interfície.** L'etiqueta «millor» del candidat guanyador passa a ser
 «preferit pel motor».
 
+**Bateria.** 801 passen, 23 fallen, 78 s'ometen; a `5c282dd` eren 746, 27 i 73.
+Cap fallada nova: les 23 que queden ja hi eren. Se'n resolen quatre.
+
 
 - Els moviments de subordinades reconeixen els connectors amb majúscula:
   conserven la coma concessiva, adapten «Com que» a «ja que» en posició final

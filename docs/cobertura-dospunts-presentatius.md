@@ -221,6 +221,24 @@ el sintagma s'empassa el verb, de manera que el patró no arriba a encaixar. Es
 documenta i no es toca: canviar el retrocés de l'element nominal afecta totes les
 regles que en fan servir i necessita el seu propi mesurament.
 
+## Bateria de proves
+
+Bateria completa (`python -m pytest tests/ -q`) amb `ca_core_news_md` instal·lat,
+comparada amb la mateixa bateria a `5c282dd` en un *worktree* a part:
+
+| | HEAD `5c282dd` | Aquesta entrega |
+|---|---|---|
+| Passen | 746 | 801 |
+| Fallen | 27 | 23 |
+| S'ometen | 73 | 78 |
+
+**Cap fallada nova.** Les 23 que queden ja fallaven a `5c282dd` i no tenen res a
+veure amb aquests canvis. Se'n resolen quatre:
+`test_rule_id_list_matches_rule_set`, `test_rule_set_covers_all_families`,
+`test_rule_examples[assertiu.limitacio_documental]` (l'inventari de regles del
+test no coincidia amb el conjunt real) i
+`test_rule_examples[ordre.connector_medial_a_inicial]`.
+
 ## 4. Nivell de paràgraf
 
 `tests/test_nivell5_focalitzat.py` comprova el camí sencer de la interfície
