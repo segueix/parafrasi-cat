@@ -59,7 +59,7 @@ class VoiceRule(Rule):
                 ctx.note(f"Passiva → activa bloquejada: arrel no admesa ({detail}).")
             return
         passive = root.verb_form == "Part"
-        # Alguns parsers catalans retornen nsubj/obl sense subtipus passiu.
+        # Alguns parsers catalans retornen nsubj i obl/obj sense subtipus passiu.
         # Només acceptem aquesta lectura amb auxiliar passiu i agent conegut.
         explicit_passive = passive and any(
             t.head == root.index and t.lemma.lower() in {"ser", "ésser"}
@@ -71,7 +71,7 @@ class VoiceRule(Rule):
         if passive and not objects and explicit_passive:
             agents = {"taller", "equip", "investigador", "investigadora", "especialista",
                       "restaurador", "restauradora", "autor", "autora", "editor", "editora"}
-            objects = [t for t in tree.tokens if t.head == root.index and t.dep == "obl"
+            objects = [t for t in tree.tokens if t.head == root.index and t.dep in {"obl", "obj"}
                        and t.lemma.lower() in agents
                        and tree.text[slice(*tree.subtree_span(t))].startswith(("per ", "pel ", "pels "))]
         if len(subjects) != 1 or len(objects) != 1:
