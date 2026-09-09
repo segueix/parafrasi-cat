@@ -5,7 +5,7 @@ només s'avaluen amb un arbre fiable; sense parser, o amb un parse dubtós, la
 regla no s'aplica. A més de les de sempre (``is_subject``,
 ``is_adverbial_clause``, ``is_adjunct``, ``is_apposition``, ``movable_subtree``,
 ``no_subject``, ``no_clitic``, ``single_clause``, ``mood``, ``exact``) n'hi ha
-tres que serveixen per reformular sense perdre la coreferència:
+quatre que serveixen per reformular sense perdre la coreferència:
 
 - ``tense: pres`` — temps verbal del bloc segons l'analitzador (mai endevinat);
 - ``agrees_with_subject: true`` — el verb propi del bloc concorda en nombre i
@@ -13,7 +13,10 @@ tres que serveixen per reformular sense perdre la coreferència:
   del bloc és el mateix subjecte de la principal;
 - ``relative_subject_of: <grup>`` — el grup és un pronom relatiu que fa de
   subjecte d'un verb conjugat que concorda amb el sintagma capturat a
-  ``<grup>``.
+  ``<grup>``;
+- ``apposition_of: <grup>`` — el grup és exactament l'aposició d'aquell
+  sintagma: és la prova que uns dos punts hi identifiquen el que s'ha anunciat
+  abans, i no expliquen ni enumeren cap altra cosa.
 
 I una que no necessita parser: ``phrase_number`` (``sg``/``pl``/``known``), que
 és com ``number`` però amb la millor evidència disponible —determinant, recurs
@@ -269,7 +272,7 @@ def _group_ok(
 STRUCTURAL_KEYS = frozenset(
     {"is_subject", "is_adverbial_clause", "mood", "tense", "no_clitic", "single_clause", "exact",
      "is_apposition", "no_subject", "movable_subtree", "is_adjunct", "agrees_with_subject",
-     "relative_subject_of"}
+     "relative_subject_of", "apposition_of"}
 )  # fmt: skip
 
 
@@ -309,7 +312,19 @@ def _structural_ok(
         return False
     if spec.get("no_clitic") is True:
         first = state.tokens.index(tokens[0])
-        if any(state.is_clitic(first + offset) for offset in range(len(tokens))):
+        # Un reflexiu lligat al seu propi verb dins del grup no assenyala res de
+        # fora: viatja amb el verb. La resta de pronoms febles continuen
+        # bloquejant (vegeu SentenceSyntax.bound_reflexives).
+        bound = {
+            t.start
+            for t in syntax.tokens_in(start, end)
+            if t.index in syntax.bound_reflexives(start, end)
+        }
+        if any(
+            state.is_clitic(first + offset)
+            and tokens[offset].span.start not in bound
+            for offset in range(len(tokens))
+        ):
             return False
     if spec.get("single_clause") is True and not _single_clause(tokens, state, starts):
         return False
@@ -370,6 +385,14 @@ def _structural_ok(
         if head is None or head.dep != "appos":
             return False
         if not syntax.covers(head, start, end):
+            return False
+    # «apposition_of: <grup>»: el grup no només és una aposició, sinó que ho és
+    # **d'aquell** sintagma. És la prova que els dos punts identifiquen el
+    # sintagma anterior i no expliquen, enumeren ni comenten cap altra cosa.
+    apposed = spec.get("apposition_of")
+    if isinstance(apposed, str):
+        other = match.group_tokens(state, apposed) if match is not None else ()
+        if not _is_apposition_of(syntax, tokens, other):
             return False
     if spec.get("no_subject") is True and syntax.confident:
         # Només un subjecte nominal fa personal la construcció: en «es considera
@@ -491,6 +514,31 @@ def _agrees_with_subject(syntax: SentenceSyntax, start: int, end: int) -> bool:
     return verb.person in (person, None)
 
 
+def _is_apposition_of(
+    syntax: SentenceSyntax,
+    tokens: Sequence[Token],
+    antecedent: Sequence[Token],
+) -> bool:
+    """Cert si el grup és exactament l'aposició del sintagma capturat a ``antecedent``.
+
+    Es demana que l'analitzador hi vegi una relació ``appos``, que el subarbre
+    de l'aposició ocupi exactament el grup i que el seu nucli pengi d'un mot de
+    dins de l'antecedent. Amb aquestes tres condicions, els dos punts
+    identifiquen aquell sintagma i no cap altra cosa de la frase.
+    """
+    if not syntax.confident or not tokens or not antecedent:
+        return False
+    head = _phrase_head(tokens, syntax)
+    if head is None or head.dep != "appos":
+        return False
+    start, end = tokens[0].span.start, tokens[-1].span.end
+    if not syntax.covers(head, start, end):
+        return False
+    first, last = antecedent[0].span.start, antecedent[-1].span.end
+    target = next((t for t in syntax.tokens if t.index == head.head), None)
+    return target is not None and first <= target.start and target.end <= last
+
+
 def _is_relative_subject(
     syntax: SentenceSyntax,
     tokens: Sequence[Token],
@@ -513,8 +561,18 @@ def _is_relative_subject(
     if parsed.pron_type != "Rel" or parsed.dep not in SUBJECT_DEPS:
         return False
     verb = next((t for t in syntax.tokens if t.index == parsed.head), None)
-    if verb is None or not verb.is_finite_verb:
+    if verb is None:
         return False
+    if not verb.is_finite_verb:
+        # Perífrasi («que va circular»): qui porta la concordança és l'auxiliar.
+        auxiliaries = [
+            t
+            for t in syntax.tokens
+            if t.head == verb.index and t.dep == "aux" and t.is_finite_verb
+        ]
+        if len(auxiliaries) != 1:
+            return False
+        verb = auxiliaries[0]
     number = number_of(state, antecedent)
     return number is not None and verb.number == number
 

@@ -99,6 +99,7 @@ RULE_IDS = [
     "ordre.connector_medial_a_inicial", "ordre.connector_inicial_a_medial",
     "impersonal.es_a_hom", "impersonal.hom_a_es",
     "presentatiu.hi_ha_np_relativa_a_subjecte", "presentatiu.hi_ha_plural_nu_a_quantificador",
+    "presentatiu.hi_ha_np_amb_aposicio_a_identificacio",
     "dospunts.explicacio_a_relativa_del_subjecte",
     "veu.activa_passiva", "assertiu.podria_potser",
     "cobertura.causal_perque_a_ja_que",
