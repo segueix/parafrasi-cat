@@ -53,6 +53,14 @@ test('reescriptura assistida proposa només continuacions de candidats compatibl
     continuacions('El taller va restaurar', 22, opcions),
     [{ text: 'la pintura.', option_id: 'a' }],
   );
+  assert.deepEqual(
+    continuacions('El taller la pintura.', 9, opcions),
+    [
+      { text: 'va restaurar', option_id: 'a' },
+      { text: 'restaurà', option_id: 'b' },
+    ],
+  );
+  assert.deepEqual(continuacions('El tall', 7, opcions), []);
 });
 
 test('reescriptura assistida no barreja construccions sense correspondència fiable', () => {

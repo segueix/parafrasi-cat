@@ -67,23 +67,16 @@ const EinesComposicio = (() => {
     if (!tokensAbans.length || tokensAbans.length > tokensCandidat.length) return null;
 
     let iniciBuit = 0;
-    const acabaEnEspai = /\s$/u.test(abans);
     for (let i = 0; i < tokensAbans.length; i += 1) {
       const escrit = plegat(tokensAbans[i].text);
       const disponible = tokensCandidat[i];
       if (!disponible) return null;
       const candidatPlegat = plegat(disponible.text);
-      const esDarrer = i === tokensAbans.length - 1;
-      const potSerParcial = esDarrer && !acabaEnEspai && esLexic(tokensAbans[i].text);
-      if (potSerParcial) {
-        if (!candidatPlegat.startsWith(escrit)) return null;
-        iniciBuit = escrit.length === candidatPlegat.length
-          ? disponible.end
-          : disponible.start + tokensAbans[i].text.length;
-      } else {
-        if (escrit !== candidatPlegat) return null;
-        iniciBuit = disponible.end;
-      }
+      // Primera versió deliberadament conservadora: només avancem quan el
+      // token escrit coincideix sencer amb el mateix token del candidat.
+      // Això evita completar mitges paraules amb espais o barrejar camins.
+      if (escrit !== candidatPlegat) return null;
+      iniciBuit = disponible.end;
     }
 
     let fiBuit = candidat.length;
@@ -356,7 +349,11 @@ if (typeof window !== "undefined") {
         if (!editor.value.trim()) return;
         const editable = article.querySelector(".editor-frase textarea");
         if (!editable) return;
-        estat.transferencia = { anterior: editable.value, aplicada: editor.value };
+        estat.transferencia = {
+          anterior: editable.value,
+          aplicada: editor.value,
+          teniaManual: typeof composicio !== "undefined" && composicio.manuals.has(frase.index),
+        };
         editable.value = editor.value;
         editable.dispatchEvent(new Event("input", { bubbles: true }));
         desferTransferencia.hidden = false;
@@ -371,6 +368,10 @@ if (typeof window !== "undefined") {
         }
         editable.value = estat.transferencia.anterior;
         editable.dispatchEvent(new Event("input", { bubbles: true }));
+        if (!estat.transferencia.teniaManual && typeof composicio !== "undefined") {
+          composicio.manuals.delete(frase.index);
+          if (typeof refrescarParagraf === "function") refrescarParagraf();
+        }
         estat.transferencia = null;
         desferTransferencia.hidden = true;
         nota.textContent = "Transferència desfeta. La reescriptura assistida es conserva.";
