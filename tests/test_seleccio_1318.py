@@ -361,10 +361,14 @@ def test_the_boundary_alternative_wins_on_merit(own: Pipeline, orfil: object) ->
 
 
 def test_the_paragraph_scale_is_covered_too(own: Pipeline, orfil: object) -> None:
-    """Propietat 4 de punta a punta: dues causals del mateix paràgraf no s'igualen."""
+    """Propietat 4 de punta a punta: dues causals del mateix paràgraf no s'igualen.
+
+    Des que un canvi de connector que degrada l'estructura no cobra guany, el
+    paràgraf sovint no en du cap: la propietat que no pot fallar mai és que, si
+    n'hi ha més d'una, no siguin la mateixa.
+    """
     causals = _forms(own, orfil.paragraphs[0].output_text, CAUSALS)  # type: ignore[attr-defined]
-    assert len(causals) >= 2, causals
-    assert len(set(causals)) > 1, causals
+    assert len(causals) == len(set(causals)), causals
 
 
 def test_the_window_carries_the_text_already_decided(own: Pipeline, orfil: object) -> None:

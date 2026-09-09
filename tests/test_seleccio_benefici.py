@@ -1,14 +1,16 @@
-"""Selecció: un canvi superficial ha de justificar-se; l'original guanya si no ho fa.
+"""Selecció: cap premi per canviar per canviar; l'estructura per damunt del retoc.
 
 Tres defectes reproduïts abans de tocar res, tots tres amb la frase real de la
 mostra:
 
-1. El guany per transformacions es cobrava pel sol fet d'haver-hi un canvi, molt
-   per damunt de la penalització per degradació estructural: «perquè» → «ja que»
-   guanyava tot i baixar ``qualitat_sintactica`` d'1 a 0,8.
+1. Un canvi que no reorganitza res i que **degrada** l'estructura local guanyava
+   igualment: «perquè» → «ja que» afegeix un subordinant «que»
+   (``qualitat_sintactica`` 1 a 0,8) i el guany pla per transformació (+0,15)
+   superava de llarg la penalització per degradació (-0,10).
 2. Amb el perfil d'estil per defecte, la distància només depèn de la longitud
    mitjana de frase: allargar el connector («Però» → «No obstant això,») acostava
-   la frase a l'objectiu i feia guanyar el candidat més llarg.
+   la frase a l'objectiu i feia guanyar el candidat més llarg, sense que hagués
+   canviat res de l'arquitectura.
 3. Una substitució de connector absorbida dins d'una reordenació eixamplava la
    substitució física i, amb ella, el grau de reredacció estructural.
 """
@@ -84,28 +86,46 @@ def scorer(style: StyleEvaluator) -> CompositeScorer:
 # --- 1. cap premi per canviar per canviar -----------------------------------------------------
 
 
-def test_a_connector_swap_without_benefit_earns_nothing(scorer: CompositeScorer) -> None:
-    ctx = ScoringContext(ValidationResult.passed(), SENTENCE)
-    score = scorer.score(_connector(SENTENCE, "Però", "No obstant això,"), ctx)
+def test_a_degrading_connector_swap_earns_nothing(
+    paths: ProjectPaths, catalan_analyzer: RuleBasedAnalyzer
+) -> None:
+    """«perquè» → «ja que» afegeix un «que» i no reorganitza res: guany zero."""
+    from parafrasi_cat.style.degradation import StructuralDegradation
+
+    scorer = CompositeScorer(
+        ScoringWeights(structure=0.35),
+        style_evaluator=StyleEvaluator(
+            load_style_profile(paths.style / "default.yaml"), catalan_analyzer
+        ),
+        degradation=StructuralDegradation(catalan_analyzer),
+    )
+    ctx = ScoringContext(ValidationResult.passed(), CAUSAL)
+    score = scorer.score(_connector(CAUSAL, "perquè", "ja que"), ctx)
     assert score.components["transformacions"] == 0.0
     assert UNJUSTIFIED_SURFACE in score.explanation
 
 
-def test_the_original_wins_when_nothing_improves(scorer: CompositeScorer) -> None:
-    ctx = ScoringContext(ValidationResult.passed(), SENTENCE)
-    original = Candidate.identity(0, SENTENCE)
-    swaps = [
-        _connector(SENTENCE, "Però", "No obstant això,"),
-        _connector(SENTENCE, "Però", "Tanmateix,"),
-        _connector(SENTENCE, "Però", "Així i tot,"),
-    ]
-    items = [original, *swaps]
-    best = select_best(items, lambda c: c, lambda c: scorer.score(c, ctx))
+def test_the_original_wins_over_a_degrading_swap(
+    paths: ProjectPaths, catalan_analyzer: RuleBasedAnalyzer
+) -> None:
+    from parafrasi_cat.style.degradation import StructuralDegradation
+
+    scorer = CompositeScorer(
+        ScoringWeights(structure=0.35),
+        style_evaluator=StyleEvaluator(
+            load_style_profile(paths.style / "default.yaml"), catalan_analyzer
+        ),
+        degradation=StructuralDegradation(catalan_analyzer),
+    )
+    ctx = ScoringContext(ValidationResult.passed(), CAUSAL)
+    original = Candidate.identity(0, CAUSAL)
+    swaps = [_connector(CAUSAL, "perquè", "ja que"), _connector(CAUSAL, "perquè", "atès que")]
+    best = select_best([original, *swaps], lambda c: c, lambda c: scorer.score(c, ctx))
     assert best is original
 
 
 def test_a_longer_connector_does_not_buy_style(scorer: CompositeScorer) -> None:
-    """La longitud de frase no es mou per als canvis que no reorganitzen res."""
+    """La longitud de frase no compta mentre no canviï quantes frases hi ha."""
     ctx = ScoringContext(ValidationResult.passed(), SENTENCE)
     original = scorer.score(Candidate.identity(0, SENTENCE), ctx)
     longer = scorer.score(_connector(SENTENCE, "Però", "No obstant això,"), ctx)
@@ -113,6 +133,30 @@ def test_a_longer_connector_does_not_buy_style(scorer: CompositeScorer) -> None:
     assert longer.components["estil"] == pytest.approx(original.components["estil"])
     assert shorter.components["estil"] == pytest.approx(original.components["estil"])
     assert longer.total == pytest.approx(shorter.total)
+
+
+def test_a_structural_change_still_pays_its_length(scorer: CompositeScorer) -> None:
+    """Una divisió sí que canvia el ritme: allà la longitud continua comptant."""
+    split = Candidate.from_transformations(
+        0,
+        SENTENCE,
+        [
+            _transformation(
+                SENTENCE,
+                "que no encaixa",
+                ". No encaixa",
+                rule_id="prova.divisio",
+                family="CLAUSE_SPLIT",
+                kind=TransformationType.SYNTACTIC,
+            )
+        ],
+    )
+    original = scorer.score(Candidate.identity(0, SENTENCE), ctx := ScoringContext(
+        ValidationResult.passed(), SENTENCE
+    ))
+    assert scorer.score(split, ctx).components["estil"] != pytest.approx(
+        original.components["estil"]
+    )
 
 
 def test_a_structural_candidate_still_earns_its_gain(scorer: CompositeScorer) -> None:

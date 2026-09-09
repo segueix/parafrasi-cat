@@ -39,21 +39,40 @@ no es proposa res.
 `agrees_with_subject`, `relative_subject_of`, `phrase_number`, el filtre
 `agree(msg,fsg,mpl,fpl)` i la classe de context `@conjunction`.
 
-**Selecció.** Un canvi que no reorganitza la frase ja no cobra res pel sol fet
-de ser un canvi: ha de millorar alguna dimensió mesurada (estil, preferències,
-afinitat, varietat de connectors o llenguatge assertiu). A més, la distància
-d'estil d'un canvi superficial ja no compta el component de longitud de frase
-—allargar el connector acostava la frase a la mitjana del perfil i feia guanyar
-«No obstant això» per damunt de l'original— i l'abast estructural d'una
-transformació composta només compta el que hi han canviat les operacions
-estructurals, de manera que una substitució absorbida no infla el grau de
-reredacció. En cas d'empat guanya el candidat amb menys operacions reals.
-`qualitat_sintactica` és 1 − degradació estructural local (relatives
+**Selecció.** Tres canvis, tots tres mesurats sobre la frase que els va treure a
+la llum:
+
+- Un canvi que **no reorganitza** la frase i que a sobre **degrada**
+  l'estructura local ja no cobra cap guany. «perquè» → «ja que» afegeix un
+  subordinant «que» (`qualitat_sintactica` 1 → 0,8) i el guany pla per
+  transformació (+0,15) superava de llarg la penalització per degradació
+  (−0,10); ara l'original guanya. Un candidat estructural sí que continua
+  cobrant: allà la degradació és el preu d'una reestructuració real.
+- La **longitud mitjana de frase** deixa de comptar a la distància d'estil
+  mentre el candidat no canviï quantes frases hi ha. Amb el perfil per defecte
+  la distància només depèn d'aquesta longitud, i n'hi havia prou d'allargar el
+  connector («Però» → «No obstant això,») per acostar-se a l'objectiu i guanyar.
+  En una divisió o una fusió, on la longitud mesura una cosa real, s'hi conserva.
+- L'**abast estructural** d'una transformació composta només compta el que hi
+  han canviat les operacions estructurals: una substitució de connector
+  absorbida dins d'una reordenació ja no infla el grau de reredacció. I, en cas
+  d'empat, guanya el candidat amb menys operacions reals.
+
+`qualitat_sintactica` és 1 menys la degradació estructural local (relatives
 consecutives, «que» acumulats, estructura repetida) i `structural_change_score`
 continua sent un indicador d'estructura, no cap percentatge de millora.
 
+**Cobertura.** `ordre.connector_medial_a_inicial` («La hipòtesi, per tant,
+continua oberta.» → «Per tant, la hipòtesi continua oberta.») no s'aplicava mai:
+sense analitzador, la condició `has_finite_verb` depèn de l'endevinador
+morfològic, que no reconeix formes tan corrents com «ocupa», «continua» o
+«roman». Ara la regla demana l'analitzador, que és qui sap on és el verb.
+
 **Interfície.** L'etiqueta «millor» del candidat guanyador passa a ser
 «preferit pel motor».
+
+**Bateria.** 801 passen, 23 fallen, 78 s'ometen; a `5c282dd` eren 746, 27 i 73.
+Cap fallada nova: les 23 que queden ja hi eren. Se'n resolen quatre.
 
 
 - Els moviments de subordinades reconeixen els connectors amb majúscula:
