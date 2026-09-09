@@ -54,11 +54,30 @@ class VoiceRule(Rule):
             return
         root = tree.root
         if root is None or root.lemma not in PARTICIPLES or root.pos != "VERB":
+            if " ser " in ctx.text:
+                detail = "sense arrel" if root is None else f"{root.text}: lema {root.lemma}, categoria {root.pos}"
+                ctx.note(f"Passiva → activa bloquejada: arrel no admesa ({detail}).")
             return
         passive = root.verb_form == "Part"
-        subjects = [t for t in tree.tokens if t.head == root.index and t.dep == ("nsubj:pass" if passive else "nsubj")]
+        # Alguns parsers catalans retornen nsubj/obl sense subtipus passiu.
+        # Només acceptem aquesta lectura amb auxiliar passiu i agent conegut.
+        explicit_passive = passive and any(
+            t.head == root.index and t.lemma.lower() in {"ser", "ésser"}
+            and t.dep in {"aux", "aux:pass"} for t in tree.tokens
+        )
+        subject_deps = {"nsubj:pass", "nsubj"} if explicit_passive else {"nsubj:pass"} if passive else {"nsubj"}
+        subjects = [t for t in tree.tokens if t.head == root.index and t.dep in subject_deps]
         objects = [t for t in tree.tokens if t.head == root.index and t.dep == ("obl:agent" if passive else "obj")]
+        if passive and not objects and explicit_passive:
+            agents = {"taller", "equip", "investigador", "investigadora", "especialista",
+                      "restaurador", "restauradora", "autor", "autora", "editor", "editora"}
+            objects = [t for t in tree.tokens if t.head == root.index and t.dep == "obl"
+                       and t.lemma.lower() in agents
+                       and tree.text[slice(*tree.subtree_span(t))].startswith(("per ", "pel ", "pels "))]
         if len(subjects) != 1 or len(objects) != 1:
+            if passive:
+                labels = ", ".join(f"{t.text}: {t.dep}" for t in tree.tokens if t.head == root.index and t != root)
+                ctx.note(f"Passiva → activa bloquejada: subjecte o agent no resolt ({labels}).")
             return
         subject, obj = subjects[0], objects[0]
         def nominal(head, agent=False):
@@ -76,12 +95,16 @@ class VoiceRule(Rule):
             return ctx.text[start:end]
         left, right = nominal(subject), nominal(obj, passive)
         if left is None or right is None:
+            if passive:
+                ctx.note("Passiva → activa bloquejada: falta nombre o hi ha un sintagma nominal complex.")
             return
         aux = "va" if subject.number == "sg" else "van"
         # Exactitud del marc textual: rebutja negació, adverbis de focus,
         # subordinades, complements perduts i altres temps verbals.
         expected = f"{left} {aux} {'ser ' if passive else ''}{root.text} {right}."
         if ctx.text != expected:
+            if passive:
+                ctx.note("Passiva → activa bloquejada: la frase no encaixa en el marc de passat perifràstic amb agent explícit.")
             return
         if passive:
             if right.startswith("pel "):

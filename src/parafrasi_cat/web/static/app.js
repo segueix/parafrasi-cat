@@ -1040,19 +1040,40 @@ function crearFrase(frase) {
   const node = $("plantilla-frase").content.cloneNode(true);
   const article = node.querySelector(".frase");
   article.dataset.frase = String(frase.index);
-  if (frase.diagnostics?.messages?.length) {
+  {
+    const messages = (frase.diagnostics?.messages || []).filter(m => typeof m === "string" && m.trim());
+    if (!messages.length) messages.push("No hi ha cap diagnòstic disponible per a aquesta frase.");
     const details = document.createElement("details");
     details.className = "detall";
     const summary = document.createElement("summary");
     summary.textContent = "Per què hi ha aquestes alternatives?";
     const list = document.createElement("ul");
     list.className = "ajuda";
-    for (const message of frase.diagnostics.messages) {
+    for (const message of messages) {
       const item = document.createElement("li");
       item.textContent = message;
       list.append(item);
     }
-    details.append(summary, list);
+    const copia = document.createElement("button");
+    copia.type = "button";
+    copia.className = "secundari";
+    copia.textContent = "Copia diagnòstic";
+    copia.addEventListener("click", async () => {
+      const text = [$("compon-nivell").textContent, `Frase ${frase.index + 1}`, ...messages].join("\n");
+      try {
+        await navigator.clipboard.writeText(text);
+        copia.textContent = "Diagnòstic copiat";
+      } catch (_) {
+        const area = document.createElement("textarea");
+        area.value = text;
+        area.readOnly = true;
+        area.setAttribute("aria-label", "Diagnòstic per copiar manualment");
+        details.append(area);
+        area.select();
+        copia.textContent = "Copia el text seleccionat";
+      }
+    });
+    details.append(summary, list, copia);
     article.append(details);
   }
   node.querySelector(".titol-frase").textContent = `Frase ${frase.index + 1}`;
@@ -1153,6 +1174,10 @@ function mostrarComposicio(esborrany) {
   tancarDesplegable();
   $("compon-sense").hidden = true;
   $("compon-resultat").hidden = false;
+  const nivell = esborrany.level;
+  $("compon-nivell").textContent = Number.isInteger(nivell)
+    ? `Nivell efectiu: ${esborrany.level_label || nivell}. ${nivell <= 3 ? "Sense divisió ni fusió entre frases." : "Pot incloure divisió o fusió de frases segons les regles actives."}`
+    : "Nivell efectiu no disponible: actualitza i reinicia l’app.";
   $("compon-fonts").textContent = `Alternatives: ${esborrany.suggestions}.`;
   // Sense diccionari de sinònims la pantalla funciona igual, però la llista és
   // molt més curta: val la pena oferir-lo aquí i no només al plafó de recursos.

@@ -528,6 +528,9 @@ class RewriteService:
         return {
             **draft.to_dict(),
             "wanted": request.wanted,
+            "level": config.level,
+            "requested_level": request.level,
+            "level_label": level_label(config.level),
             "mode": mode_settings(request.mode).to_dict(),
             "rule_set": config.rule_set,
             "dictionaries": list(request.dictionaries),
