@@ -106,6 +106,43 @@ def choose_options(
     return tuple(picked)
 
 
+def option_group(candidate: Candidate) -> str:
+    """Group only known voice/tense variants; never merge unrelated movements.
+
+    This is presentation metadata, not a semantic-equivalence validator.
+    Unknown or mixed structural paths retain their individual wording.
+    """
+    operations = candidate.operation_architectures
+    voice = tuple(op for op in operations if op.startswith("veu.activa_passiva["))
+    if len(voice) == 1 and all(
+        op in voice or op.split("[", 1)[0] in {
+            "verbal.perifrastic_a_simple", "verbal.simple_a_perifrastic"
+        } for op in operations
+    ):
+        return voice[0]
+    return candidate.normalized_text()
+
+
+def choose_groups(candidates, wanted=DEFAULT_WANTED):
+    """Select representatives with the existing selector, retain their variants."""
+    groups = {}
+    for evaluated in candidates:
+        if evaluated.accepted and not evaluated.candidate.is_identity:
+            bucket = groups.setdefault(option_group(evaluated.candidate), [])
+            if not any(e.candidate.normalized_text() == evaluated.candidate.normalized_text()
+                       for e in bucket):
+                bucket.append(evaluated)
+    def direct(e):
+        rules = [r for t in e.candidate.transformations for r in t.operation_rule_ids]
+        return ("nominal.verb_a_nom" in rules,
+                "verbal.perifrastic_a_simple" in rules, -_total(e))
+    for bucket in groups.values():
+        bucket.sort(key=direct)
+    representatives = choose_options([b[0] for b in groups.values()], wanted)
+    representatives = sorted(representatives, key=lambda e: direct(e)[0])
+    return tuple(tuple(groups[option_group(e.candidate)]) for e in representatives)
+
+
 def _total(evaluated: EvaluatedCandidate) -> float:
     return evaluated.score.total if evaluated.score is not None else 0.0
 
@@ -118,6 +155,7 @@ class DraftOption:
     text: str
     original: bool = False
     """Cert per al text tal com el va escriure qui l'ha portat."""
+    variant_of: str = ""
     signature: str = "ORIGINAL"
     structural_degree: float = 0.0
     change_ratio: float = 0.0
@@ -136,6 +174,7 @@ class DraftOption:
             "option_id": self.option_id,
             "text": self.text,
             "original": self.original,
+            "variant_of": self.variant_of,
             "signature": self.signature,
             "structural_degree": self.structural_degree,
             "structural_change_score": self.structural_degree,
@@ -162,7 +201,7 @@ class SentenceDraft:
 
     @property
     def n_rewrites(self) -> int:
-        return sum(1 for option in self.options if not option.original)
+        return sum(1 for option in self.options if not option.original and not option.variant_of)
 
     def to_dict(self) -> dict[str, object]:
         return {

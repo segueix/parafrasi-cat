@@ -927,6 +927,7 @@ function pintarRedaccions(article, frase) {
   const llista = article.querySelector(".redaccions");
   llista.replaceChildren();
   const triada = opcioTriada(frase);
+  const grups = new Map();
   for (const opcio of frase.options) {
     const node = $("plantilla-redaccio").content.cloneNode(true);
     const element = node.querySelector(".redaccio");
@@ -946,7 +947,25 @@ function pintarRedaccions(article, frase) {
       ? (modificat ? "Original amb canvis manuals · pendent de revisió" : "Text original")
       : `${opcio.summary} · ${modificat ? "canvis manuals pendents de revisió" : "filtres automàtics superats"}`;
     pintarText(node.querySelector(".text-redaccio"), frase, opcio);
-    llista.append(node);
+    if (opcio.variant_of && grups.has(opcio.variant_of)) {
+      const grup = grups.get(opcio.variant_of);
+      grup.llista.append(node);
+      grup.n += 1;
+      grup.resum.textContent = `Variants de forma verbal (${grup.n})`;
+      if (radio.checked || modificat) grup.details.open = true;
+    } else {
+      llista.append(node);
+      if (!opcio.original) {
+        const details = document.createElement("details");
+        const resum = document.createElement("summary");
+        const variants = document.createElement("ul");
+        variants.className = "redaccions";
+        details.append(resum, variants);
+        // Append only for groups with variants: no empty disclosure controls.
+        if (frase.options.some(o => o.variant_of === opcio.option_id)) element.append(details);
+        grups.set(opcio.option_id, { details, resum, llista: variants, n: 0 });
+      }
+    }
   }
 }
 

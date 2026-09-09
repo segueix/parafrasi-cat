@@ -17,7 +17,7 @@ tres alternatives validades, es diu clarament; no s'omple la llista.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from parafrasi_cat.analyzer.analysis import Analysis
 from parafrasi_cat.candidates.candidate import Candidate
@@ -25,9 +25,9 @@ from parafrasi_cat.compose.options import (
     DEFAULT_WANTED,
     DraftOption,
     SentenceDraft,
-    choose_options,
+    choose_groups,
+    option_group,
 )
-from parafrasi_cat.core.transformation import CHAINED_RULES_KEY
 from parafrasi_cat.pipeline.pipeline import Pipeline
 from parafrasi_cat.pipeline.result import ParaphraseResult, SentenceResult
 from parafrasi_cat.synonyms.suggester import SynonymSuggester
@@ -130,11 +130,15 @@ class Composer:
     # -- frase -------------------------------------------------------------------------------
 
     def _sentence(self, result: SentenceResult) -> SentenceDraft:
-        rewrites = choose_options(result.candidates, self._wanted)
-        options = [
-            self._option(f"s{result.index}-r{n}", evaluated.candidate, original=False)
-            for n, evaluated in enumerate(rewrites)
-        ]
+        groups = choose_groups(result.candidates, self._wanted)
+        rewrites = [group[0] for group in groups]
+        options = []
+        for n, group in enumerate(groups):
+            parent = f"s{result.index}-r{n}"
+            for v, evaluated in enumerate(group):
+                option = self._option(parent if v == 0 else f"{parent}-v{v}",
+                                      evaluated.candidate, original=False)
+                options.append(replace(option, variant_of=parent if v else ""))
         options.append(self._option(f"s{result.index}-o", _identity(result), original=True))
         return SentenceDraft(
             index=result.index,
@@ -167,13 +171,17 @@ def _diagnostics(result: SentenceResult, parser_available: bool) -> dict[str, ob
     rejected = [e for e in result.candidates if not e.accepted]
     structural = sum(e.accepted and e.candidate.is_structural
                      for e in result.candidates if not e.candidate.is_identity)
+    groups = len({option_group(e.candidate) for e in result.candidates
+                  if e.accepted and e.candidate.is_structural
+                  and e.candidate.structural_degree() > 0})
     messages = [
         "Analitzador sintàctic disponible." if parser_available else
         "Sense analitzador sintàctic: les regles que el necessiten no s’apliquen.",
         f"{len(result.rule_proposals)} regles provades sobre el text inicial; "
         f"{sum(n > 0 for n in result.rule_proposals.values())} han generat propostes.",
         result.generation.describe(),
-        f"{structural} candidats estructurals han superat els filtres; "
+        f"{structural} candidats estructurals han superat els filtres "
+        f"({groups} grups; variants verbals de veu agrupades); "
         f"{len(rejected)} candidats han estat rebutjats.",
         *result.notes,
     ]
@@ -187,7 +195,7 @@ def _diagnostics(result: SentenceResult, parser_available: bool) -> dict[str, ob
     messages.extend("Motiu de rebuig: " + reason for reason in reasons[:8])
     return {"messages": messages, "initial_rule_proposals": result.rule_proposals,
             "search": result.generation.to_dict(), "rejection_reasons": reasons,
-            "accepted_structural": structural, "parser_available": parser_available}
+            "accepted_structural": structural, "structural_groups": groups, "parser_available": parser_available}
 
 
 def _identity(result: SentenceResult) -> Candidate:
@@ -222,15 +230,10 @@ def _rule_ids(candidate: Candidate) -> tuple[str, ...]:
     a ``CHAINED_RULES_KEY``. Sense mirar-hi, una divisió amb reordenació es
     presentaria com si només hagués canviat l'ordre.
     """
-    found: dict[str, None] = {}
-    for transformation in candidate.transformations:
-        chained = transformation.metadata.get(CHAINED_RULES_KEY)
-        if isinstance(chained, (list, tuple)) and chained:
-            for rule_id in chained:
-                found.setdefault(str(rule_id), None)
-        else:
-            found.setdefault(transformation.rule_id, None)
-    return tuple(found)
+    return tuple(dict.fromkeys(
+        rule for transformation in candidate.transformations
+        for rule in transformation.operation_rule_ids
+    ))
 
 
 def _summary(candidate: Candidate) -> str:
@@ -242,7 +245,19 @@ def _summary(candidate: Candidate) -> str:
     reordenació com si només hagués canviat l'ordre.
     """
     labels: dict[str, None] = {}
+    architectures = " ".join(candidate.operation_architectures)
+    rules = {r for t in candidate.transformations for r in t.operation_rule_ids}
+    voice = ("Passiva → activa" if "architecture=passiva_a_activa" in architectures
+             else "Activa → passiva" if "architecture=activa_a_passiva" in architectures else "")
+    if voice:
+        labels[voice] = None
+    nominal = ("Verb → nom" if "nominal.verb_a_nom" in rules else
+               "Nom → verb" if "nominal.nom_a_verb" in rules else "")
+    if nominal:
+        labels[nominal] = None
     for family in candidate.families:
+        if (family.value == "SYNTACTIC" and voice) or (family.value == "NOMINALIZATION" and nominal):
+            continue
         label = _FAMILY_LABELS.get(family.value)
         if label:
             labels.setdefault(label, None)
