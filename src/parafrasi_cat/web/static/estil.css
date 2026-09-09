@@ -431,3 +431,15 @@ input::file-selector-button { background: var(--fons); color: var(--accent); bor
   .frase > .redaccions { grid-template-columns: minmax(0, 1fr); }
   .editor-frase textarea { min-height: 12rem; }
 }
+
+/* Editors contigus; les referències continuen a sobre. */
+.editors-en-parallel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; margin-top: 1.4rem; align-items: stretch; }
+.editors-en-parallel > .editor-frase, .editors-en-parallel > .reescriptura-assistida { min-width: 0; margin: 0; padding: 1.2rem; border-radius: 12px; }
+.editors-en-parallel > .editor-frase { border: 1px solid var(--accent); border-top: 4px solid var(--accent); background: var(--seleccio-fons); display: flex; flex-direction: column; align-items: flex-start; }
+.editors-en-parallel .editor-frase > label { order: -1; margin: 0 0 .8rem; color: var(--accent); }
+.editors-en-parallel .editor-frase > textarea { margin-top: .7rem; }
+.editors-en-parallel > .reescriptura-assistida { border: 1px solid var(--alternativa); border-top: 4px solid var(--alternativa); background: var(--alternativa-fons); }
+.editors-en-parallel .taller-assistit { position: static; padding: 0; border: 0; background: transparent; }
+.editors-en-parallel .taller-assistit .etiqueta-editor-assistit { margin: 0 0 .8rem; color: var(--alternativa); font-size: 1.1rem; }
+.editors-en-parallel textarea { min-height: 12rem; background: var(--plafo); color: var(--text); padding: 1rem; font: inherit; line-height: 1.75; }
+@media (max-width: 850px) { .editors-en-parallel { grid-template-columns: minmax(0, 1fr); } }

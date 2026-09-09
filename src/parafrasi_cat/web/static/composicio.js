@@ -332,43 +332,10 @@ if (typeof window !== "undefined") {
     function crearAssistida(article, frase) {
       if (article.querySelector(".reescriptura-assistida")) return;
       const estat = estatDe(frase);
-      const referencies = EinesComposicio.referenciesAssistides(frase);
       const caixa = document.createElement("section");
       caixa.className = "reescriptura-assistida";
-      const titol = document.createElement("h5");
-      titol.textContent = "Reescriptura assistida";
-      const introduccio = document.createElement("p");
-      introduccio.className = "introduccio-assistida";
-      introduccio.textContent = "Consulta l'original i totes les reformulacions mentre redactes la teva versió, sense perdre de vista l'editor.";
-
-      const espai = document.createElement("div");
-      espai.className = "espai-assistit";
-      const referencia = document.createElement("aside");
-      referencia.className = "referencies-assistides";
-      referencia.setAttribute("aria-label", "Textos de referència per a la reescriptura");
-      const capReferencies = document.createElement("div");
-      capReferencies.className = "cap-referencies";
-      const titolReferencies = document.createElement("h6");
-      titolReferencies.textContent = "Textos de referència";
-      const comptador = document.createElement("span");
-      comptador.className = "comptador-referencies";
-      comptador.textContent = `${referencies.reformulacions.length} reformulació${referencies.reformulacions.length === 1 ? "" : "ns"}`;
-      capReferencies.append(titolReferencies, comptador);
-      referencia.append(capReferencies, creaTargetaReferencia("Original", referencies.original, "", true));
-      for (const reformulacio of referencies.reformulacions) {
-        referencia.append(creaTargetaReferencia(reformulacio.label, reformulacio.text, reformulacio.summary, false));
-      }
-      if (!referencies.reformulacions.length) {
-        const buit = document.createElement("p");
-        buit.className = "sense-reformulacions";
-        buit.textContent = "El sistema no ha generat cap reformulació addicional per a aquesta frase.";
-        referencia.append(buit);
-      }
-
       const taller = document.createElement("div");
       taller.className = "taller-assistit";
-      const titolTaller = document.createElement("h6");
-      titolTaller.textContent = "La teva redacció";
       const etiqueta = document.createElement("label");
       etiqueta.className = "etiqueta-editor-assistit";
       etiqueta.htmlFor = `assistida-frase-${frase.index}`;
@@ -463,11 +430,15 @@ if (typeof window !== "undefined") {
       });
 
       barra.append(desfer, refer, utilitza, desferTransferencia);
-      taller.append(titolTaller, etiqueta, editor, suggeriments, barra, nota);
-      espai.append(referencia, taller);
-      caixa.append(titol, introduccio, espai);
+      taller.append(etiqueta, editor, suggeriments, barra, nota);
+      caixa.append(taller);
       const editable = article.querySelector(".editor-frase");
-      if (editable) editable.after(caixa);
+      if (editable) {
+        const editors = document.createElement("div");
+        editors.className = "editors-en-parallel";
+        editable.before(editors);
+        editors.append(editable, caixa);
+      }
       actualitzaSuggeriments(article, frase);
     }
 
