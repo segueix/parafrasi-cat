@@ -1,4 +1,24 @@
-"""Regla declarativa basada en patrons de tokens (motor «pattern»)."""
+"""Regla declarativa basada en patrons de tokens (motor «pattern»).
+
+Les condicions de grup que consulten l'anàlisi sintàctica (``STRUCTURAL_KEYS``)
+només s'avaluen amb un arbre fiable; sense parser, o amb un parse dubtós, la
+regla no s'aplica. A més de les de sempre (``is_subject``,
+``is_adverbial_clause``, ``is_adjunct``, ``is_apposition``, ``movable_subtree``,
+``no_subject``, ``no_clitic``, ``single_clause``, ``mood``, ``exact``) n'hi ha
+tres que serveixen per reformular sense perdre la coreferència:
+
+- ``tense: pres`` — temps verbal del bloc segons l'analitzador (mai endevinat);
+- ``agrees_with_subject: true`` — el verb propi del bloc concorda en nombre i
+  persona amb el subjecte de l'oració: és la prova que el subjecte el·líptic
+  del bloc és el mateix subjecte de la principal;
+- ``relative_subject_of: <grup>`` — el grup és un pronom relatiu que fa de
+  subjecte d'un verb conjugat que concorda amb el sintagma capturat a
+  ``<grup>``.
+
+I una que no necessita parser: ``phrase_number`` (``sg``/``pl``/``known``), que
+és com ``number`` però amb la millor evidència disponible —determinant, recurs
+morfològic o analitzador—, per als sintagmes sense determinant.
+"""
 
 from __future__ import annotations
 
@@ -21,10 +41,11 @@ from parafrasi_cat.rules.patterns import (
     PatternMatcher,
     contains_temporal,
     is_participle,
+    number_of,
     phrase_in,
     render_template,
 )
-from parafrasi_cat.syntax.analysis import SentenceSyntax, SyntaxToken, empty
+from parafrasi_cat.syntax.analysis import SUBJECT_DEPS, SentenceSyntax, SyntaxToken, empty
 
 _LEADING_PUNCT = ",;.:)»”"
 
@@ -177,7 +198,11 @@ def _starts_with(tokens: Sequence[Token], options: Sequence[str], state: MatchSt
 
 
 def _group_ok(
-    spec: Mapping[str, object], tokens: Sequence[Token], text: str, state: MatchState
+    spec: Mapping[str, object],
+    tokens: Sequence[Token],
+    text: str,
+    state: MatchState,
+    match: Match | None = None,
 ) -> bool:
     hints = state.hints
     starts = as_str_list(spec, "starts_with")
@@ -195,6 +220,14 @@ def _group_ok(
         actual = hints.number_of(tokens)
         if actual is None or (number != "known" and actual != number):
             return False
+    # «phrase_number» és el mateix criteri que «number», però amb la millor
+    # evidència disponible: determinant, analitzador o recurs morfològic. Serveix
+    # per als sintagmes sense determinant, on «number» no pot dir res.
+    phrase_number = spec.get("phrase_number")
+    if phrase_number is not None:
+        actual = number_of(state, tokens)
+        if actual is None or (phrase_number != "known" and actual != phrase_number):
+            return False
     max_tokens = spec.get("max_tokens")
     if isinstance(max_tokens, int) and len(tokens) > max_tokens:
         return False
@@ -206,7 +239,7 @@ def _group_ok(
         return False
     if spec.get("no_finite_verb") is True and finite:
         return False
-    if not _structural_ok(spec, tokens, text, state, starts):
+    if not _structural_ok(spec, tokens, text, state, starts, match):
         return False
     if spec.get("no_relative") is True and any(t.lower in RELATIVE_MARKERS for t in tokens):
         return False
@@ -234,8 +267,9 @@ def _group_ok(
 
 #: Condicions de grup que consulten l'estructura de la frase.
 STRUCTURAL_KEYS = frozenset(
-    {"is_subject", "is_adverbial_clause", "mood", "no_clitic", "single_clause", "exact",
-     "is_apposition", "no_subject", "movable_subtree", "is_adjunct"}
+    {"is_subject", "is_adverbial_clause", "mood", "tense", "no_clitic", "single_clause", "exact",
+     "is_apposition", "no_subject", "movable_subtree", "is_adjunct", "agrees_with_subject",
+     "relative_subject_of"}
 )  # fmt: skip
 
 
@@ -256,6 +290,7 @@ def _structural_ok(
     text: str,
     state: MatchState,
     starts: Sequence[str],
+    match: Match | None = None,
 ) -> bool:
     """Condicions estructurals d'un grup.
 
@@ -311,6 +346,22 @@ def _structural_ok(
             if not finite or any(t.mood not in (mood, None) for t in finite):
                 return False
         elif any(_guessed_mood(t) not in (mood, None) for t in tokens):
+            return False
+    tense = spec.get("tense")
+    if isinstance(tense, str):
+        # El temps només el dona l'analitzador: l'endevinador no en sap prou i
+        # inventar-lo obriria la porta a confondre un relat amb una descripció.
+        if not syntax.confident:
+            return False
+        finite = syntax.finite_tokens_in(start, end)
+        if not finite or any(t.tense not in (tense, None) for t in finite):
+            return False
+    if spec.get("agrees_with_subject") is True and not _agrees_with_subject(syntax, start, end):
+        return False
+    reference = spec.get("relative_subject_of")
+    if isinstance(reference, str):
+        other = match.group_tokens(state, reference) if match is not None else ()
+        if not _is_relative_subject(syntax, tokens, other, state):
             return False
     if spec.get("is_apposition") is True:
         if not syntax.confident:
@@ -393,6 +444,79 @@ def _is_adverbial_clause(
             return lemma not in COMPLEMENT_TAKING_LEMMAS
         return False
     return False
+
+
+#: Categories nominals: el seu «person» no el marca l'analitzador, però és tercera.
+_NOMINAL_POS = frozenset({"NOUN", "PROPN"})
+
+
+def _clause_verb(syntax: SentenceSyntax, start: int, end: int) -> SyntaxToken | None:
+    """Verb conjugat propi del bloc: el seu nucli, o la còpula que el sosté.
+
+    S'accepta el nucli quan ja és un verb conjugat i el predicat nominal amb
+    còpula (``és el centre``); **no** s'accepta un nucli no finit sostingut per
+    un auxiliar (``va perdre``, ``ha conservat``), perquè aleshores el bloc és
+    una perífrasi i el temps que en dona l'analitzador és el de l'auxiliar, no
+    el de l'acció.
+    """
+    head = syntax.closed_subtree(start, end)
+    if head is None:
+        return None
+    if head.is_finite_verb:
+        return head
+    copulas = [
+        t
+        for t in syntax.tokens
+        if t.head == head.index and t.dep == "cop" and t.is_finite_verb
+    ]
+    return copulas[0] if len(copulas) == 1 else None
+
+
+def _agrees_with_subject(syntax: SentenceSyntax, start: int, end: int) -> bool:
+    """Cert si el verb propi del bloc concorda amb el subjecte de l'oració.
+
+    És la prova que el subjecte el·líptic del bloc és el mateix subjecte de la
+    principal. Si el subjecte no és clar, si el bloc no té verb propi o si
+    algun dels trets falta, no es dona per bona la coreferència.
+    """
+    if not syntax.confident:
+        return False
+    subject = syntax.subject_of_root()
+    verb = _clause_verb(syntax, start, end)
+    if subject is None or verb is None:
+        return False
+    if subject.number is None or verb.number is None or subject.number != verb.number:
+        return False
+    person = subject.person if subject.pos not in _NOMINAL_POS else "3"
+    return verb.person in (person, None)
+
+
+def _is_relative_subject(
+    syntax: SentenceSyntax,
+    tokens: Sequence[Token],
+    antecedent: Sequence[Token],
+    state: MatchState,
+) -> bool:
+    """Cert si el grup és un relatiu que fa de subjecte del seu verb.
+
+    Es demana que l'analitzador hi vegi un pronom relatiu amb funció de
+    subjecte (``nsubj``) d'un verb conjugat i que aquest verb concordi en
+    nombre amb l'antecedent que la regla ha capturat: si el relatiu es refereix
+    a un altre nom del sintagma («una peça dels escacs que semblen antigues»),
+    la concordança no quadra i no es transforma res.
+    """
+    if not syntax.confident or len(tokens) != 1 or not antecedent:
+        return False
+    parsed = syntax.token_at(tokens[0].span.start)
+    if parsed is None or parsed.end != tokens[0].span.end:
+        return False
+    if parsed.pron_type != "Rel" or parsed.dep not in SUBJECT_DEPS:
+        return False
+    verb = next((t for t in syntax.tokens if t.index == parsed.head), None)
+    if verb is None or not verb.is_finite_verb:
+        return False
+    number = number_of(state, antecedent)
+    return number is not None and verb.number == number
 
 
 #: Relacions d'un complement circumstancial que es pot desplaçar sencer.
@@ -514,6 +638,8 @@ def _token_in(
             return True
         if option == "@determiner" and state.hints.is_determiner(token):
             return True
+        if option == "@conjunction" and low in state.hints.conjunctions:
+            return True
         if option == "@finite_verb" and state.is_finite(token):
             return True
         if not option.startswith("@") and low == option.lower().replace("’", "'"):
@@ -571,7 +697,7 @@ def check_conditions(
             if spec.get("required") is True:
                 return False
             continue
-        if not _group_ok(spec, tokens, match.group_text(state, name), state):
+        if not _group_ok(spec, tokens, match.group_text(state, name), state, match):
             return False
     if not _context_ok(as_mapping(conditions, "context"), match, state):
         return False

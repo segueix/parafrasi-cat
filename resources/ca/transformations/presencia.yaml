@@ -114,3 +114,104 @@ rules:
       negative:
         - "En aquest sarcòfag hi ha la presència de dos cranis."
         - "Hi ha dos cranis."
+
+  # --- Presentatius «hi ha … que …» --------------------------------------------------
+  #
+  # «Hi ha X que P» afirma l'existència de X i li atribueix P. Quan el relatiu
+  # fa de subjecte, la mateixa afirmació es pot dir sense el presentatiu, amb X
+  # com a subjecte de P. No s'hi toca res més: ni la negació, ni els
+  # quantificadors, ni el que ve després. Per això la reescriptura es limita al
+  # tros «hi ha X que» i deixa la resta de la frase intacta.
+  #
+  # Condicions comunes: el presentatiu ha d'obrir la frase (com a molt darrere
+  # d'una conjunció com «Però»), perquè un «hi ha» subordinat o negat («no hi
+  # ha X que…», «si hi ha X que…») no admet la promoció; i l'analitzador ha de
+  # confirmar que «que» és el subjecte relatiu d'un verb conjugat que concorda
+  # amb X. Si «que» fos complement directe («hi ha coses que no entenc»), treure
+  # el presentatiu deixaria un sintagma sense oració.
+  - rule_id: presentatiu.hi_ha_np_relativa_a_subjecte
+    engine: pattern
+    category: presencia
+    family: SYNTACTIC
+    structural_weight: 0.55
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.7
+    description: "«hi ha X que V…» → «X V…» (presentatiu → predicació directa)"
+    pattern:
+      - {text: hi}
+      - {text: ha}
+      - {np: true, group: np}
+      - {text: que, group: rel}
+    conditions:
+      groups:
+        np:
+          starts_with: ["@determiner", "@number"]
+          no_finite_verb: true
+        rel: {relative_subject_of: np}
+      context:
+        preceded_by: ["@start", "@conjunction"]
+        not_preceded_by: [ni, o, si, com, que, mai]
+      sentence:
+        no_relative_before: true
+        no_comma_before: true
+      syntax:
+        requires_parser: true
+    transformation: "{np|sentcase}"
+    examples:
+      positive:
+        - input: "Però hi ha una peça que no encaixa tan fàcilment: l'orfil."
+          output: "Però una peça no encaixa tan fàcilment: l'orfil."
+        - input: "Hi ha dues peces que conserven el nom llatí."
+          output: "Dues peces conserven el nom llatí."
+      negative:
+        - "No hi ha cap peça que encaixi."
+        - "Hi ha coses que no entenc."
+        - "Si hi ha una peça que no encaixa, la partida canvia."
+        - "En aquest sarcòfag hi ha dos cranis."
+
+  # Amb un sintagma sense determinant («hi ha peces que…») la promoció a
+  # subjecte exigeix un quantificador, perquè el català no admet un plural nu
+  # davant del verb. El quantificador ha de concordar en gènere, i el gènere
+  # només s'accepta si l'analitzador o el recurs morfològic el demostren: sense
+  # evidència, la plantilla no dona cap candidat i la frase es queda com és.
+  - rule_id: presentatiu.hi_ha_plural_nu_a_quantificador
+    engine: pattern
+    category: presencia
+    family: SYNTACTIC
+    structural_weight: 0.55
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.65
+    description: "«hi ha X que V…» → «alguns/algunes X V…» (X plural sense determinant)"
+    pattern:
+      - {text: hi}
+      - {text: ha}
+      - {np: true, group: np, bare: true}
+      - {text: que, group: rel}
+    conditions:
+      groups:
+        np:
+          not_starts_with: ["@determiner", "@number"]
+          phrase_number: pl
+          no_finite_verb: true
+        rel: {relative_subject_of: np}
+      context:
+        preceded_by: ["@start", "@conjunction"]
+        not_preceded_by: [ni, o, si, com, que, mai]
+      sentence:
+        no_relative_before: true
+        no_comma_before: true
+      syntax:
+        requires_parser: true
+    transformation: "{np|agree(algun,alguna,alguns,algunes)|sentcase} {np}"
+    examples:
+      positive:
+        - input: "Hi ha llibres que expliquen la història del joc."
+          output: "Alguns llibres expliquen la història del joc."
+      negative:
+        - "No hi ha llibres que expliquin la història del joc."
+        - "Hi ha llibres que llegeixo cada any."
+        - "Hi ha una peça que no encaixa."

@@ -14,11 +14,22 @@ from parafrasi_cat.scoring.weights import ScoringWeights
 from parafrasi_cat.style.adaptation import AdaptationContext, AuthorAdaptation
 from parafrasi_cat.style.connector_repetition import ConnectorRepetition, DocumentWindow
 from parafrasi_cat.style.degradation import StructuralDegradation
-from parafrasi_cat.style.evaluator import StyleEvaluator
+from parafrasi_cat.style.evaluator import StyleDistance, StyleEvaluator
 from parafrasi_cat.style.fusion_rhythm import FusionRhythm
 from parafrasi_cat.validation.grammar import WARNING_PENALTY
 from parafrasi_cat.validation.result import ValidationDimension, ValidationResult
 
+#: Dimensions que es publiquen amb cada candidat. Dues es llegeixen malament si
+#: no se'n diu què són:
+#:
+#: - ``qualitat_sintactica`` és 1 menys la degradació estructural local
+#:   (:mod:`parafrasi_cat.style.degradation`): relatives consecutives amb el
+#:   mateix marcador, subordinants «que» de més i estructura repetida dins d'una
+#:   frase, sempre comparant el candidat amb el seu original. Que valgui 0,8 vol
+#:   dir «hi afegeix un subordinant», no «és un 80 % bo».
+#: - ``structural_change_score`` és un **indicador** del grau de reredacció
+#:   estructural (el mateix ``grau_estructural``), no cap percentatge de
+#:   millora: mesura quanta arquitectura s'ha tocat, no si el resultat és millor.
 DIMENSIONS: tuple[str, ...] = (
     "preservacio_factual",
     "preservacio_epistemologica",
@@ -47,6 +58,18 @@ STRUCTURAL_PRESSURE_SHARE = 0.65
 SURFACE_PRESSURE_SHARE = 0.35
 """Part de la pressió de reescriptura que és distància superficial respecte de l'original."""
 
+LENGTH_COMPONENT = "longitud_frase"
+"""Component de la distància d'estil que mesura la longitud mitjana de frase."""
+
+UNJUSTIFIED_SURFACE = "sense benefici mesurat: el canvi superficial no puntua"
+"""Explicació que rep un canvi superficial que no millora cap dimensió mesurada."""
+
+MEASURABLE = 1e-6
+"""Diferència mínima perquè una millora d'estil compti: per sota és soroll de càlcul."""
+
+_SOURCE_STYLE_CACHE = 512
+"""Originals recordats a la memòria cau de distància d'estil abans de buidar-la."""
+
 _DIMENSION_LABELS = {
     "preservacio_factual": "preservació factual",
     "preservacio_epistemologica": "preservació epistemològica",
@@ -59,7 +82,7 @@ _DIMENSION_LABELS = {
     "grau_de_canvi": "grau de canvi",
     "grau_superficial": "canvi superficial",
     "grau_estructural": "reredacció estructural",
-    "structural_change_score": "canvi sintàctic net",
+    "structural_change_score": "indicador de canvi estructural",
     "qualitat_sintactica": "qualitat sintàctica",
     "ritme_fusio": "ritme de la fusió",
     "assertivitat": "llenguatge assertiu",
@@ -165,6 +188,7 @@ class CompositeScorer:
         self._assertive = assertive
         self._rhythm = rhythm
         self._connectors = connectors
+        self._source_style_cache: dict[str, StyleDistance] = {}
 
     @property
     def weights(self) -> ScoringWeights:
@@ -199,10 +223,36 @@ class CompositeScorer:
         """Avaluador de la repetició de connectors (cap si no hi ha inventari)."""
         return self._connectors
 
-    def transformation_gain(self, transformations: Sequence[Transformation]) -> float:
+    def _source_style(self, source_text: str) -> StyleDistance:
+        """Distància d'estil de l'original, amb memòria cau dins de la sessió.
+
+        Tots els candidats d'una mateixa unitat comparteixen original: mesurar-lo
+        una sola vegada no canvia cap resultat i estalvia una anàlisi per candidat.
+        """
+        assert self._style is not None
+        cached = self._source_style_cache.get(source_text)
+        if cached is None:
+            if len(self._source_style_cache) >= _SOURCE_STYLE_CACHE:
+                self._source_style_cache.clear()
+            cached = self._style.distance(source_text)
+            self._source_style_cache[source_text] = cached
+        return cached
+
+    def transformation_gain(
+        self, transformations: Sequence[Transformation], *, surface: bool = True
+    ) -> float:
+        """Guany per transformacions aplicades.
+
+        Amb ``surface=False`` només compten les famílies que reorganitzen la
+        frase: serveix per no pagar res a una substitució que no millora cap
+        dimensió mesurada, ni tan sols quan viatja dins d'un candidat que sí
+        que reestructura.
+        """
         w = self._weights
         by_family: dict[TransformationFamily, list[float]] = {}
         for t in transformations:
+            if not surface and not t.family.structural:
+                continue
             value = t.confidence * max(0.0, 1.0 - w.semantic_risk * t.semantic_risk.weight)
             by_family.setdefault(t.family, []).append(value)
         total = 0.0
@@ -242,13 +292,28 @@ class CompositeScorer:
                 dimensions["compliment_terminologic"] = 1.0
                 dimensions["gramaticalitat"] = 1.0
 
+        surface_only = bool(candidate.transformations) and not candidate.is_structural
         style_penalty = 0.0
+        style_gain = 0.0
         if self._style is not None:
             distance = self._style.distance(candidate.text)
-            style_penalty = w.style_distance * distance.total
+            total_distance = distance.total
+            source_total = total_distance
+            if candidate.transformations:
+                source_style = self._source_style(candidate.source_text)
+                source_total = source_style.total
+                if surface_only:
+                    # Un canvi que no reorganitza res no canvia el ritme de
+                    # l'autor. Si se li comptés la longitud, n'hi hauria prou
+                    # d'allargar el connector per acostar la frase a la mitjana
+                    # del perfil i guanyar: el component de longitud es pren,
+                    # doncs, de l'original i s'anul·la a la comparació.
+                    total_distance = _with_source_length(distance, source_style)
+            style_penalty = w.style_distance * total_distance
+            style_gain = source_total - total_distance
             components["estil"] = round(-style_penalty, 4)
             parts.append(f"distància d'estil {-style_penalty:+.3f}")
-            dimensions["semblanca_estil"] = round(max(0.0, 1.0 - distance.total), 4)
+            dimensions["semblanca_estil"] = round(max(0.0, 1.0 - total_distance), 4)
 
         preference_bonus = 0.0
         preference_explanation = ""
@@ -280,6 +345,7 @@ class CompositeScorer:
                 dimensions["afinitat_autor"] = affinity.score
 
         connector_repetition_penalty = 0.0
+        connector_relief = 0.0
         connector_detail: dict[str, object] = {}
         if self._connectors is not None and w.connector_repetition > 0:
             # Es compara amb l'original de la unitat: només la repetició que el
@@ -290,6 +356,7 @@ class CompositeScorer:
             document = ctx.document if ctx is not None else None
             repetition = self._connectors.assess(candidate.text, reference, window, document)
             connector_detail = repetition.to_dict()
+            connector_relief = repetition.relief
             dimensions["varietat_connectors"] = round(1.0 - repetition.penalty, 4)
             if repetition.penalised:
                 connector_repetition_penalty = w.connector_repetition * repetition.penalty
@@ -307,6 +374,7 @@ class CompositeScorer:
         dimensions["structural_change_score"] = degree
 
         degradation_penalty = 0.0
+        degradation_factor = 1.0
         degradation_reasons: tuple[str, ...] = ()
         dimensions["qualitat_sintactica"] = 1.0
         if self._degradation is not None and candidate.transformations:
@@ -314,7 +382,8 @@ class CompositeScorer:
             if degradation.degraded:
                 degradation_penalty = w.degradation * degradation.score
                 degradation_reasons = degradation.reasons
-                gain *= 1.0 - degradation.score
+                degradation_factor = 1.0 - degradation.score
+                gain *= degradation_factor
                 components["transformacions"] = round(gain, 4)
                 components["degradacio"] = round(-degradation_penalty, 4)
                 parts.append(
@@ -352,6 +421,32 @@ class CompositeScorer:
                 parts.append(
                     f"ritme de la fusió {-rhythm_penalty:+.3f} ({'; '.join(assessment_r.reasons)})"
                 )
+
+        # Un canvi que no reorganitza la frase (lèxic, connector, puntuació,
+        # flexió) no cobra res pel sol fet de ser un canvi: ha de millorar
+        # alguna cosa que el motor mesuri —estil, preferències explícites,
+        # afinitat amb l'autor, varietat de connectors o llenguatge assertiu—.
+        # Si no en millora cap, el guany queda a zero i, en igualtat de
+        # condicions, la selecció conserva l'original (menys transformacions
+        # desempata). Els candidats estructurals no passen per aquí: el seu
+        # avantatge ja el paga el component «estructura», i el paga una vegada.
+        justified = (
+            style_gain > MEASURABLE
+            or preference_bonus > 0
+            or affinity_bonus > 0
+            or assertive_bonus > 0
+            or connector_relief > 0
+        )
+        if candidate.transformations and not justified:
+            gain = (
+                self.transformation_gain(candidate.transformations, surface=False)
+                * degradation_factor
+            )
+            components["transformacions"] = round(gain, 4)
+            if not candidate.is_structural or any(
+                not t.family.structural for t in candidate.transformations
+            ):
+                parts.append(UNJUSTIFIED_SURFACE)
 
         # El grau estructural es paga **una sola vegada**. Fins a la 1.3.16 el
         # cobrava el bonus d'estructura i, a més, la pressió de reescriptura
@@ -424,6 +519,21 @@ class CompositeScorer:
             rhythm=rhythm_detail,
             connectors=connector_detail,
         )
+
+
+def _with_source_length(candidate: StyleDistance, source: StyleDistance) -> float:
+    """Distància d'estil del candidat amb el component de longitud de l'original.
+
+    Serveix per als canvis superficials: la resta de components (mots evitats,
+    connectors preferits, comes i variants de l'autor) es mesuren sobre el
+    candidat; la longitud, sobre l'original. Així un canvi que només allarga o
+    escurça la frase no guanya ni perd distància d'estil.
+    """
+    components = dict(candidate.components)
+    reference = source.components
+    if LENGTH_COMPONENT in components and LENGTH_COMPONENT in reference:
+        components[LENGTH_COMPONENT] = reference[LENGTH_COMPONENT]
+    return sum(components.values()) / len(components) if components else 0.0
 
 
 def _binary(validation: ValidationResult, dimension: ValidationDimension) -> float:

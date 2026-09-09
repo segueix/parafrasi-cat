@@ -95,7 +95,9 @@ class PipelineConfig:
         length_ratio: Marge de longitud (mínim, màxim) acceptat respecte de l'original.
         use_style: Si és fals, no es calcula la distància d'estil.
         syntax: Analitzador sintàctic (``auto`` = el parser local si està instal·lat,
-            ``none`` = cap). El parser només analitza; mai no genera text.
+            ``spacy:<model>`` = un model de spaCy concret, ``none`` = cap). Sense
+            model indicat es fa servir el més exacte dels instal·lats. El parser
+            només analitza; mai no genera text.
         languagetool: Si és cert, s'afegeix la validació local de LanguageTool quan
             estigui instal·lada. Per defecte és fals: el motor no depèn de Java ni de
             LanguageTool, i la interfície ofereix activar-lo si el detecta.

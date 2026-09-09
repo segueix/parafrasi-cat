@@ -136,6 +136,12 @@ class RepetitionAssessment:
 
     penalty: float = 0.0
     """Severitat de la repetició **introduïda**, entre 0 i 1."""
+    relief: float = 0.0
+    """Severitat de la repetició que l'original tenia i el candidat **desfà**, entre 0 i 1.
+
+    És la simètrica de ``penalty``: serveix per distingir un canvi de connector
+    que aporta varietat real d'un que només canvia el mot per canviar-lo.
+    """
     profile: tuple[str, ...] = ()
     """Seqüència de connectors de l'inventari, en ordre d'aparició."""
     repeats: tuple[RepeatedConnector, ...] = field(default_factory=tuple)
@@ -158,6 +164,7 @@ class RepetitionAssessment:
     def to_dict(self) -> dict[str, object]:
         return {
             "penalty": round(self.penalty, 4),
+            "relief": round(self.relief, 4),
             "profile": list(self.profile),
             "repeats": [r.to_dict() for r in self.repeats],
             "introduced": [r.to_dict() for r in self.introduced],
@@ -325,8 +332,12 @@ class ConnectorRepetition:
         introduced = {
             form: max(0.0, weight - inherited.get(form, 0.0)) for form, weight in current.items()
         }
+        removed = {
+            form: max(0.0, weight - current.get(form, 0.0)) for form, weight in inherited.items()
+        }
         return RepetitionAssessment(
             penalty=round(min(1.0, sum(introduced.values())), 4),
+            relief=round(min(1.0, sum(removed.values())), 4),
             profile=tuple(use.form for use in own),
             repeats=tuple(
                 RepeatedConnector(form, distance, distance_weight(distance), introduced[form] > 0.0)

@@ -193,7 +193,7 @@ d'implementar sense cap dependència nova. Estan a `style/rhythm.py` i
 
 Des de la interfície: enganxeu o carregueu el text, trieu nivell, empremta,
 diccionaris, preferències i mode, i premeu **Genera candidats**. Per a cada
-frase i paràgraf veureu el text original, el millor candidat, la resta de
+frase i paràgraf veureu el text original, el candidat preferit pel motor, la resta de
 candidats, les diferències, les regles aplicades, les puntuacions per dimensió
 i els advertiments de validació. Podeu marcar candidats, editar el resultat i
 copiar-lo o exportar-lo.
@@ -504,9 +504,12 @@ el recurs el motor es comporta com abans.
 
 ## Parser sintàctic
 
-spaCy amb `ca_core_news_sm` (UD Catalan AnCora) aporta dependències, subjecte,
-objecte, subordinades i coordinacions. Les regles el consulten **només si el
-demanen**:
+spaCy amb un model català (`ca_core_news_sm`, `md` o `lg`, tots entrenats sobre
+UD Catalan AnCora) aporta dependències, subjecte, objecte, subordinades i
+coordinacions. Si n'hi ha més d'un d'instal·lat, el motor fa servir el més
+exacte; es pot fixar un model concret amb `syntax: spacy:<model>` o amb la
+variable d'entorn `PARAFRASI_SPACY_MODEL`. Les regles el consulten **només si
+el demanen**:
 
 ```yaml
 conditions:
@@ -719,4 +722,5 @@ component, [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
 Documentació addicional: [`docs/recursos-linguistics.md`](docs/recursos-linguistics.md),
 [`docs/arquitectura.md`](docs/arquitectura.md),
 [`docs/principis-de-preservacio.md`](docs/principis-de-preservacio.md),
+[`docs/cobertura-dospunts-presentatius.md`](docs/cobertura-dospunts-presentatius.md),
 [`CHANGELOG.md`](CHANGELOG.md).

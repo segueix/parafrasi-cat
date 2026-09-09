@@ -62,6 +62,7 @@ from parafrasi_cat.core.transformation import (
     CHAINED_RULES_KEY,
     CHAINED_TYPES_KEY,
     OPERATION_COUNT_KEY,
+    STRUCTURAL_EXTENT_KEY,
     SemanticRisk,
     Transformation,
     TransformationFamily,
@@ -711,6 +712,14 @@ def _compound_transformation(
         architecture for _rule, _family, _kind, architecture in records[1:]
     )
     metadata[OPERATION_COUNT_KEY] = str(len(records))
+    # L'abast estructural no és el de la substitució física: és el que hi han
+    # canviat les operacions que reorganitzen la frase.
+    structural_extent = sum(
+        piece.structural_extent
+        for piece in pieces
+        if any(f.structural for f in piece.operation_families)
+    )
+    metadata[STRUCTURAL_EXTENT_KEY] = str(structural_extent)
     explanations = [piece.explanation for piece in pieces if piece.explanation]
     return Transformation(
         rule_id=records[0][0],

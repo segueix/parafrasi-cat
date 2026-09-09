@@ -1023,7 +1023,7 @@ _INSTALL_INFO: dict[str, JsonDict] = {
             "les transformacions estructurals es puguin fer amb seguretat."
         ),
         "origin": "https://pypi.org/project/spacy/ i https://github.com/explosion/spacy-models",
-        "version": "spaCy + ca_core_news_sm (UD Catalan AnCora)",
+        "version": "spaCy + ca_core_news_sm/md/lg (UD Catalan AnCora)",
         "license": "spaCy: MIT · model: GPL-3.0",
         "approximate_size_mb": 120,
         "requirement": "Python 3.11 o superior",

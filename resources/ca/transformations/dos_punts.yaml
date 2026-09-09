@@ -1,0 +1,74 @@
+# Família: construccions explicatives amb dos punts (nivell 3, dins la frase).
+#
+# Els dos punts no diuen quina relació hi ha entre les dues parts: poden
+# introduir una explicació, una identificació, una enumeració, una conseqüència
+# o una citació. Per això **cap regla d'aquest fitxer no hi afegeix cap
+# connector causal**: convertir «A: B» en «A perquè B» o «A, ja que B» afirmaria
+# una causalitat que l'original no afirma.
+#
+# L'única reformulació que s'hi autoritza conserva les dues proposicions
+# senceres i no en canvia la força: quan el tros de darrere dels dos punts és
+# una clàusula amb el mateix subjecte que la principal (subjecte el·líptic,
+# concordança confirmada per l'analitzador), es pot dir com a relativa
+# explicativa del subjecte. La divisió en dues frases és una altra cosa: és
+# nivell 4 i viu a «cobertura_profunda.yaml», desactivada.
+description: Explicacions amb dos punts reformulades dins de la mateixa frase.
+language: ca
+rules:
+  - rule_id: dospunts.explicacio_a_relativa_del_subjecte
+    engine: pattern
+    category: subordinada
+    family: SUBORDINATION
+    structural_weight: 0.7
+    level: 3
+    transformation_type: syntactic
+    semantic_risk: low
+    confidence: 0.65
+    description: "«S P: V…» → «S, que V…, P» (l'explicació passa a relativa explicativa)"
+    pattern:
+      - {start: true}
+      - {np: true, group: subj}
+      - {seq: true, group: pred, min_tokens: 2, no_punct: true}
+      - {text: ":"}
+      - {seq: true, group: expl, greedy: true, min_tokens: 2}
+      - {sentence_end: true}
+    conditions:
+      groups:
+        # El subjecte ha d'obrir la frase i ha de ser el subjecte del nucli:
+        # així la relativa que s'hi insereix el modifica a ell i a ningú més.
+        subj:
+          is_subject: true
+          no_finite_verb: true
+          no_clitic: true
+        # Entre el subjecte i els dos punts no hi pot haver cap signe: si ja hi
+        # ha un incís entre comes, la relativa quedaria encavalcada amb ell.
+        pred:
+          has_finite_verb: true
+        # L'explicació ha de ser una clàusula sencera, sense subjecte propi,
+        # en present d'indicatiu i amb un verb que concordi amb el subjecte de
+        # la principal: és la prova que el subjecte el·líptic és el mateix. El
+        # present exclou el relat («va caure: va perdre la partida»), on els dos
+        # punts solen marcar una conseqüència i no una explicació.
+        expl:
+          has_finite_verb: true
+          mood: ind
+          tense: pres
+          no_subject: true
+          no_clitic: true
+          agrees_with_subject: true
+          movable_subtree: true
+      syntax:
+        requires_parser: true
+    transformation: "{subj}, que {expl}, {pred}"
+    examples:
+      positive:
+        - input: "El rei no necessita gaire justificació: és el centre del tauler i el centre del regne."
+          output: "El rei, que és el centre del tauler i el centre del regne, no necessita gaire justificació."
+        - input: "La reina no necessita cap explicació: ocupa el lloc immediat del poder."
+          output: "La reina, que ocupa el lloc immediat del poder, no necessita cap explicació."
+      negative:
+        - "Les peces són tres: rei, reina i cavaller."
+        - "La categoria és aquesta: un home pròxim al rei."
+        - "El rei va caure aviat: va perdre la partida."
+        - "El rei no necessita justificació: els cavallers sí que en necessiten."
+        - "La reina, quan apareix, no necessita explicació: ocupa el lloc del poder."

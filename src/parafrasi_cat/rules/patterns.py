@@ -19,6 +19,8 @@ frase (sense espais), amb retrocés com en una expressió regular:
 Les plantilles referencien els grups: ``"{subj} constitueix {pred}"``. Filtres:
 ``{x|cap}``, ``{x|lower}``, ``{x|de}`` (contracció amb «de»), ``{x|a}``,
 ``{np|agree(apareix,apareixen)}`` (concordança de nombre),
+``{np|agree(algun,alguna,alguns,algunes)}`` (concordança de gènere i nombre:
+sense evidència de gènere no dona cap resultat i la plantilla no proposa res),
 ``{p|map(fet=realitzat,feta=realitzada)}``,
 ``{cop|inflect(constituir,és=constitueix,són=constitueixen)}`` (canvi de verb
 conservant persona, nombre i gènere: primer amb el recurs morfològic i, si no
@@ -818,12 +820,51 @@ def contract_a(text: str) -> str:
     return "a " + text
 
 
+#: Confiança mínima perquè el gènere que dona el recurs morfològic compti com a
+#: evidència. L'endevinador intern («-es» → femení) marca «homes» o «llibres»
+#: com a femenins: per sota d'aquest llindar no és evidència de res.
+GENDER_CONFIDENCE = 0.9
+
+
+def gender_of(state: MatchState, tokens: Sequence[Token]) -> str | None:
+    """Gènere («m» o «f») d'un sintagma nominal, o ``None`` si no se'n té evidència.
+
+    Primer mana l'analitzador sintàctic, que és qui ha vist la frase sencera;
+    si no en dona cap tret, s'accepta el recurs morfològic només quan la
+    resposta és segura (:data:`GENDER_CONFIDENCE`) i única. Sense evidència no
+    s'endevina: qui cridi aquesta funció no proposarà cap alternativa.
+    """
+    for token in tokens:
+        if not token.is_word:
+            continue
+        if state.syntax.confident:
+            parsed = state.syntax.token_at(token.span.start)
+            if parsed is not None and parsed.end == token.span.end:
+                if parsed.pos not in ("NOUN", "PROPN"):
+                    continue
+                if parsed.gender in ("m", "f"):
+                    return parsed.gender
+        genders = {
+            entry.features.gender
+            for entry in state.morphology.analyze(token.text)
+            if entry.features.pos == "noun"
+            and entry.features.gender in ("m", "f")
+            and entry.confidence >= GENDER_CONFIDENCE
+        }
+        if len(genders) == 1:
+            return genders.pop()
+        return None
+    return None
+
+
 def number_of(state: MatchState, tokens: Sequence[Token]) -> str | None:
-    """Nombre d'un sintagma: primer pel determinant i, si no n'hi ha, per morfologia.
+    """Nombre d'un sintagma: determinant, morfologia i, si cal, analitzador.
 
     L'heurística del determinant falla amb sintagmes sense article («cranis
     humans»); aleshores es demana el nombre del primer nom que el recurs
-    morfològic conegui.
+    morfològic conegui i, si tampoc no en sap res, el que digui l'analitzador
+    sintàctic. L'ordre és el de sempre més una font al final: el que abans es
+    responia es continua responent igual.
     """
     number = state.hints.number_of(tokens)
     if number is not None:
@@ -832,6 +873,13 @@ def number_of(state: MatchState, tokens: Sequence[Token]) -> str | None:
         for entry in state.morphology.analyze(token.text):
             if entry.features.pos in ("noun", "adj") and entry.features.number is not None:
                 return entry.features.number
+    if state.syntax.confident:
+        for token in tokens:
+            parsed = state.syntax.token_at(token.span.start)
+            if parsed is None or parsed.end != token.span.end:
+                continue
+            if parsed.pos in ("NOUN", "PROPN") and parsed.number is not None:
+                return parsed.number
     return None
 
 
@@ -865,6 +913,16 @@ def _apply_filter(
         if number is None:
             return None
         return agree.group(1).strip() if number == "sg" else agree.group(2).strip()
+    # Concordança completa: «agree(msg, fsg, mpl, fpl)». Sense gènere demostrat
+    # (o sense nombre) no es tria cap forma i la plantilla no dona candidat.
+    agree4 = re.fullmatch(r"agree\(([^,()]+),([^,()]+),([^,()]+),([^,()]+)\)", name)
+    if agree4:
+        number = number_of(state, tokens)
+        gender = gender_of(state, tokens)
+        if number is None or gender is None:
+            return None
+        index = {("m", "sg"): 1, ("f", "sg"): 2, ("m", "pl"): 3, ("f", "pl"): 4}[(gender, number)]
+        return agree4.group(index).strip()
     lead = re.fullmatch(r"lead\((.*)\)", name)
     if lead:
         leads: dict[str, str] = {}

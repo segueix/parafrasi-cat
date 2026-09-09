@@ -2,7 +2,7 @@
 # Ús: parafrasi-cat --rules parafrasi --explain "Text."
 # Amb --max-risk low queden fora les regles de risc mitjà (inversions, «correspon a»...).
 name: parafrasi
-description: Totes les famílies de regles de parafraseig (lèxic, connectors, verbal, còpula, agent, presència, ordre, temporals, subordinades, impersonals, fusió, divisió, puntuació, llenguatge assertiu).
+description: Totes les famílies de regles de parafraseig (lèxic, connectors, verbal, còpula, agent, presència, ordre, temporals, subordinades, impersonals, fusió, divisió, puntuació, dos punts, llenguatge assertiu).
 max_semantic_risk: medium
 min_confidence: 0.55
 include:
@@ -23,5 +23,6 @@ include:
   - resources/ca/transformations/fusio.yaml
   - resources/ca/transformations/divisio.yaml
   - resources/ca/transformations/puntuacio.yaml
+  - resources/ca/transformations/dos_punts.yaml
   - resources/ca/transformations/assertiu.yaml
 rules: []
