@@ -13,7 +13,7 @@ def _rewrite(text: str) -> str:
             use_style=False,
         )
     )
-    return pipeline.run(text).text
+    return pipeline.run(text).output_text
 
 
 def test_triple_modalitzacio_es_redueix_sense_convertir_se_en_fet() -> None:

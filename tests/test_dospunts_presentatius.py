@@ -237,6 +237,70 @@ def test_presentative_keeps_dates_and_roman_numerals(propose) -> None:  # type: 
     assert produced == ("Dues peces del segle XV conserven el nom del 1483.",)
 
 
+# --- predicació amb infinitiu obert: dos llocs buits, cap decidible -------------------------
+#
+# Un arbre coherent no garanteix una transformació correcta. A «hi ha un llibre que val la pena
+# llegir» l'analitzador marca «que» com a nsubj de «val» sense contradir-se enlloc (un sol
+# subjecte, concordança correcta), però el relatiu hi és el complement directe de «llegir». La
+# guarda no anomena cap verb: mira si el verb del relatiu ja té un argument nominal propi («la
+# pena», «sentit», «gràcia») i, a més, en penja un infinitiu sense objecte.
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Hi ha un llibre que val la pena llegir.",
+        # Altres noms i verbs: la guarda no és cap excepció per a «llibre» ni per a «valer».
+        "Hi ha una obra que val la pena consultar.",
+        "Hi ha un informe que no té sentit publicar.",
+        "Hi ha un document que fa gràcia llegir.",
+        # Amb negació, modalitat i quantificador: continua callant.
+        "Hi ha un sol expedient que no val la pena reobrir.",
+    ],
+)
+def test_an_open_infinitive_predicate_authorises_nothing(propose, text: str) -> None:  # type: ignore[no-untyped-def]
+    assert propose(PRESENTATIVE_RULE, text) == ()
+    assert propose(BARE_PRESENTATIVE_RULE, text) == ()
+    assert propose(IDENTIFICATION_RULE, text) == ()
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # Control: el verb no té cap argument nominal propi, i el subjecte és compartit.
+        ("Hi ha un tren que vol arribar aviat.", "Un tren vol arribar aviat."),
+        ("Hi ha un mètode que pot resoldre el problema.", "Un mètode pot resoldre el problema."),
+        # Elevació amb l'infinitiu ja proveït del seu objecte.
+        (
+            "Hi ha dues normes que semblen contradir el reglament.",
+            "Dues normes semblen contradir el reglament.",
+        ),
+        # Gerundi: no obre cap lloc d'objecte a omplir.
+        ("Hi ha un autor que continua escrivint.", "Un autor continua escrivint."),
+        # Amb negació i data, per comprovar que la guarda no s'hi fica.
+        (
+            "Hi ha una clàusula del 1998 que no pot anul·lar el contracte.",
+            "Una clàusula del 1998 no pot anul·lar el contracte.",
+        ),
+    ],
+)
+def test_the_guard_leaves_control_and_raising_alone(propose, text: str, expected: str) -> None:  # type: ignore[no-untyped-def]
+    assert propose(PRESENTATIVE_RULE, text) == (expected,)
+
+
+def test_the_guard_reads_the_tree_and_not_a_list_of_verbs(parser) -> None:  # type: ignore[no-untyped-def]
+    """L'evidència que fa callar la regla és la forma de l'arbre, i es comprova."""
+    from parafrasi_cat.rules.pattern_rule import _open_infinitive_predicate
+
+    blocked = parser.parse("Hi ha un llibre que val la pena llegir.")
+    relative = next(t for t in blocked.tokens if t.pron_type == "Rel")
+    assert _open_infinitive_predicate(blocked, relative.head)
+
+    allowed = parser.parse("Hi ha un tren que vol arribar aviat.")
+    relative = next(t for t in allowed.tokens if t.pron_type == "Rel")
+    assert not _open_infinitive_predicate(allowed, relative.head)
+
+
 # --- presentatiu amb plural nu: només amb gènere demostrat -----------------------------------
 
 
@@ -323,12 +387,12 @@ def test_the_identification_becomes_a_copular_sentence(propose) -> None:  # type
 
 def test_the_identification_works_with_other_words(propose) -> None:
     """Mateixa estructura, vocabulari diferent: no hi ha cap excepció programada."""
-    assert propose(
-        IDENTIFICATION_RULE, "Hi ha una moneda que va circular molt: el florí."
-    ) == ("El florí és una moneda que va circular molt.",)
-    assert propose(
-        IDENTIFICATION_RULE, "Hi ha un càrrec que no encaixa tan bé: el veguer."
-    ) == ("El veguer és un càrrec que no encaixa tan bé.",)
+    assert propose(IDENTIFICATION_RULE, "Hi ha una moneda que va circular molt: el florí.") == (
+        "El florí és una moneda que va circular molt.",
+    )
+    assert propose(IDENTIFICATION_RULE, "Hi ha un càrrec que no encaixa tan bé: el veguer.") == (
+        "El veguer és un càrrec que no encaixa tan bé.",
+    )
 
 
 @pytest.mark.parametrize(
@@ -351,9 +415,7 @@ def test_the_identification_declines_when_the_parse_does_not_confirm_it(propose,
 
 
 def test_the_identification_agrees_in_number(propose) -> None:  # type: ignore[no-untyped-def]
-    produced = propose(
-        IDENTIFICATION_RULE, "Hi ha uns oficials que depenen del rei: els veguers."
-    )
+    produced = propose(IDENTIFICATION_RULE, "Hi ha uns oficials que depenen del rei: els veguers.")
     assert produced == ("Els veguers són uns oficials que depenen del rei.",)
 
 

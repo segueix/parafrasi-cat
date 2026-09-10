@@ -83,12 +83,31 @@ sense que res la substituís. Ara els noms d'una locució (relacions `fixed` i
 `flat`) no compten. El defecte hi era d'abans; només es veia amb l'anàlisi
 fiable, i la correcció anterior el va fer visible.
 
-### Cas que continua sent ambigu
+### El cas que quedava ambigu, resolt
 
 A «Hi ha un llibre que val la pena llegir» l'analitzador marca «que» com a
-subjecte de «val» de manera internament coherent —no hi ha cap segon subjecte—, i
-la regla hi actua. No s'hi ha programat cap excepció: fer-ho seria una llista de
-verbs, no una regla.
+subjecte de «val» de manera internament coherent —no hi ha cap segon subjecte i
+la concordança quadra—, i la regla hi actuava. **Un arbre coherent no garanteix
+una transformació correcta.**
+
+L'evidència que hi falla és una altra: el verb del relatiu ja té un argument
+nominal propi («la pena») i, a més, en penja un infinitiu **sense complement
+directe**. Hi ha dos llocs buits —el subjecte de «val» i l'objecte de «llegir»— i
+el relatiu pot ser a qualsevol dels dos; l'analitzador tria sempre el primer.
+`relative_subject_of` demana ara que aquesta configuració no s'hi doni.
+
+| Frase | Argument nominal del verb | Infinitiu | Objecte de l'infinitiu | Es transforma |
+| --- | --- | --- | --- | --- |
+| que val la pena **llegir** | «pena» | sí | no | no |
+| que no té sentit **publicar** | «sentit» | sí | no | no |
+| que **vol** arribar aviat | cap | sí | — | sí |
+| que semblen **contradir** el reglament | cap | sí | sí | sí |
+| que **continua** escrivint | cap | gerundi | — | sí |
+
+No s'hi ha programat cap verb ni cap nom. El preu de la prudència és una
+abstenció quan l'infinitiu és intransitiu i no li falta res («que deixa passar el
+temps»): sense un diccionari de valències no es pot saber, i davant del dubte es
+conserva l'original.
 
 ## 2. Què es pot saber d'una empremta
 

@@ -158,7 +158,9 @@ def test_nominalization_both_directions(paths: ProjectPaths, outputs) -> None:  
         "Van realitzar l'anàlisi de les dades del jaciment.",
         "Van dur a terme l'anàlisi de les dades del jaciment.",
     ]
-    assert outputs(to_noun, "L'equip estudia el retaule.")[0] == "L'equip fa l'estudi del retaule."
+    assert (
+        outputs(to_noun, "El comitè estudia el retaule.")[0] == "El comitè fa l'estudi del retaule."
+    )
     assert outputs(to_noun, "Van analitzar-les ahir.") == []
     assert outputs(to_noun, "Cal analitzar les dades.") == []  # infinitiu sense auxiliar del passat
     to_verb = NominalizationRule(
@@ -268,3 +270,74 @@ def test_rule_definition_validation() -> None:
     assert [e.input for e in definition.positive_examples] == ["i"]
     assert [e.input for e in definition.negative_examples] == ["n", "m"]
     assert definition.params == {"extra": 1}
+
+
+# --- article elidit davant del subjecte: no és cap pronom feble -------------------------------
+
+
+ELIDED_SUBJECT = "L'equip revisa la datació del sarcòfag."
+"""«L'» hi és l'article de «equip»: la nominalització hi ha de poder actuar."""
+
+CLITIC_OBJECT = "L'analitzen amb calma."
+"""«L'» hi és el complement directe del verb: el bloqueig s'ha de mantenir."""
+
+
+@pytest.fixture(scope="module")
+def deep_level3():  # type: ignore[no-untyped-def]
+    from parafrasi_cat.pipeline.builder import build_pipeline
+    from parafrasi_cat.pipeline.config import PipelineConfig
+    from parafrasi_cat.pipeline.modes import apply_mode
+
+    pipeline = build_pipeline(apply_mode(PipelineConfig(rule_set="parafrasi"), "profund", 3))
+    if not pipeline.syntax.available:
+        pytest.skip("cal el parser local (scripts/install_parser.py): la distinció ve de l'arbre")
+    return pipeline
+
+
+def _nominalizations(pipeline, text: str) -> list[str]:  # type: ignore[no-untyped-def]
+    result = pipeline.run(text)
+    return [
+        scored.candidate.text
+        for sentence in result.sentences
+        for scored in sentence.candidates
+        if "nominal.verb_a_nom" in scored.candidate.rule_ids
+    ]
+
+
+def test_an_elided_article_no_longer_blocks_the_nominalization(deep_level3) -> None:  # type: ignore[no-untyped-def]
+    """L'analitzador de text marca «L'» com a pronom ambigu; l'arbre diu que és un determinant."""
+    produced = _nominalizations(deep_level3, ELIDED_SUBJECT)
+    assert "L'equip fa la revisió de la datació del sarcòfag." in produced
+
+
+def test_the_same_shape_with_other_words(deep_level3) -> None:  # type: ignore[no-untyped-def]
+    """No hi ha cap excepció per a «equip» ni per a «revisar»."""
+    produced = _nominalizations(deep_level3, "L'institut estudia el retaule.")
+    assert "L'institut fa l'estudi del retaule." in produced
+
+
+def test_a_real_weak_pronoun_still_blocks_it(deep_level3) -> None:  # type: ignore[no-untyped-def]
+    """El pronom feble no es pot traslladar a un nom d'acció: el bloqueig no s'ha tocat."""
+    assert _nominalizations(deep_level3, CLITIC_OBJECT) == []
+    assert _nominalizations(deep_level3, "Van analitzar-les ahir.") == []
+
+
+def test_without_the_parser_the_block_stays_as_it_was(paths: ProjectPaths, outputs) -> None:  # type: ignore[no-untyped-def]
+    """Sense arbre no s'endevina res: es manté el comportament conservador d'abans.
+
+    L'arnès dels exemples declarats construeix el context sense analitzador, i
+    per això l'exemple del fitxer de regles porta un subjecte sense article
+    elidit. La millora és del producte, no de l'arnès.
+    """
+    pairs = load_nominalization_pairs(
+        paths.language() / "transformations" / "nominalitzacions.yaml"
+    )
+    to_noun = NominalizationRule(
+        RuleDefinition.from_mapping(
+            {"rule_id": "n", "engine": "nominalization", "category": "nominalitzacio", "level": 3}
+        ),
+        pairs,
+        direction="to_noun",
+    )
+    assert outputs(to_noun, ELIDED_SUBJECT) == []
+    assert outputs(to_noun, "La comissió revisa la datació del sarcòfag.")
