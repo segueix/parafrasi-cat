@@ -54,11 +54,17 @@ def test_style_build_writes_fingerprint_and_profile(
     )
     assert code == 0
     out = capsys.readouterr().out
-    assert "Empremta «prova-narrativa»" in out and "validació: 2 documents" in out
+    assert "Empremta «prova-narrativa»" in out
+    assert "validació independent: 2 documents" in out
     assert "prefereix «apareix»" in out
+    # L'informe diu amb què s'ha fet l'empremta i quant se'n pot refiar.
+    assert "confiança per component" in out and "no cap probabilitat estadística" in out
+    assert "fragments literals del corpus" in out
     data = json.loads(output.read_text(encoding="utf-8"))
     assert data["name"] == "prova-narrativa" and data["description"] == "Corpus de prova"
     assert data["validation"]["n_documents"] == 2
+    assert data["validation"]["verdict"] in {"insufficient_data", "consistent", "divergent"}
+    assert data["corpus"]["n_duplicates"] == 0
     assert output.read_text(encoding="utf-8").endswith("}\n")
     profile_data = yaml.safe_load(profile.read_text(encoding="utf-8"))
     assert profile_data["fingerprint"] == str(output)

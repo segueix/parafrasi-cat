@@ -257,6 +257,15 @@ class FeedbackRequest:
         )
 
 
+def _fingerprint_message(name: str, n_documents: int, n_duplicates: int) -> str:
+    """Missatge de confirmació que diu si algun text ha quedat fora, i per què."""
+    message = f"Empremta «{name}» creada amb {n_documents} textos."
+    if n_duplicates:
+        repeated = "text repetit" if n_duplicates == 1 else "textos repetits"
+        message += f" No s'hi han comptat {n_duplicates} {repeated} (mateix contingut)."
+    return message
+
+
 def _as_flag(value: object) -> bool:
     """Booleà d'un valor JSON o de formulari («true», «1», «on» compten com a cert)."""
     if isinstance(value, bool):
@@ -916,8 +925,14 @@ class RewriteService:
 
         Els textos són de l'usuari i no van a Internet: viatgen fins a
         l'ordinador que executa el motor —el mateix, o un altre de la xarxa
-        local—, s'hi processen en memòria i només se'n desa l'empremta, que és
-        un JSON de recomptes i estadístics. No s'entrena cap model.
+        local—, s'hi processen en memòria i només se'n desa l'empremta. Els
+        textos sencers no es desen enlloc; l'empremta, però, no és **només**
+        recomptes: hi queden fragments literals curts del corpus (fins a tres
+        per tret, retallats) que il·lustren cada connector, cada expressió
+        recurrent i cada variant preferida. No s'entrena cap model.
+
+        Els textos repetits compten una sola vegada, encara que arribin dues
+        vegades des de la interfície.
 
         Només hi entren textos propis: un esborrany generat amb LLM no pot formar
         part del corpus de l'autor, perquè contaminaria l'empremta.
@@ -955,7 +970,8 @@ class RewriteService:
             "n_documents": fingerprint.n_documents,
             "n_words": fingerprint.n_words,
             "summary": StylePreferences(fingerprint).summary(),
-            "message": f"Empremta «{clean}» creada amb {len(useful)} textos.",
+            "n_duplicates": len(corpus.duplicates),
+            "message": _fingerprint_message(clean, len(corpus.main), len(corpus.duplicates)),
         }
 
     # -- historial ---------------------------------------------------------------------------

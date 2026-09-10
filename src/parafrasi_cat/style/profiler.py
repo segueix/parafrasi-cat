@@ -24,7 +24,7 @@ from parafrasi_cat.style.observations import (
     StyleSettings,
     VariantGroup,
 )
-from parafrasi_cat.style.rhythm import rhythm_profile
+from parafrasi_cat.style.rhythm import confidence_level, rhythm_profile
 from parafrasi_cat.style.statistics import (
     confidence,
     iqr,
@@ -48,6 +48,36 @@ PREFERRED_MIN_OBSERVATIONS = 5
 #: Distància a partir de la qual una característica del corpus de validació es
 #: considera divergent respecte del corpus principal.
 VALIDATION_DIVERGENCE = 0.4
+
+#: Veredictes possibles d'una validació independent.
+VALIDATION_INSUFFICIENT = "insufficient_data"
+"""No hi ha prou text reservat per dir-ne res: ni confirma ni desmenteix l'empremta."""
+
+VALIDATION_CONSISTENT = "consistent"
+"""El text reservat s'assembla a l'empremta feta amb els altres documents."""
+
+VALIDATION_DIVERGENT = "divergent"
+"""Hi ha prou text i s'aparta de l'empremta: l'estil hi coincideix poc."""
+
+
+def validation_verdict(
+    n_sentences: int, n_documents: int, distance: float, threshold: float = VALIDATION_DIVERGENCE
+) -> tuple[str, str]:
+    """Veredicte i confiança d'una validació independent.
+
+    Separa dues coses que es confonen amb facilitat: **no tenir-ne prou dades**
+    i **no coincidir**. Amb poc text reservat la distància no vol dir res, i el
+    veredicte és :data:`VALIDATION_INSUFFICIENT` encara que surti alta o baixa.
+    La confiança reutilitza el criteri de :func:`confidence_level` (frases i
+    documents), el mateix que la resta del perfil.
+    """
+    level = confidence_level(n_sentences, n_documents)
+    if level == "low":
+        return VALIDATION_INSUFFICIENT, level
+    if distance >= threshold:
+        return VALIDATION_DIVERGENT, level
+    return VALIDATION_CONSISTENT, level
+
 
 _APPROXIMATE_FACTOR = 0.6
 _PUNCTUATION_KEYS = (
@@ -147,9 +177,13 @@ def build_fingerprint(
         for item in sorted(comparison.items, key=lambda i: (-i.distance, i.path))
         if item.weight > 0 and item.distance >= VALIDATION_DIVERGENCE
     ]
+    n_validation_sentences = sum(o.n_sentences for o in validation)
+    verdict, level = validation_verdict(
+        n_validation_sentences, len(validation_documents), comparison.distance
+    )
     validation_section: dict[str, object] = {
         "n_documents": len(validation_documents),
-        "n_sentences": sum(o.n_sentences for o in validation),
+        "n_sentences": n_validation_sentences,
         "n_words": sum(o.n_words for o in validation),
         "documents": _document_entries(validation_documents, validation),
         "distance": comparison.distance,
@@ -158,6 +192,8 @@ def build_fingerprint(
         "feature_distances": {
             item.path: item.distance for item in comparison.items if item.weight > 0
         },
+        "verdict": verdict,
+        "confidence": level,
     }
     return StyleFingerprint(
         name=fingerprint.name,
@@ -237,7 +273,7 @@ def _corpus_summary(
     corpus: Corpus | None,
 ) -> dict[str, object]:
     root = corpus.root if corpus is not None else None
-    return {
+    summary: dict[str, object] = {
         "root": None if root is None else Path(root).as_posix(),
         "n_documents": len(documents),
         "n_paragraphs": sum(o.n_paragraphs for o in observations),
@@ -246,6 +282,11 @@ def _corpus_summary(
         "documents": _document_entries(documents, observations),
         "excluded": [e.to_dict() for e in corpus.excluded] if corpus is not None else [],
     }
+    if corpus is not None:
+        summary["n_duplicates"] = len(corpus.duplicates)
+        if corpus.corpus_type:
+            summary["type"] = corpus.corpus_type
+    return summary
 
 
 # --- Agregació ----------------------------------------------------------------------

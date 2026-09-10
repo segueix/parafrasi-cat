@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/segueix/parafrasi-cat/style/fingerprint.schema.json",
   "title": "Empremta estilística d'un autor (parafrasi-cat)",
-  "description": "Resultat de l'anàlisi estilomètrica d'un corpus. Cada característica numèrica és un objecte «stat» amb valor, nombre d'observacions, confiança, variabilitat i exemples curts. No conté el corpus.",
+  "description": "Resultat de l'anàlisi estilomètrica d'un corpus. Cada característica numèrica és un objecte «stat» amb valor, nombre d'observacions, confiança, variabilitat i exemples curts. No conté els textos del corpus, però sí fragments literals curts (els «examples»): no és només un recompte.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "name", "description", "language", "generator", "corpus", "features", "validation"],
@@ -31,10 +31,12 @@
       "required": ["root", "n_documents", "n_paragraphs", "n_sentences", "n_words", "documents", "excluded"],
       "properties": {
         "root": {"type": ["string", "null"]},
+        "type": {"type": "string", "description": "Mena de corpus indicada per qui el construeix («prosa d'investigació»). Etiqueta lliure: no intervé en cap càlcul."},
         "n_documents": {"type": "integer", "minimum": 0},
         "n_paragraphs": {"type": "integer", "minimum": 0},
         "n_sentences": {"type": "integer", "minimum": 0},
         "n_words": {"type": "integer", "minimum": 0},
+        "n_duplicates": {"type": "integer", "minimum": 0, "description": "Documents exclosos per contingut repetit (dins d'un corpus o entre el principal i el de validació)."},
         "documents": {"type": "array", "items": {"$ref": "#/$defs/document"}},
         "excluded": {
           "type": "array",
@@ -42,7 +44,11 @@
             "type": "object",
             "additionalProperties": false,
             "required": ["name", "reason"],
-            "properties": {"name": {"type": "string"}, "reason": {"type": "string"}}
+            "properties": {
+              "name": {"type": "string"},
+              "reason": {"type": "string"},
+              "duplicate_of": {"type": "string", "description": "Document que ja aportava aquest contingut. Només hi és si l'exclusió és per duplicat o per solapament entre corpus."}
+            }
           }
         }
       }
@@ -199,7 +205,9 @@
             "distance": {"$ref": "#/$defs/unit_interval"},
             "divergence_threshold": {"$ref": "#/$defs/unit_interval"},
             "divergent_features": {"type": "array", "items": {"type": "string"}},
-            "feature_distances": {"type": "object", "additionalProperties": {"$ref": "#/$defs/unit_interval"}}
+            "feature_distances": {"type": "object", "additionalProperties": {"$ref": "#/$defs/unit_interval"}},
+            "verdict": {"type": "string", "enum": ["insufficient_data", "consistent", "divergent"], "description": "«insufficient_data»: no hi ha prou text reservat i la distància no decideix res. «consistent»: hi ha prou text i s'assembla a l'empremta. «divergent»: hi ha prou text i s'hi assembla poc."},
+            "confidence": {"type": "string", "enum": ["high", "medium", "low"], "description": "Confiança de la validació segons frases i documents reservats (mateix criteri que la resta del perfil). Indicador intern, no cap probabilitat estadística."}
           }
         }
       ]

@@ -5,6 +5,100 @@ projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
 ## Pendent de publicació
 
+### Fiabilitat del motor i de l'empremta (tercera entrega)
+
+**Bateria de vint frases noves amb el parser real**
+(`tests/test_bateria_sintactica.py`). Vint frases que no són cap de les que van
+motivar les regles: presentatius amb identificació darrere dels dos punts,
+incisos amb verbs pronominals, subordinades coordinades i cinc casos ambigus que
+el motor s'ha d'estar de tocar. De cada frase se'n declara **què s'hi admet** i
+**què no hi pot canviar mai** —negació, modalitat, xifres, nombres romans, noms
+propis, abast dels quantificadors i afirmacions d'identitat—, i els invariants es
+comproven a *tots* els candidats, no només al preferit. No s'hi exigeix cap
+redacció literal. Els tests necessiten el parser local i s'ometen si no hi és:
+els d'arbre construït a mà continuen a `tests/test_blocs_reflexius.py`, separats.
+
+Resultat de la bateria (vint frases triades, no cap percentatge general): **15
+amb alternativa estructural correcta, 2 només amb variants de superfície, 3
+abstencions completes i 0 transformacions incorrectes.** Va destapar tres errors
+concrets, tots tres corregits:
+
+**Nombre comparat entre categories diferents.** El criteri de confiança comparava
+el nombre que dona el parser amb el que dona el recurs morfològic local sense
+mirar de què parlaven. Amb «L'arxiu, quan es va constituir al segle XVI, no tenia
+cap inventari», el conjecturador llegeix «arxiu» com si fos una segona persona
+del plural del verb «arxir» i el marca `pl`; el parser hi veu un nom singular, i
+la frase quedava degradada al nivell 2 sense cap alternativa. Ara `numbers_of`
+rep també la categoria que ha triat el parser i només compara lectures de la
+mateixa categoria (`COMPARABLE_POS`): el nombre d'un verb no diu res del d'un
+nom. La comprovació entre noms —que és per a la qual serveix— no s'ha tocat.
+
+**L'article elidit llegit com una sigla.** El filtre `lower` deixava en majúscula
+qualsevol mot inicial en majúscules de més d'un caràcter, per no espatllar «UE» o
+«XVI». «L'» té dos caràcters i una sola lletra, i sortia «Quan es va constituir al
+segle XVI, L'arxiu no tenia cap inventari». Ara es compten les **lletres**.
+
+**Dos subjectes per a un verb.** Amb «Hi ha una condició que cal complir: no
+arribar tard», l'analitzador marca «que» com a `nsubj` de «cal» i alhora
+«complir» com a `csubj`. La regla es refiava del primer i proposava «Una condició
+cal complir», que no vol dir el mateix. `relative_subject_of` demana ara que el
+verb **no tingui cap altre subjecte**: un arbre que se'n contradiu no autoritza a
+reescriure res. Amb «Hi ha una tasca que cal fer» el model ja marca «que» com a
+`obj` i la regla ja callava.
+
+**Locucions esborrades de les propostes de sinònims.** La passada de
+concordança del suggeridor treia de la llista qualsevol proposta que
+encavalqués un nom, per no deixar substituir un nom sense la seva concordança.
+Amb «Ho fem a causa de la pluja», el «causa» de la locució és un nom per a
+l'analitzador, i la proposta «a causa de → per raó de» desapareixia sense que
+res la substituís. Ara els noms que formen part d'una locució (relacions
+`fixed` i `flat`) no compten com a noms substituïbles. El defecte hi era abans;
+només es veia quan l'anàlisi era fiable, i la correcció del nombre entre
+categories el va destapar.
+
+Queda documentat un cas que continua sent ambigu: a «Hi ha un llibre que val la
+pena llegir», l'analitzador marca «que» com a subjecte de «val» de manera
+internament coherent, i la regla hi actua. No s'hi ha programat cap excepció.
+
+**Bateria completa.** 887 passen, 23 fallen, 79 s'ometen. Cap fallada nova
+respecte de `ab61acb`: les 23 que queden ja hi eren i no tenen res a veure amb
+aquests canvis. Les dues que aquests canvis van fer sortir —la locució
+esborrada del suggeridor i el text de l'informe d'empremta— estan corregides.
+
+**Empremta: duplicats i solapament de corpus.** Dos documents amb el mateix
+contingut i noms diferents comptaven dues vegades i inflaven el corpus. Ara la
+comparació es fa sobre el text normalitzat **només en allò que no en canvia res**
+(final de línia, espai al final de cada línia, línies en blanc als extrems): la
+puntuació, les majúscules i els espais interiors es conserven, i dos textos que
+hi difereixin són documents diferents. El primer per ordre de nom es conserva i
+la resta queda a `Corpus.excluded` amb el nom del document del qual és còpia. Un
+document que és al corpus principal i al de validació es conserva **al
+principal** i s'exclou del de validació: si no, l'empremta es compararia amb un
+text que ella mateixa ha ajudat a definir. Cap fitxer original no es toca mai:
+excloure és no llegir-lo. Tampoc no s'hi dedueix autoria ni procedència: només
+es comparen continguts.
+
+`style build` accepta `--corpus-type` («prosa d'investigació»): és una etiqueta
+lliure que no canvia cap càlcul i que queda desada a `corpus.type`.
+
+**Empremta: informe.** `style build` i `style show` fan servir ara el mateix
+informe (`parafrasi_cat.style.report`), que diu:
+
+* documents, paràgrafs, frases i paraules, i la mena de corpus si se n'ha indicat;
+* quins textos s'han exclòs i per què, amb els duplicats comptats a part;
+* quin model sintàctic s'ha fet servir, quantes frases s'han analitzat i quantes
+  s'han descartat per anàlisi poc fiable;
+* la confiança de cada component, dient cada vegada que és un **indicador
+  intern** derivat d'observacions i documents, no cap probabilitat estadística;
+* que a l'empremta **hi ha fragments literals del corpus** (fins a tres per tret,
+  retallats), no només recomptes;
+* el resultat de la validació independent, que ara distingeix **«sense dades
+  suficients»** de **«estil poc coincident»**: amb poc text reservat, una
+  distància alta o baixa no decideix res. El veredicte queda desat a
+  `validation.verdict`; a les empremtes anteriors es dedueix dels recomptes que ja
+  hi eren.
+
+
 ### Construccions que quedaven bloquejades (segona entrega)
 
 **Identificació darrere dels dos punts**

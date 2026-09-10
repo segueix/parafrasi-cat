@@ -26,6 +26,7 @@ from parafrasi_cat.style.corpus import (
     ExcludedDocument,
     corpus_from_texts,
     load_corpus,
+    normalized_text,
 )
 from parafrasi_cat.style.estimate import estimate_profile
 from parafrasi_cat.style.evaluator import StyleDistance, StyleEvaluator
@@ -38,7 +39,13 @@ from parafrasi_cat.style.observations import (
 )
 from parafrasi_cat.style.preferences import StylePreferences
 from parafrasi_cat.style.profile import StyleProfile, load_style_profile
-from parafrasi_cat.style.profiler import aggregate, build_fingerprint, observe_corpus
+from parafrasi_cat.style.profiler import (
+    aggregate,
+    build_fingerprint,
+    observe_corpus,
+    validation_verdict,
+)
+from parafrasi_cat.style.report import fingerprint_report
 
 __all__ = [
     "ComparisonItem",
@@ -63,7 +70,10 @@ __all__ = [
     "compute_style_metrics",
     "corpus_from_texts",
     "estimate_profile",
+    "fingerprint_report",
     "load_corpus",
     "load_style_profile",
+    "normalized_text",
     "observe_corpus",
+    "validation_verdict",
 ]
