@@ -133,16 +133,37 @@ class NominalizationRule(Rule):
         ends = self._np.ends(state, index)
         return ends[0] if ends else None
 
+    def _elided_articles(self, ctx: RuleContext) -> frozenset[int]:
+        """Posicions on el que sembla un pronom feble és, de fet, un article elidit.
+
+        «L'equip revisa la datació» i «L'analitzen amb calma» comencen igual, i
+        l'analitzador de text marca totes dues «L'» com a pronom **ambigu**. Qui
+        les distingeix és l'arbre: a «L'equip», «L'» és el determinant d'un nom
+        (``DET``); a «L'analitzen» és el complement directe del verb (``PRON``).
+        Sense parser, o amb una anàlisi poc fiable, no s'endevina res i el
+        bloqueig es manté tal com era.
+        """
+        analysis = ctx.parse()
+        if not analysis or not analysis.confident:
+            return frozenset()
+        return frozenset(t.start for t in analysis.tokens if t.pos == "DET")
+
     def _to_noun(self, ctx: RuleContext, state: MatchState) -> Iterable[Transformation]:
         tokens = state.tokens
+        articles = self._elided_articles(ctx)
         for index, token in enumerate(tokens):
             found = self._by_verb_form.get(token.lower)
             if found is None or token.kind is not TokenKind.WORD:
                 continue
             pair, form = found
             window_start = tokens[max(0, index - 3)].span.start
-            if any(t.kind is TokenKind.CLITIC for t in tokens[max(0, index - 3):index]) or any(
-                window_start <= pronoun.span.start and pronoun.span.end <= token.span.start
+            if any(
+                t.kind is TokenKind.CLITIC and t.span.start not in articles
+                for t in tokens[max(0, index - 3):index]
+            ) or any(
+                window_start <= pronoun.span.start
+                and pronoun.span.end <= token.span.start
+                and pronoun.span.start not in articles
                 for pronoun in ctx.sentence.pronouns
             ):
                 continue  # el pronom feble no es pot traslladar a un nom d'acció

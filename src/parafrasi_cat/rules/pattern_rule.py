@@ -558,6 +558,13 @@ def _is_relative_subject(
     «cal» i alhora «complir» com a ``csubj``: dos subjectes per a un verb és una
     contradicció de l'arbre, i llavors la lectura de subjecte del relatiu no és
     de fiar (el relatiu hi és, de fet, el complement directe).
+
+    I es demana que el verb no formi una **predicació amb infinitiu obert**
+    (:func:`_open_infinitive_predicate`). Un arbre coherent no garanteix una
+    transformació correcta: a «hi ha un llibre que val la pena llegir»
+    l'analitzador marca «que» com a ``nsubj`` de «val» sense contradir-se
+    enlloc, però el relatiu hi és el complement directe de «llegir», i
+    «un llibre val la pena llegir» no vol dir el mateix.
     """
     if not syntax.confident or len(tokens) != 1 or not antecedent:
         return False
@@ -570,6 +577,8 @@ def _is_relative_subject(
     if verb is None:
         return False
     if _has_another_subject(syntax, verb.index, parsed.index):
+        return False
+    if _open_infinitive_predicate(syntax, verb.index):
         return False
     if not verb.is_finite_verb:
         # Perífrasi («que va circular»): qui porta la concordança és l'auxiliar.
@@ -594,6 +603,57 @@ def _has_another_subject(syntax: SentenceSyntax, verb_index: int, subject_index:
     return any(
         t.head == verb_index and t.dep in SUBJECT_DEPS and t.index != subject_index
         for t in syntax.tokens
+    )
+
+
+#: Complements no finits que pengen directament d'un verb.
+OPEN_COMPLEMENT_DEPS = frozenset({"xcomp", "ccomp"})
+
+#: Relacions amb què un nom omple un lloc d'argument del verb.
+NOMINAL_ARGUMENT_DEPS = frozenset({"obj", "iobj", "compound"})
+
+
+def _open_infinitive_predicate(syntax: SentenceSyntax, verb_index: int) -> bool:
+    """Cert si el verb combina un argument nominal propi amb un infinitiu sense objecte.
+
+    És la forma de «val la pena llegir», «no té sentit publicar» o «fa gràcia
+    escoltar»: el verb ja té un nom que li omple un lloc («la pena», «sentit»,
+    «gràcia») i, a més, en penja un infinitiu al qual li falta el complement
+    directe. Aleshores hi ha **dos llocs buits** —el subjecte del verb i
+    l'objecte de l'infinitiu— i el relatiu pot ser a qualsevol dels dos.
+    L'analitzador tria sempre el primer, i s'equivoca sense contradir-se: per
+    això no n'hi ha prou amb comprovar que l'arbre sigui coherent.
+
+    No hi entren les perífrasis de control ni les d'elevació, que és on el
+    relatiu sí que és el subjecte: a «que vol arribar aviat» o «que pot
+    resoldre'l», el verb no té cap argument nominal propi; a «que semblen
+    conservar el nom llatí», l'infinitiu ja porta el seu objecte. Tampoc no hi
+    entren els gerundis ni els participis («que continua escrivint», «que
+    sembla documentada»), que no obren cap lloc d'objecte a omplir.
+
+    El preu d'aquesta prudència és una abstenció quan l'infinitiu és
+    intransitiu i no li falta res («que deixa passar el temps»): sense un
+    diccionari de valències no es pot saber, i davant del dubte es conserva
+    l'original.
+    """
+    children = [t for t in syntax.tokens if t.head == verb_index]
+    if not any(_is_nominal_argument(t) for t in children):
+        return False
+    infinitives = [
+        t
+        for t in children
+        if t.dep in OPEN_COMPLEMENT_DEPS and t.pos in ("VERB", "AUX") and t.verb_form == "Inf"
+    ]
+    return any(not _has_object(syntax, t.index) for t in infinitives)
+
+
+def _is_nominal_argument(token: SyntaxToken) -> bool:
+    return token.pos in ("NOUN", "PROPN") and token.dep.split(":")[0] in NOMINAL_ARGUMENT_DEPS
+
+
+def _has_object(syntax: SentenceSyntax, verb_index: int) -> bool:
+    return any(
+        t.head == verb_index and t.dep.split(":")[0] in ("obj", "iobj") for t in syntax.tokens
     )
 
 

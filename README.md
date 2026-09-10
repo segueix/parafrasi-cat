@@ -759,4 +759,5 @@ Documentació addicional: [`docs/recursos-linguistics.md`](docs/recursos-linguis
 [`docs/principis-de-preservacio.md`](docs/principis-de-preservacio.md),
 [`docs/cobertura-dospunts-presentatius.md`](docs/cobertura-dospunts-presentatius.md),
 [`docs/fiabilitat-motor-i-empremta.md`](docs/fiabilitat-motor-i-empremta.md),
+[`docs/fallades-conegudes.md`](docs/fallades-conegudes.md),
 [`CHANGELOG.md`](CHANGELOG.md).

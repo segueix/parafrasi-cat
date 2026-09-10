@@ -19,8 +19,11 @@ rules:
           output: "Van fer l'anàlisi de les dades del jaciment."
         - input: "Van analitzar les dades del jaciment."
           output: "Van dur a terme l'anàlisi de les dades del jaciment."
-        - input: "L'equip revisa la datació del sarcòfag."
-          output: "L'equip fa la revisió de la datació del sarcòfag."
+        # Subjecte sense article elidit: l'arnès que verifica els exemples declarats
+        # no porta analitzador, i «L'equip» necessita l'arbre per distingir
+        # l'article del pronom feble (vegeu tests/test_motors_regles.py).
+        - input: "La comissió revisa la datació del sarcòfag."
+          output: "La comissió fa la revisió de la datació del sarcòfag."
       negative:
         - "Van analitzar-les ahir."
         - "L'anàlisi és correcta."

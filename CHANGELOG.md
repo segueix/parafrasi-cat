@@ -5,6 +5,60 @@ projecte utilitza [versionatge semàntic](https://semver.org/lang/ca/).
 
 ## Pendent de publicació
 
+### Correcció semàntica i classificació de fallades (quarta entrega)
+
+**Predicació amb infinitiu obert.** «Hi ha un llibre que val la pena llegir»
+produïa «Un llibre val la pena llegir», que no vol dir el mateix. L'arbre no s'hi
+contradiu enlloc —«que» és `nsubj` de «val», hi ha un sol subjecte i la
+concordança quadra—, de manera que la guarda del doble subjecte no hi arribava:
+un arbre coherent no garanteix una transformació correcta.
+
+L'evidència que hi falla és una altra. Quan el verb del relatiu **ja té un
+argument nominal propi** («la pena», «sentit», «gràcia») i, a més, en penja un
+**infinitiu sense complement directe**, hi ha dos llocs buits —el subjecte del
+verb i l'objecte de l'infinitiu— i el relatiu pot ser a qualsevol dels dos.
+L'analitzador tria sempre el primer. `relative_subject_of` demana ara que aquesta
+configuració no s'hi doni (`_open_infinitive_predicate`).
+
+No hi ha cap excepció per a cap verb ni per a cap nom, i no es bloqueja la
+família «hi ha… que…»: les perífrasis de control i d'elevació hi continuen
+passant, perquè el verb no hi té cap argument nominal propi («que vol arribar
+aviat», «que pot resoldre el problema») o l'infinitiu ja porta el seu objecte
+(«que semblen contradir el reglament»); els gerundis i els participis tampoc no
+hi entren («que continua escrivint», «que sembla documentada»). El preu és una
+abstenció quan l'infinitiu és intransitiu i no li falta res: sense un diccionari
+de valències no es pot saber, i davant del dubte es conserva l'original.
+
+**Article elidit pres per un pronom feble.** «L'equip revisa la datació del
+sarcòfag» no es nominalitzava. L'analitzador de text marca «L'» com a pronom
+**ambigu** —igual que a «L'analitzen amb calma»— i la guarda de pronoms febles
+del motor de nominalització hi refusava. Qui els distingeix és l'arbre: a
+«L'equip», «L'» és el determinant d'un nom (`DET`); a «L'analitzen», el
+complement directe del verb (`PRON`). Ara només es deixa passar el que el parser
+diu que és determinant; sense parser, o amb una anàlisi poc fiable, el bloqueig
+es manté exactament com era. El pronom feble de debò continua bloquejant.
+
+Com que l'arnès que verifica els exemples declarats de les regles construeix el
+context **sense** analitzador, l'exemple de `nominal.verb_a_nom` porta ara un
+subjecte sense article elidit, i el cas de l'article elidit té la seva regressió
+amb el parser real a `tests/test_motors_regles.py`.
+
+**Comodí obsolet als tests assertius.** Les quatre proves de
+`test_assertiu_regressions_134.py` cridaven `pipeline.run(text).text`, i el camp
+es diu `output_text`: fallaven totes abans d'arribar a la seva asserció. Corregit
+el comodí, tres passen i la quarta destapa un error real —
+`assertiu.normalitza_modalitzacio` no redueix «potser podria ser possible»— que
+queda documentat, no arreglat.
+
+**Classificació de les fallades.** `docs/fallades-conegudes.md` agrupa per causa
+les proves que fallen: fusió de paràgrafs retirada a posta (6, decisió pendent),
+piles de modalització (1, error real), el sintagma nominal que es menja el verb i
+deixa morta `ordre.connector_inicial_a_medial` (error real), signatures de
+candidats (7, per determinar), recursos de prova absents (1) i dues sense
+determinar. De cada grup s'hi diu l'efecte visible, un exemple mínim i la
+prioritat. No s'hi ha canviat cap expectativa perquè passés.
+
+
 ### Fiabilitat del motor i de l'empremta (tercera entrega)
 
 **Bateria de vint frases noves amb el parser real**
